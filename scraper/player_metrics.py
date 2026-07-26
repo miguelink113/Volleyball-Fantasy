@@ -49,12 +49,12 @@ def get_headers(table_rows: List[List[str]]) -> Dict[int, str]:
     
     Estructura:
     - Índices 0-1: dorsal, nombre (se saltan en parse_player_row)
-    - Índices 2-6: Formación Inicial (1, 2, 3, 4, 5)
-    - Índices 7-9: Puntos (Tot, BP, G-P)
-    - Índices 10-12: Saque (Tot, Err, Punto directo)
-    - Índices 13-16: Recepción (Tot, Err, Pos%, Exc.%)
-    - Índices 17-21: Ataque (Tot, Err, Blo, Exc., Exc. %)
-    - Índices 22: Bloqueo (Pts)
+    - Índices 2-6: Formación Inicial (PosicionSet1, PosicionSet2, PosicionSet3, PosicionSet4, PosicionSet5)
+    - Índices 7-9: Puntos (PuntosTot, PuntosBP, PuntosG-P)
+    - Índices 10-12: Saque (SaqueTot, SaqueErr, SaqueDirecto)
+    - Índices 13-16: Recepción (RecepciónTot, RecepciónErr, RecepciónPos%, RecepciónExc.%)
+    - Índices 17-21: Ataque (AtaqueTot, AtaqueErr, AtaqueBlo, AtaqueExc., AtaqueExc. %)
+    - Índices 22: Bloqueo (BloqueoPts)
     
     Args:
         table_rows: No se usa (se mantiene para compatibilidad con el resto del código)
@@ -63,27 +63,27 @@ def get_headers(table_rows: List[List[str]]) -> Dict[int, str]:
         Diccionario: {índice_columna: nombre_métrica}
     """
     headers = {
-        2: "1",
-        3: "2",
-        4: "3",
-        5: "4",
-        6: "5",
-        7: "Tot",
-        8: "BP",
-        9: "G-P",
-        10: "Tot",
-        11: "Err",
-        12: "Punto directo",
-        13: "Tot",
-        14: "Err",
-        15: "Pos%",
-        16: "Exc.%",
-        17: "Tot",
-        18: "Err",
-        19: "Blo",
-        20: "Exc.",
-        21: "Exc. %",
-        22: "Pts",
+        2: "PosicionSet1",
+        3: "PosicionSet2",
+        4: "PosicionSet3",
+        5: "PosicionSet4",
+        6: "PosicionSet5",
+        7: "PuntosTot",
+        8: "PuntosBP",
+        9: "PuntosG-P",
+        10: "SaqueTot",
+        11: "SaqueErr",
+        12: "SaqueDirecto",
+        13: "RecepciónTot",
+        14: "RecepciónErr",
+        15: "RecepciónPos%",
+        16: "RecepciónExc.%",
+        17: "AtaqueTot",
+        18: "AtaqueErr",
+        19: "AtaqueBlo",
+        20: "AtaqueExc.",
+        21: "AtaqueExc. %",
+        22: "BloqueoPts",
     }
     return headers
 
@@ -100,16 +100,16 @@ def parse_player_row(row: List[str], headers: Dict) -> Dict:
         Diccionario con los datos del jugador (dorsal, nombre, métricas)
     """
     player_data = {
-        "dorsal": row[0],
-        "nombre": row[1],
-        "metricas": {}
+        "Dorsal": row[0],
+        "Nombre": row[1],
+        "Metricas": {}
     }
     
     # Mapear cada métrica con su encabezado
     for i in range(2, len(row)):
         if i in headers:
             metric_name = headers[i]
-            player_data["metricas"][metric_name] = row[i]
+            player_data["Metricas"][metric_name] = row[i]
     
     return player_data
 
@@ -150,10 +150,10 @@ def create_dataframe(players: List[Dict]) -> pd.DataFrame:
     
     for player in players:
         row_data = {
-            "dorsal": player["dorsal"],
-            "nombre": player["nombre"],
+            "Dorsal": player["Dorsal"],
+            "Nombre": player["Nombre"],
         }
-        row_data.update(player["metricas"])
+        row_data.update(player["Metricas"])
         data.append(row_data)
     
     return pd.DataFrame(data)

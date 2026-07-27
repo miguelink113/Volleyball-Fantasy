@@ -3,7 +3,7 @@ Script de prueba mejorado para validar la extracción de datos de voleibol.
 """
 
 import requests
-from player_metrics import process_match_statistics
+from scraper.player_metrics_scraper import process_match_statistics
 import pandas as pd
 
 # Descargar HTML
@@ -16,10 +16,12 @@ url = "https://rfevb-web.dataproject.com/MatchStatistics.aspx?mID=13852&ID=152&C
 html = requests.get(url).text
 print("   ✓ HTML descargado exitosamente")
 
+"""
 # Guardar HTML para referencia
 with open("match13852.html", "w", encoding="utf8") as f:
     f.write(html)
 print("   ✓ HTML guardado en 'match13852.html'")
+"""
 
 # Procesar estadísticas de ambos equipos
 print("\n2. Procesando estadísticas...")

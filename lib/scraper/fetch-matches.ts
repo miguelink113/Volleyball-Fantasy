@@ -196,7 +196,7 @@ function extractMatchLinks(html: string): Match[] {
 }
 
 /**
- * Función principal del scraper.
+ * Función principal del matches.
  *
  * Ejemplo:
  *

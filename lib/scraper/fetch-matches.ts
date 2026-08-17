@@ -12,6 +12,8 @@ export interface Match {
     categoryId: string;
     seasonId: string;
     round: number;
+    homeTeam: string;
+    awayTeam: string;
     url: string;
 }
 
@@ -119,6 +121,90 @@ function getMatchUrl(
 }
 
 /**
+ * Extrae los nombres de los dos equipos de un partido.
+ *
+ * La web utiliza actualmente:
+ *
+ *   _LBL_HomeTeamName  -> equipo local
+ *   _LBL_GuestTeamName -> equipo visitante
+ *
+ * En algunas versiones de la página también aparecen:
+ *
+ *   _Label6 -> equipo local
+ *   _Label7 -> equipo visitante
+ *
+ * No utilizamos la posición del texto ni nombres del pabellón.
+ */
+function extractTeamNames(
+    $: cheerio.CheerioAPI,
+    matchId: string
+): {
+    homeTeam: string;
+    awayTeam: string;
+} | null {
+    let homeTeam: string | null = null;
+    let awayTeam: string | null = null;
+
+    $(`[onclick*="mID=${matchId}"] span`).each(
+        (_, element) => {
+            const id = $(element).attr("id");
+
+            if (!id) {
+                return;
+            }
+
+            const text = $(element)
+                .text()
+                .replace(/\s+/g, " ")
+                .trim();
+
+            if (!text) {
+                return;
+            }
+
+            // Versión principal.
+            if (
+                id.endsWith("_LBL_HomeTeamName") &&
+                !homeTeam
+            ) {
+                homeTeam = text;
+            }
+
+            if (
+                id.endsWith("_LBL_GuestTeamName") &&
+                !awayTeam
+            ) {
+                awayTeam = text;
+            }
+
+            // Versión alternativa.
+            if (
+                id.endsWith("_Label6") &&
+                !homeTeam
+            ) {
+                homeTeam = text;
+            }
+
+            if (
+                id.endsWith("_Label7") &&
+                !awayTeam
+            ) {
+                awayTeam = text;
+            }
+        }
+    );
+
+    if (!homeTeam || !awayTeam) {
+        return null;
+    }
+
+    return {
+        homeTeam,
+        awayTeam,
+    };
+}
+
+/**
  * Extrae todos los partidos del HTML de CompetitionMatches.
  */
 function extractMatchLinks(html: string): Match[] {
@@ -134,7 +220,7 @@ function extractMatchLinks(html: string): Match[] {
     );
 
     roundContainers.each((index, container) => {
-        // La posición en el HTML determina la jornada.
+        // La posición del bloque determina la jornada.
         const roundNumber = index + 1;
 
         $(container)
@@ -146,20 +232,28 @@ function extractMatchLinks(html: string): Match[] {
                     return;
                 }
 
-                if (!onclick.includes("MatchStatistics.aspx")) {
+                if (
+                    !onclick.includes(
+                        "MatchStatistics.aspx"
+                    )
+                ) {
                     return;
                 }
 
-                const params = extractMatchParams(onclick);
+                const params =
+                    extractMatchParams(onclick);
 
                 if (!params) {
                     return;
                 }
 
                 const matchId = params.get("mID");
-                const competitionId = params.get("ID");
-                const categoryId = params.get("CID");
-                const seasonId = params.get("PID");
+                const competitionId =
+                    params.get("ID");
+                const categoryId =
+                    params.get("CID");
+                const seasonId =
+                    params.get("PID");
 
                 if (
                     !matchId ||
@@ -170,7 +264,45 @@ function extractMatchLinks(html: string): Match[] {
                     return;
                 }
 
+                /*
+                 * Un mismo partido aparece varias veces
+                 * en el HTML porque la página contiene
+                 * diferentes representaciones visuales.
+                 */
                 if (seenMatchIds.has(matchId)) {
+                    return;
+                }
+
+                const teamNames =
+                    extractTeamNames($, matchId);
+
+                if (!teamNames) {
+                    console.warn(
+                        `No se pudieron obtener los equipos del partido ${matchId}`
+                    );
+
+                    /*
+                     * No perdemos el partido si falta
+                     * la información de los equipos.
+                     */
+                    seenMatchIds.add(matchId);
+
+                    matches.push({
+                        matchId,
+                        competitionId,
+                        categoryId,
+                        seasonId,
+                        round: roundNumber,
+                        homeTeam: "Desconocido",
+                        awayTeam: "Desconocido",
+                        url: getMatchUrl(
+                            matchId,
+                            competitionId,
+                            categoryId,
+                            seasonId
+                        ),
+                    });
+
                     return;
                 }
 
@@ -182,6 +314,8 @@ function extractMatchLinks(html: string): Match[] {
                     categoryId,
                     seasonId,
                     round: roundNumber,
+                    homeTeam: teamNames.homeTeam,
+                    awayTeam: teamNames.awayTeam,
                     url: getMatchUrl(
                         matchId,
                         competitionId,
@@ -196,17 +330,13 @@ function extractMatchLinks(html: string): Match[] {
 }
 
 /**
- * Función principal del matches.
- *
- * Ejemplo:
+ * Función principal del scraper.
  *
  * scrapeMatches(152, 186)
- *
- * devuelve todos los partidos.
+ *   -> devuelve todos los partidos.
  *
  * scrapeMatches(152, 186, 10)
- *
- * devuelve únicamente los de la jornada 10.
+ *   -> devuelve únicamente los partidos de la jornada 10.
  */
 export async function scrapeMatches(
     competitionId: number,
@@ -217,18 +347,21 @@ export async function scrapeMatches(
         `Buscando partidos. Competición: ${competitionId}, Temporada: ${seasonId}`
     );
 
-    const html = await getCompetitionMatchesHtml(
-        competitionId,
-        seasonId
-    );
+    const html =
+        await getCompetitionMatchesHtml(
+            competitionId,
+            seasonId
+        );
 
-    const matches = extractMatchLinks(html);
+    const matches =
+        extractMatchLinks(html);
 
     const filteredMatches =
         roundNumber === undefined
             ? matches
             : matches.filter(
-                (match) => match.round === roundNumber
+                (match) =>
+                    match.round === roundNumber
             );
 
     console.log(

@@ -14,11 +14,11 @@ Obtiene los partidos de una competición y temporada.
 
 Parámetros:
 
-| Parámetro     | Descripción          | Ejemplo |
-| ------------- | -------------------- | ------- |
-| `competition` | ID de la competición | `152`   |
-| `season`      | ID de la temporada   | `186`   |
-| `round`       | Jornada opcional     | `10`    |
+| Parámetro     | Descripción          | Ejemplos |
+| ------------- | -------------------- |------|
+| `competition` | ID de la competición | `152` |
+| `season`      | ID de la temporada   | `186` |
+| `round`       | Jornada opcional     | `10` |
 
 #### Ejemplo
 

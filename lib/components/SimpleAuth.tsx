@@ -31,7 +31,8 @@ export function SimpleAuth() {
     try {
       if (mode === "register") {
         if (!formData.fullName) {
-          throw new Error("Por favor completa tu nombre");
+          // Validation handled by useSupabase hook
+          return;
         }
         await signUp(formData.email, formData.password, formData.fullName);
         setSuccessMessage(
@@ -44,8 +45,6 @@ export function SimpleAuth() {
         setSuccessMessage("✅ ¡Bienvenido!");
         setFormData({ email: "", password: "", fullName: "" });
       }
-    } catch (err) {
-      console.error("Error:", err);
     } finally {
       setIsSubmitting(false);
     }

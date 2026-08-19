@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Session } from "@supabase/supabase-js";
 
@@ -16,7 +16,7 @@ export function useSupabase() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   // Obtener sesión y perfil al montar
   useEffect(() => {
@@ -36,7 +36,14 @@ export function useSupabase() {
             .single();
 
           if (profileError) {
-            console.error("Error obteniendo perfil:", profileError);
+            // Log error only in development
+            if (process.env.NODE_ENV === 'development') {
+              console.error("Error obteniendo perfil:", profileError);
+            }
+            setError(
+              profileError?.message || "Error obteniendo perfil"
+            );
+            setProfile(null);
           } else {
             setProfile(profileData);
           }
@@ -58,12 +65,23 @@ export function useSupabase() {
 
       // Cuando cambia la sesión, recargar perfil
       if (session?.user) {
-        const { data: profileData } = await supabase
+        const { data: profileData, error: profileError } = await supabase
           .from("profiles")
           .select("*")
           .eq("id", session.user.id)
           .single();
-        setProfile(profileData || null);
+
+        if (profileError) {
+          if (process.env.NODE_ENV === 'development') {
+            console.error("Error obteniendo perfil (onAuthStateChange):", profileError);
+          }
+          setError(
+            profileError?.message || "Error obteniendo perfil"
+          );
+          setProfile(null);
+        } else {
+          setProfile(profileData || null);
+        }
       } else {
         setProfile(null);
       }
@@ -88,7 +106,8 @@ export function useSupabase() {
         );
 
         if (authError || !authData.user) {
-          throw new Error(authError?.message || "Error en registro");
+          setError(authError?.message || "Error en registro");
+          return;
         }
 
         // El perfil se crea automáticamente por el trigger
@@ -103,7 +122,10 @@ export function useSupabase() {
           .single();
 
         if (profileError) {
-          console.error("Error actualizando perfil:", profileError);
+          if (process.env.NODE_ENV === 'development') {
+            console.error("Error actualizando perfil:", profileError);
+          }
+          setError(profileError?.message || "Error actualizando perfil");
           // No lanzamos error aquí porque el usuario ya está registrado
         }
 
@@ -111,7 +133,6 @@ export function useSupabase() {
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : "Error desconocido";
         setError(errorMsg);
-        throw err;
       }
     },
     [supabase]
@@ -129,14 +150,14 @@ export function useSupabase() {
           });
 
         if (signInError) {
-          throw new Error(signInError.message);
+          setError(signInError.message);
+          return;
         }
 
         return data;
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : "Error desconocido";
         setError(errorMsg);
-        throw err;
       }
     },
     [supabase]
@@ -147,13 +168,15 @@ export function useSupabase() {
     setError(null);
     try {
       const { error: signOutError } = await supabase.auth.signOut();
-      if (signOutError) throw signOutError;
+      if (signOutError) {
+        setError(signOutError.message);
+        return;
+      }
       setSession(null);
       setProfile(null);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Error desconocido";
       setError(errorMsg);
-      throw err;
     }
   }, [supabase]);
 
@@ -163,7 +186,8 @@ export function useSupabase() {
       setError(null);
       try {
         if (!session?.user) {
-          throw new Error("Usuario no autenticado");
+          setError("Usuario no autenticado");
+          return;
         }
 
         const { data, error: updateError } = await supabase
@@ -177,7 +201,8 @@ export function useSupabase() {
           .single();
 
         if (updateError) {
-          throw new Error(updateError.message);
+          setError(updateError.message);
+          return;
         }
 
         setProfile(data);
@@ -185,7 +210,6 @@ export function useSupabase() {
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : "Error desconocido";
         setError(errorMsg);
-        throw err;
       }
     },
     [supabase, session]

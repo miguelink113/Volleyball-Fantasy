@@ -64,7 +64,9 @@ export async function registerUser(
       .single();
 
     if (profileError) {
-      console.error("Error actualizando nombre:", profileError);
+      if (process.env.NODE_ENV === 'development') {
+        console.error("Error actualizando nombre:", profileError);
+      }
       // No lanzamos error porque el usuario está registrado
       return {
         error: null,

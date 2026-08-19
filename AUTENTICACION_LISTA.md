@@ -152,7 +152,7 @@ curl -X GET http://localhost:3000/api/auth/profile \
 - Nadie puede acceder a datos de otros
 
 ✅ **Sesiones Seguras**
-- Guardam en cookies
+- Guardadas en cookies
 - Sincronizadas entre pestañas
 - Token refrescado automáticamente
 
@@ -177,7 +177,8 @@ Hace click en "Registrarse"
         ↓
 signUp() se ejecuta:
   ├─ Crea usuario en auth.users (Supabase)
-  └─ Crea perfil en tabla profiles
+  └─ Si has creado el trigger en la base de datos, éste inserta automáticamente
+     la fila en `profiles`; el código actualiza después el nombre del usuario
         ↓
 Email de confirmación enviado
         ↓

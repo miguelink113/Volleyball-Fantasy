@@ -99,6 +99,25 @@ El middleware automáticamente:
 - Refresca tokens expirados
 - Sincroniza sesiones entre pestañas
 
+Nota: si vas a crear perfiles al registrar usuarios desde el cliente, es recomendable crear un trigger en la base de datos que inserte automáticamente la fila en `profiles` cuando se crea un registro en `auth.users`. Esto evita errores de Row Level Security (RLS).
+
+Ejemplo de trigger (ejecutar en SQL Editor de Supabase):
+
+```sql
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, full_name)
+  VALUES (new.id, new.email, '');
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+CREATE OR REPLACE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+```
+
 ## Documentación
 
 - [Documentación de Supabase](https://supabase.com/docs)

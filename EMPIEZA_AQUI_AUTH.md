@@ -4,7 +4,7 @@
 
 #### 1. **Backend de Autenticación** (`lib/supabase/auth.ts`)
 Creé funciones para:
-- `registerUser()` → Registra usuario + crea perfil
+- `registerUser()` → Registra usuario (el perfil se crea automáticamente por un trigger si lo configuras)
 - `loginUser()` → Login + obtiene perfil
 - `getUserProfile()` → Obtiene perfil del usuario
 - `updateUserProfile()` → Actualiza nombre/email

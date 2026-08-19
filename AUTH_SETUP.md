@@ -45,6 +45,24 @@ CREATE POLICY "Users can insert their own profile"
   ON profiles
   FOR INSERT
   WITH CHECK (auth.uid() = id);
+
+-- Opcional: crear un trigger para que al crear un usuario en auth.users
+-- se inserte automáticamente una fila en `profiles` (evita errores RLS
+-- al intentar insertar desde el cliente durante el registro).
+
+-- Crea la función y el trigger:
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, full_name)
+  VALUES (new.id, new.email, '');
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+CREATE OR REPLACE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 ```
 
 Después de ejecutar esto, tu tabla estará lista.
@@ -171,7 +189,8 @@ app/api/auth/
 
 3. signUp() ejecuta:
    - Crea usuario en auth.users (Supabase)
-   - Crea perfil en tabla profiles
+   - Un trigger (si lo has creado) inserta automáticamente la fila en `profiles`
+     y luego el código actualiza el nombre del usuario
 
 4. Sistema envía email de confirmación
 

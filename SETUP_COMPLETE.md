@@ -36,6 +36,25 @@ http://localhost:3000/api/supabase-test
 ```
 Deberías ver una respuesta JSON indicando que Supabase está correctamente configurado.
 
+### 1.1 (Opcional pero recomendado) Crear trigger para perfiles
+Si planeas crear perfiles al mismo tiempo que registras usuarios desde el cliente, habilita este trigger en Supabase para evitar errores de Row Level Security (RLS). Ve a la consola SQL y ejecuta:
+
+```sql
+-- Función y trigger para crear automáticamente profiles al insertar en auth.users
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, full_name)
+  VALUES (new.id, new.email, '');
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+CREATE OR REPLACE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+```
+
 ### 2. **Genera los Tipos de Base de Datos (IMPORTANTE)**
 En tu terminal, ejecuta:
 ```bash

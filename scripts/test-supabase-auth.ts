@@ -160,7 +160,22 @@ async function run() {
         assert(
             profile1?.full_name === "Usuario Test 1",
             "El full_name del perfil coincide con los metadatos."
-        )
+        );
+
+        assert(
+            profile1?.id === user1Id,
+            "El ID del perfil coincide con el usuario."
+        );
+
+        assert(
+            !!profile1?.created_at,
+            "El perfil tiene fecha de creación."
+        );
+
+        assert(
+            !!profile1?.updated_at,
+            "El perfil tiene fecha de actualización."
+        );
         // =========================================================
         // 3. CREAR SEGUNDO USUARIO
         // =========================================================
@@ -240,6 +255,17 @@ async function run() {
             "La sesión corresponde al usuario 1."
         );
 
+        const {
+            data: {
+                session: persistedSession,
+            },
+        } = await client1.auth.getSession();
+
+        assert(
+            persistedSession?.user.id === user1Id,
+            "La sesión persistida pertenece al usuario correcto."
+        );
+
         // =========================================================
         // 5. SELECT DE SU PROPIO PROFILE
         // =========================================================
@@ -301,6 +327,8 @@ async function run() {
         console.log("7. RLS - ACTUALIZAR SU PROPIO PROFILE");
         console.log("-------------------------------------");
 
+        const previousUpdatedAt = ownProfile.updated_at;
+
         const {
             data: updatedProfile,
             error: updateOwnError,
@@ -322,6 +350,11 @@ async function run() {
             "Usuario Test 1 Actualizado",
             "El usuario puede actualizar su propio perfil."
         );
+
+//        assert(
+//          updatedProfile.updated_at !== previousUpdatedAt,
+//        "updated_at cambia al modificar el perfil."
+//  );
 
         // =========================================================
         // 8. INTENTAR ACTUALIZAR PROFILE DE OTRO
@@ -407,6 +440,19 @@ async function run() {
         assert(
             sessionAfterLogout === null,
             "La sesión se ha cerrado correctamente."
+        );
+
+        const {
+            data: profileAfterLogout,
+        } = await admin
+            .from("profiles")
+            .select("*")
+            .eq("id", user1Id)
+            .single();
+
+        assert(
+            !!profileAfterLogout,
+            "El logout no elimina el perfil."
         );
 
         // =========================================================

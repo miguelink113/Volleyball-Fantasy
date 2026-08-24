@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { useSupabase } from "@/lib/hooks/useSupabase";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 type AuthMode = "login" | "register";
 
 export function SimpleAuth() {
   const { session, profile, loading, error, signIn, signUp, signOut } =
-    useSupabase();
+    useAuth();
 
   const [mode, setMode] = useState<AuthMode>("login");
   const [formData, setFormData] = useState({
@@ -31,7 +31,7 @@ export function SimpleAuth() {
     try {
       if (mode === "register") {
         if (!formData.fullName) {
-          // Validation handled by useSupabase hook
+          // Validation handled by useAuth hook
           return;
         }
         await signUp(formData.email, formData.password, formData.fullName);
@@ -41,7 +41,12 @@ export function SimpleAuth() {
         setFormData({ email: "", password: "", fullName: "" });
         setTimeout(() => setMode("login"), 2000);
       } else {
-        await signIn(formData.email, formData.password);
+        const result = await signIn(formData.email, formData.password);
+
+        if (!result) {
+          return;
+        }
+
         setSuccessMessage("✅ ¡Bienvenido!");
         setFormData({ email: "", password: "", fullName: "" });
       }

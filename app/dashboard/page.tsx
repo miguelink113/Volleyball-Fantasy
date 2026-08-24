@@ -1,11 +1,11 @@
 "use client";
 
-import { useSupabase } from "@/lib/hooks/useSupabase";
+import { useAuth } from "@/lib/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 export default function DashboardPage() {
-  const { session, profile, loading, signOut } = useSupabase();
+  const { session, profile, loading, signOut } = useAuth();
   const router = useRouter();
 
   useEffect(() => {

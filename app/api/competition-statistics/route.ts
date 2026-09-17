@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
                 {
                     success: false,
                     error:
-                        "Faltan competition-statistics y season.",
+                        "Faltan competition y season.",
                 },
                 { status: 400 }
             );

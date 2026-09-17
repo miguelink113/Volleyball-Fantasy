@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
                 {
                     success: false,
                     error:
-                        "Faltan los parámetros competition-statistics y season.",
+                        "Faltan los parámetros competition y season.",
                 },
                 { status: 400 }
             );
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
             matches,
         });
     } catch (error) {
-        console.error("Error en el matches:", error);
+        console.error("Error obteniendo los partidos:", error);
 
         return NextResponse.json(
             {

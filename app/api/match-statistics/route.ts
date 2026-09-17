@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
                 {
                     success: false,
                     error:
-                        "Faltan matchId, competition-statistics, category o season.",
+                        "Faltan matchId, competition, category o season.",
                 },
                 { status: 400 }
             );

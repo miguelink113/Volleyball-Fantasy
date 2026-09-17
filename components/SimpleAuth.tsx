@@ -34,7 +34,16 @@ export function SimpleAuth() {
           // Validation handled by useAuth hook
           return;
         }
-        await signUp(formData.email, formData.password, formData.fullName);
+        const result = await signUp(
+          formData.email,
+          formData.password,
+          formData.fullName
+        );
+
+        if (!result) {
+          return;
+        }
+
         setSuccessMessage(
           "✅ Registro exitoso! Revisa tu correo para confirmar."
         );

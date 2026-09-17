@@ -127,6 +127,7 @@ export function useAuth() {
 
           if (profileError) {
             setError(profileError.message);
+            return null;
           }
 
           return {

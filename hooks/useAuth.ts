@@ -108,8 +108,7 @@ export function useAuth() {
 
           if (authError || !authData.user) {
             setError(
-                authError?.message ||
-                "Error en registro"
+                authError?.message || "Error en registro"
             );
             return null;
           }
@@ -132,6 +131,7 @@ export function useAuth() {
 
           return {
             user: authData.user,
+            session: authData.session,
             profile: profileData,
           };
         } catch (err) {

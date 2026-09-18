@@ -17,7 +17,11 @@ export const metadata: Metadata = {
   description: "Gestiona tu experiencia de fantasy de voleibol.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html
       lang="es"

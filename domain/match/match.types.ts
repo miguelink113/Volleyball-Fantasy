@@ -1,3 +1,5 @@
+import type { MatchSet } from "@/domain/match/match-set.types";
+
 export interface Match {
     id: string;
     competitionId: string;
@@ -7,5 +9,5 @@ export interface Match {
     awayTeamId: string;
     homeScore: number;
     awayScore: number;
-    sets: Match[];
+    sets: MatchSet[];
 }

@@ -1,4 +1,4 @@
-import { SimpleAuth } from "@/components/SimpleAuth";
+import { SimpleAuth } from "@/components/auth/SimpleAuth";
 
 export default function LoginPage() {
   return (

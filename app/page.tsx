@@ -38,12 +38,20 @@ export default async function HomePage() {
           {profile.full_name || profile.email}
         </p>
         <p className="mt-1 text-gray-500">{profile.email}</p>
-        <Link
-          href="/dashboard"
-          className="mt-6 inline-block rounded bg-blue-500 px-4 py-2 font-semibold text-white transition hover:bg-blue-600"
-        >
-          Ir al dashboard
-        </Link>
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
+          <Link
+            href="/dashboard"
+            className="inline-block rounded bg-blue-500 px-4 py-2 font-semibold text-white transition hover:bg-blue-600"
+          >
+            Ir al dashboard
+          </Link>
+          <Link
+            href="/fantasy"
+            className="inline-block rounded bg-violet-600 px-4 py-2 font-semibold text-white transition hover:bg-violet-700"
+          >
+            Ir al fantasy
+          </Link>
+        </div>
       </div>
     </main>
   );

@@ -1,6 +1,24 @@
 # Scraper RFEVB
 
-Scraper desarrollado con **Next.js + TypeScript + Cheerio** para obtener partidos y estadísticas de competiciones de voleibol desde RFEVB.
+Scraper desarrollado con **Next.js + TypeScript + Cheerio** para obtener el
+catálogo de competiciones de voleibol, sus equipos, jugadores, partidos y
+estadísticas desde RFEVB.
+
+La extracción es un adaptador externo. Su responsabilidad termina en descargar
+HTML, extraer campos, normalizar valores básicos y conservar los identificadores
+oficiales. No renderiza la UI, no decide reglas fantasy y todavía no persiste
+los resultados en Supabase.
+
+## Límites del scraper
+
+| Capa | Responsabilidad |
+| --- | --- |
+| `lib/scraper/` | Descargar e interpretar la web de RFEVB. |
+| `app/api/` | Validar parámetros HTTP e invocar el scraper. |
+| `domain/` | Definir interfaces de `Competition`, `Team`, `Player`, `Match` y estadísticas. |
+| `lib/services/fantasy/` | Aplicar reglas de plantilla, alineación y mercado de la demo. |
+| `components/fantasy/` | Mostrar el mercado, el equipo y la alineación. |
+| Supabase | Persistencia futura; todavía no almacena el catálogo extraído. |
 
 ## Endpoints
 
@@ -175,17 +193,95 @@ La respuesta contiene cada partido junto con sus estadísticas:
 
 > **Nota:** este endpoint puede realizar muchas peticiones a la web de RFEVB. Para pruebas, es recomendable utilizar `round` y trabajar primero con una sola jornada.
 
-## Integración con el dominio fantasy
+### 4. Obtener equipos y jugadores de una competición
 
-`lib/domain/map-scraped-match.ts` transforma un partido y sus estadísticas
-extraídas en las interfaces del dominio:
+```text
+GET /api/competition-roster
+```
+
+Obtiene los equipos de una competición y los jugadores de sus plantillas.
+
+Parámetros:
+
+| Parámetro     | Descripción          | Ejemplo |
+| ------------- | -------------------- | ------- |
+| `competition` | ID de la competición | `152`   |
+
+#### Ejemplo
+
+```text
+http://localhost:3000/api/competition-roster?competition=152
+```
+
+La respuesta contiene `teams` y `players`. Los objetos se conectan con las
+interfaces `Team` y `Player` del dominio y conservan el identificador oficial
+en `rfevbId`:
+
+```json
+{
+  "success": true,
+  "competitionId": "152",
+  "teams": [
+    {
+      "id": "rfevb:team:1318",
+      "rfevbId": "1318",
+      "name": "Bus Leader San Roque",
+      "logoUrl": "https://images.dataproject.com/rfevb/TeamLogo/100/40/TeamLogo_1318.jpg",
+      "detailsUrl": "https://rfevb-web.dataproject.com/CompetitionTeamDetails.aspx?TeamID=1318&ID=152"
+    }
+  ],
+  "players": [
+    {
+      "id": "rfevb:player:8825",
+      "rfevbId": "8825",
+      "firstName": "Vidal",
+      "lastName": "Allen Serrano Luis",
+      "displayName": "Allen Serrano Luis Vidal",
+      "position": "middle",
+      "currentTeamId": "rfevb:team:1312",
+      "dorsal": 14,
+      "teamRfevbId": "1312",
+      "detailsUrl": "https://rfevb-web.dataproject.com/PlayerDetails.aspx?TeamID=1312&PlayerID=8825&ID=152"
+    }
+  ]
+}
+```
+
+El endpoint consulta:
+
+1. `CompetitionTeamSearch.aspx?ID=<competitionId>` para obtener los equipos.
+2. `CompetitionPlayerSearch.aspx?ID=<competitionId>` como listado inicial.
+3. `CompetitionTeamDetails.aspx?TeamID=<teamId>&ID=<competitionId>` para
+   recorrer las plantillas completas de cada equipo y evitar depender de la
+   paginación del listado global.
+
+La posición se normaliza a los valores del dominio:
+
+```text
+setter | opposite | outside | middle | libero
+```
+
+En la comprobación actual de la competición `152` se obtienen 12 equipos y
+180 jugadores.
+
+## Integración con el dominio deportivo
+
+`lib/domain/map-scraped-match.ts` contiene el adaptador histórico para
+transformar un partido y sus estadísticas extraídas en las interfaces del
+dominio:
 
 - `Competition`, `Season` y `Match`.
 - `Team`, `Player` y `MatchPlayerStats`.
 - `MatchSet` para los marcadores de cada set.
 
-Los identificadores de equipos y jugadores se generan de forma estable a partir
-de los nombres y dorsales mientras no exista persistencia en base de datos.
+El roster actual usa directamente los identificadores oficiales:
+
+- `rfevb:team:<id>` para equipos.
+- `rfevb:player:<id>` para jugadores.
+
+El mapeador histórico de partidos todavía genera algunas identidades a partir
+de nombres y dorsales y debe alinearse con el roster oficial antes de la
+ingesta persistente.
 Los valores estadísticos ausentes se normalizan a `0` en el modelo de dominio.
 
 El sistema de puntuación se define mediante `ScoringSystem`, por lo que puede
@@ -236,13 +332,18 @@ lib/
     ├── fetch-matches.ts
     ├── fetch-match-statistics.ts
     └── fetch-competition-statistics.ts
+    └── fetch-competition-roster.ts
 ```
 
 * `fetch-matches.ts`: obtiene los partidos.
 * `fetch-match-statistics.ts`: obtiene las estadísticas de un partido.
 * `fetch-competition-statistics.ts`: combina partidos y estadísticas.
+* `fetch-competition-roster.ts`: obtiene equipos y jugadores de una
+  competición y los adapta a `Team` y `Player`.
 
-Los datos obtenidos todavía no se almacenan en una base de datos.
+Los datos obtenidos todavía no se almacenan en una base de datos. Consultar
+RFEVB desde una ruta HTTP sirve para la demo y para pruebas, pero no sustituye
+un proceso de ingesta programado.
 
 ## Mostrar puntuaciones del primer partido de la jornada 1
 
@@ -271,3 +372,49 @@ El script informa de cada fase:
    principal.
 7. Aplica `BasicScoringSystem` y muestra una tabla con jugador, equipo, G-P,
    puntos por sets y puntuación total.
+
+## Probar equipos y jugadores directamente
+
+Con el servidor iniciado se puede consultar el endpoint desde el navegador,
+PowerShell o `curl`:
+
+```powershell
+Invoke-RestMethod `
+  -Uri "http://localhost:3000/api/competition-roster?competition=152" |
+  ConvertTo-Json -Depth 10
+```
+
+También se puede ejecutar el scraper sin pasar por HTTP:
+
+```bash
+npx tsx -e "import { scrapeCompetitionRoster } from './lib/scraper/fetch-competition-roster.ts'; scrapeCompetitionRoster(152).then((roster) => console.log(JSON.stringify({ teams: roster.teams.length, players: roster.players.length }, null, 2))).catch((error) => { console.error(error); process.exit(1); });"
+```
+
+La web externa de RFEVB debe estar disponible. Los identificadores internos
+estables se construyen con el identificador oficial (`rfevb:team:<id>` y
+`rfevb:player:<id>`), por lo que no dependen del nombre mostrado.
+
+## Uso del catálogo real en la demo fantasy
+
+La demo de `/fantasy` consume `/api/competition-roster?competition=152` al
+cargarse, en lugar del catálogo fijo de `lib/data/season-25-26/players.ts`.
+El componente relaciona cada jugador con el nombre de su equipo mediante
+`currentTeamId` y conserva el `id` estable del scraper.
+
+Para que la demo sea manejable mientras se define el mercado persistente, crea
+un mercado diario de 30 jugadores. La selección utiliza una semilla
+determinista con formato `YYYY-MM-DD`:
+
+- todos los usuarios ven la misma selección durante el mismo día;
+- la selección cambia al cambiar la fecha;
+- la página detecta el cambio de día mientras está abierta;
+- los precios mostrados son valores de demo deterministas derivados del día y
+  del `rfevbId`;
+- las puntuaciones por jornada permanecen vacías y se muestran como `0` hasta
+  conectar las estadísticas reales y el cálculo de puntuación.
+
+La lógica de selección y semilla está en
+`lib/services/fantasy/fantasy-team.service.ts`, mediante
+`createDailyFantasyRoster`. La plantilla inicial se construye con una
+composición válida de posiciones a partir del mercado diario. Esta lógica
+pertenece a la demo fantasy y no al scraper.

@@ -26,7 +26,7 @@ npm run show:first-match-scores
 ```
 
 `npm run test:supabase` requiere las variables descritas en
-`AUTHENTICATION.md`. `npm run show:first-match-scores` requiere que la
+`docs/AUTHENTICATION.md`. `npm run show:first-match-scores` requiere que la
 aplicación esté disponible y utiliza las rutas HTTP del scraper.
 
 ## Separación de responsabilidades

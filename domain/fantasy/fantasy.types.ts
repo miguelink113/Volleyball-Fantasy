@@ -1,36 +1,62 @@
-import { PlayerPosition } from "@/domain/player/player.types";
+import { PlayerPosition } from '../player/player.types';
 
-export type FantasyRound = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
-
-export interface FantasyPlayer {
+export interface PlayerMarketValue {
     id: string;
-    name: string;
-    club: string;
-    position: PlayerPosition;
+    playerId: string;
     price: number;
-    season: string;
-    weeklyScores: Partial<Record<FantasyRound, number>>;
+    validFrom: Date;
+    validTo?: Date;
+    calculationReason?: string;
 }
 
 export interface FantasyTeam {
     id: string;
+    userId: string;
+    leagueId: string;
     name: string;
-    season: string;
-    selectedPlayerIds: string[];
-    lineupPlayerIds: string[];
+    budget: number;
+    createdAt: Date;
 }
 
-export interface LineupValidationResult {
-    valid: boolean;
-    counts: Record<PlayerPosition, number>;
-    missing: string[];
-    errors: string[];
+export interface FantasyTeamPlayer {
+    id: string;
+    fantasyTeamId: string;
+    playerId: string;
+    buyPrice: number;
+    joinedAt: Date;
+    leftAt?: Date;
+    isActive: boolean;
 }
 
-export const LINEUP_REQUIREMENTS: Record<PlayerPosition, number> = {
-    [PlayerPosition.Setter]: 1,
-    [PlayerPosition.Libero]: 1,
-    [PlayerPosition.Opposite]: 1,
-    [PlayerPosition.MiddleBlocker]: 2,
-    [PlayerPosition.OutsideHitter]: 2,
-};
+export interface FantasyLineup {
+    id: string;
+    fantasyTeamId: string;
+    roundNumber: number;
+    isLocked: boolean;
+    lockedAt?: Date;
+    players: FantasyLineupSlot[];
+}
+
+export interface FantasyLineupSlot {
+    playerId: string;
+    position: PlayerPosition;
+}
+
+export interface League {
+    id: string;
+    name: string;
+    code: string;
+    seasonId: string;
+    createdBy: string;
+    createdAt: Date;
+}
+
+export type LeagueMemberRole = 'admin' | 'member';
+
+export interface LeagueMember {
+    id: string;
+    leagueId: string;
+    userId: string;
+    role: LeagueMemberRole;
+    joinedAt: Date;
+}

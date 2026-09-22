@@ -1,7 +1,9 @@
-export interface TeamPlayer {
+export interface TeamPlayerHistory {
     id: string;
     playerId: string;
     teamId: string;
     seasonId: string;
-    shirtNumber?: number;
+    dorsal: number;
+    startDate: Date;
+    endDate?: Date;
 }

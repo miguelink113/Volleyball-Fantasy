@@ -121,7 +121,7 @@ async function run() {
 
         assert(
             !!createdUser1.user,
-            "El usuario 1 se ha creado en auth.users."
+            "El usuario 1 se ha creado en profile.users."
         );
 
         user1Id = createdUser1.user.id;

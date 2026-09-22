@@ -78,14 +78,7 @@ export function FantasyTeamBuilder() {
 
         if (lineupIds.length >= 7) return;
 
-        const nextIds = [...lineupIds, playerId];
-        const result = validateLineup(nextIds, season25Players);
-
-        if (!result.valid) {
-            return;
-        }
-
-        setLineupIds(nextIds);
+        setLineupIds((current) => [...current, playerId]);
     };
 
     const lineupScore = calculateLineupScoreForRound(lineupIds, selectedRound, season25Players);

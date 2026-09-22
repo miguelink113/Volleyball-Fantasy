@@ -1,22 +1,35 @@
 export interface MatchPlayerStats {
-    id: string;
+    id?: string;
     matchId: string;
     playerId: string;
     teamId: string;
+    setsPlayed: number;
+
+    // Puntos directos y balance
     pointsTotal: number;
-    pointsBp: number;
-    pointsWonLost: number;
+    pointsBreakout: number; // BP
+    wonLost: number;        // G-P
+
+    // Saque
     serveTotal: number;
     serveErrors: number;
-    serveDirectPoints: number;
+    serveAces: number;
+
+    // Recepción
     receptionTotal: number;
     receptionErrors: number;
-    receptionPositivePercentage: number;
-    receptionExcellentPercentage: number;
+    receptionPositive: number;
+    receptionExcellent: number;
+
+    // Ataque
     attackTotal: number;
     attackErrors: number;
-    attackBlocks: number;
-    attackExcellent: number;
-    attackExcellentPercentage: number;
+    attackBlocked: number;
+    attackPoints: number;
+
+    // Bloqueo
     blockPoints: number;
+
+    // Copia íntegra de la extracción para auditoría/depuración
+    rawJson?: Record<string, unknown>;
 }

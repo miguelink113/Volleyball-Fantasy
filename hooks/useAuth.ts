@@ -5,7 +5,7 @@ import type { Session } from "@supabase/supabase-js";
 import {
   getProfileById,
   updateProfileById,
-} from "@/lib/services/profile.service";
+} from "@/lib/services/profile/profile.service";
 
 export interface UserProfile {
   id: string;

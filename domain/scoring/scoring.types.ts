@@ -1,23 +1,25 @@
-import type { Player } from "@/domain/player/player.types";
-import type { MatchPlayerStats } from "@/domain/match/match-player-stats.types";
+import { MatchPlayerStats } from '../match/match-player-stats.types';
+import { Match } from '../match/match.types';
 
-export interface PlayerMatchPerformance {
-    player: Player;
-    stats: MatchPlayerStats;
-    teamName: string;
-    setsPlayed: number;
-}
-
-export interface PlayerScore {
-    playerId: string;
-    playerName: string;
-    teamId: string;
-    teamName: string;
-    setsPlayedPoints: number;
-    gpPoints: number;
-    total: number;
+export interface ScoringCalculationResult {
+    totalScore: number;
+    breakdown: Record<string, number>;
+    isProvisional: boolean;
 }
 
 export interface ScoringSystem {
-    score(performance: PlayerMatchPerformance): PlayerScore;
+    version: string;
+    calculate(stats: MatchPlayerStats, match: Match): ScoringCalculationResult;
+}
+
+export interface PlayerRoundScore {
+    id: string;
+    playerId: string;
+    seasonId: string;
+    roundNumber: number;
+    score: number;
+    breakdown: Record<string, number>;
+    scoringVersion: string;
+    isProvisional: boolean;
+    calculatedAt: Date;
 }

@@ -1,9 +1,21 @@
-import { PlayerPosition } from "@/domain/player/player.types";
-import type {
-    FantasyPlayer,
-    FantasyTeam,
-    LineupValidationResult,
-} from "@/domain/fantasy/fantasy.types";
+import type { PlayerPosition } from "@/domain/player/player.types";
+
+export interface FantasyDemoPlayer {
+    id: string;
+    name: string;
+    club: string;
+    position: PlayerPosition;
+    price: number;
+    season: string;
+    weeklyScores: Partial<Record<number, number>>;
+}
+
+export interface LineupValidationResult {
+    valid: boolean;
+    counts: Record<PlayerPosition, number>;
+    missing: string[];
+    errors: string[];
+}
 
 const MAX_TEAM_SIZE = 14;
 const LINEUP_SIZE = 7;
@@ -22,21 +34,21 @@ export function validateRosterSize(playerIds: string[]) {
     };
 }
 
-export function getPlayerMap(players: FantasyPlayer[]) {
+export function getPlayerMap(players: FantasyDemoPlayer[]) {
     return new Map(players.map((player) => [player.id, player]));
 }
 
 export function validateLineup(
     lineupPlayerIds: string[],
-    players: FantasyPlayer[]
+    players: FantasyDemoPlayer[]
 ): LineupValidationResult {
     const playerMap = getPlayerMap(players);
     const counts: Record<PlayerPosition, number> = {
-        [PlayerPosition.Setter]: 0,
-        [PlayerPosition.Libero]: 0,
-        [PlayerPosition.Opposite]: 0,
-        [PlayerPosition.MiddleBlocker]: 0,
-        [PlayerPosition.OutsideHitter]: 0,
+        setter: 0,
+        libero: 0,
+        opposite: 0,
+        middle: 0,
+        outside: 0,
     };
 
     const missing: string[] = [];
@@ -59,13 +71,13 @@ export function validateLineup(
 
     Object.entries(counts).forEach(([position, total]) => {
         const required =
-            position === PlayerPosition.Setter
+            position === "setter"
                 ? 1
-                : position === PlayerPosition.Libero
+                : position === "libero"
                     ? 1
-                    : position === PlayerPosition.Opposite
+                    : position === "opposite"
                         ? 1
-                        : position === PlayerPosition.MiddleBlocker
+                        : position === "middle"
                             ? 2
                             : 2;
 
@@ -92,7 +104,7 @@ export function validateLineup(
 
 export function getLineupSummary(
     lineupPlayerIds: string[],
-    players: FantasyPlayer[]
+    players: FantasyDemoPlayer[]
 ) {
     return validateLineup(lineupPlayerIds, players);
 }
@@ -100,7 +112,7 @@ export function getLineupSummary(
 export function calculateLineupScoreForRound(
     lineupPlayerIds: string[],
     round: number,
-    players: FantasyPlayer[]
+    players: FantasyDemoPlayer[]
 ) {
     const playerMap = getPlayerMap(players);
 
@@ -109,58 +121,4 @@ export function calculateLineupScoreForRound(
         const score = player?.weeklyScores[round as keyof typeof player.weeklyScores] ?? 0;
         return total + score;
     }, 0);
-}
-
-export function createInitialFantasyTeam(): FantasyTeam {
-    return {
-        id: "team-demo",
-        name: "Mi equipo",
-        season: "25-26",
-        selectedPlayerIds: [],
-        lineupPlayerIds: [],
-    };
-}
-
-export function addPlayerToTeam(team: FantasyTeam, playerId: string) {
-    if (team.selectedPlayerIds.includes(playerId)) {
-        return team;
-    }
-
-    return {
-        ...team,
-        selectedPlayerIds: [...team.selectedPlayerIds, playerId],
-    };
-}
-
-export function removePlayerFromTeam(team: FantasyTeam, playerId: string) {
-    const nextSelected = team.selectedPlayerIds.filter((id) => id !== playerId);
-    const nextLineup = team.lineupPlayerIds.filter((id) => id !== playerId);
-
-    return {
-        ...team,
-        selectedPlayerIds: nextSelected,
-        lineupPlayerIds: nextLineup,
-    };
-}
-
-export function toggleLineupPlayer(team: FantasyTeam, playerId: string) {
-    if (team.lineupPlayerIds.includes(playerId)) {
-        return {
-            ...team,
-            lineupPlayerIds: team.lineupPlayerIds.filter((id) => id !== playerId),
-        };
-    }
-
-    if (team.lineupPlayerIds.length >= LINEUP_SIZE) {
-        return team;
-    }
-
-    return {
-        ...team,
-        lineupPlayerIds: [...team.lineupPlayerIds, playerId],
-    };
-}
-
-export function getTransferablePlayers(players: FantasyPlayer[], team: FantasyTeam) {
-    return players.filter((player) => !team.selectedPlayerIds.includes(player.id));
 }

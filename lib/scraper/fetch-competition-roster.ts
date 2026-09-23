@@ -317,12 +317,18 @@ function extractPlayersFromTeamDetails(
     return players;
 }
 
-export async function scrapeCompetitionTeams(
+async function fetchCompetitionTeams(
     competitionId: number
 ): Promise<ScrapedCompetitionTeam[]> {
     const competitionIdValue = String(competitionId);
     const url = `${COMPETITION_TEAM_SEARCH_URL}?ID=${competitionIdValue}`;
-    const teams = extractTeams(await fetchHtml(url), competitionIdValue);
+    return extractTeams(await fetchHtml(url), competitionIdValue);
+}
+
+export async function scrapeCompetitionTeams(
+    competitionId: number
+): Promise<ScrapedCompetitionTeam[]> {
+    const teams = await fetchCompetitionTeams(competitionId);
 
     console.log(`Equipos encontrados: ${teams.length}`);
     return teams;
@@ -340,7 +346,7 @@ export async function scrapeCompetitionPlayers(
         competitionIdValue
     );
     const teams =
-        competitionTeams ?? (await scrapeCompetitionTeams(competitionId));
+        competitionTeams ?? (await fetchCompetitionTeams(competitionId));
     const teamPlayers = (
         await Promise.all(
             teams.map(async (team) => {

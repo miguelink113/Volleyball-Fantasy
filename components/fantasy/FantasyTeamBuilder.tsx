@@ -27,12 +27,47 @@ interface RosterResponse {
     }>;
 }
 
+type RosterPayload =
+    | (RosterResponse & { success: true })
+    | { success: false; error?: string };
+
+let rosterRequest: Promise<RosterResponse> | null = null;
+
 function getDateKey(date = new Date()) {
     return date.toISOString().slice(0, 10);
 }
 
+async function fetchCompetitionRoster(): Promise<RosterResponse> {
+    if (!rosterRequest) {
+        rosterRequest = fetch(
+            `/api/competition-roster?competition=${COMPETITION_ID}`,
+            { cache: "no-store" }
+        )
+            .then(async (response) => {
+                const payload = (await response.json()) as RosterPayload;
+
+                if (!response.ok || !payload.success) {
+                    throw new Error(
+                        "error" in payload && payload.error
+                            ? payload.error
+                            : "No se pudo cargar el catálogo de jugadores."
+                    );
+                }
+
+                return payload;
+            })
+            .catch((error) => {
+                rosterRequest = null;
+                throw error;
+            });
+    }
+
+    return rosterRequest;
+}
+
 export function FantasyTeamBuilder() {
     const [players, setPlayers] = useState<FantasyDemoPlayer[]>([]);
+    const [catalogPlayers, setCatalogPlayers] = useState<FantasyDemoPlayer[]>([]);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [lineupIds, setLineupIds] = useState<string[]>([]);
     const [selectedRound, setSelectedRound] = useState<number>(1);
@@ -48,21 +83,7 @@ export function FantasyTeamBuilder() {
             setError(null);
 
             try {
-                const response = await fetch(
-                    `/api/competition-roster?competition=${COMPETITION_ID}`,
-                    { cache: "no-store" }
-                );
-                const payload = (await response.json()) as
-                    | (RosterResponse & { success: true })
-                    | { success: false; error?: string };
-
-                if (!response.ok || !payload.success) {
-                    throw new Error(
-                        "error" in payload && payload.error
-                            ? payload.error
-                            : "No se pudo cargar el catálogo de jugadores."
-                    );
-                }
+                const payload = await fetchCompetitionRoster();
 
                 const teamsById = new Map(
                     payload.teams.map((team) => [
@@ -87,15 +108,8 @@ export function FantasyTeamBuilder() {
                         weeklyScores: {},
                     })
                 );
-                const dailyRoster = createDailyFantasyRoster(
-                    realPlayers,
-                    dateKey
-                );
-
                 if (!cancelled) {
-                    setPlayers(dailyRoster.players);
-                    setSelectedIds(dailyRoster.initialTeamIds);
-                    setLineupIds(dailyRoster.initialLineupIds);
+                    setCatalogPlayers(realPlayers);
                 }
             } catch (loadError) {
                 if (!cancelled) {
@@ -117,7 +131,20 @@ export function FantasyTeamBuilder() {
         return () => {
             cancelled = true;
         };
-    }, [dateKey]);
+    }, []);
+
+    useEffect(() => {
+        if (catalogPlayers.length === 0) {
+            return;
+        }
+
+        const dailyRoster = createDailyFantasyRoster(catalogPlayers, dateKey);
+        // Reset the in-memory demo team when the daily market changes.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setPlayers(dailyRoster.players);
+        setSelectedIds(dailyRoster.initialTeamIds);
+        setLineupIds(dailyRoster.initialLineupIds);
+    }, [catalogPlayers, dateKey]);
 
     useEffect(() => {
         const interval = window.setInterval(() => {

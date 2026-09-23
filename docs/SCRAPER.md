@@ -156,6 +156,8 @@ Para probarlo con una jornada concreta:
 
 ```text
 http://localhost:3000/api/competition-statistics?competition=152&season=186&round=24
+
+http://localhost:3000/api/fantasy-round-scores?competition=152&season=186&round=1
 ```
 
 La respuesta contiene cada partido junto con sus estadísticas:
@@ -192,6 +194,28 @@ La respuesta contiene cada partido junto con sus estadísticas:
 ```
 
 > **Nota:** este endpoint puede realizar muchas peticiones a la web de RFEVB. Para pruebas, es recomendable utilizar `round` y trabajar primero con una sola jornada.
+
+Algunas jornadas incluyen fichas de partidos programados o aplazados que aún
+no tienen tablas de estadísticas. Esas fichas responden correctamente con
+HTML, pero no contienen los dos equipos estadísticos esperados. El scraper las
+omite y devuelve los partidos jugados que sí tienen estadísticas; no convierte
+un único partido pendiente en un error de toda la jornada.
+
+En la competición 152, la numeración de los contenedores de RFEVB representa
+también las fases de la competición:
+
+| Jornadas | Fase | Comportamiento |
+| -------- | ---- | -------------- |
+| 1-22 | Liga regular SVM | Se disputan todas las jornadas |
+| 23 | Cuartos de final | Eliminatorias al mejor de 3; número variable de partidos |
+| 24 | Semifinales | Eliminatorias al mejor de 3; número variable de partidos |
+| 25 | Final | Eliminatoria al mejor de 3; número variable de partidos |
+
+El contenedor 26 aparece en el HTML, pero no corresponde a una jornada jugable
+y no contiene partidos. Por tanto, la demo solo muestra las jornadas 1-22 y
+las tres fases de playoff. Las jornadas de playoff no deben interpretarse como
+una jornada regular de seis partidos: solo incluyen los partidos realmente
+programados o disputados en cada eliminatoria.
 
 ### 4. Obtener equipos y jugadores de una competición
 
@@ -340,6 +364,8 @@ lib/
 * `fetch-competition-statistics.ts`: combina partidos y estadísticas.
 * `fetch-competition-roster.ts`: obtiene equipos y jugadores de una
   competición y los adapta a `Team` y `Player`.
+- `lib/services/fantasy/fantasy-round-score.service.ts`: relaciona las
+  estadísticas de una jornada con el roster y agrega la puntuación provisional.
 
 Los datos obtenidos todavía no se almacenan en una base de datos. Consultar
 RFEVB desde una ruta HTTP sirve para la demo y para pruebas, pero no sustituye
@@ -410,11 +436,33 @@ determinista con formato `YYYY-MM-DD`:
 - la página detecta el cambio de día mientras está abierta;
 - los precios mostrados son valores de demo deterministas derivados del día y
   del `rfevbId`;
-- las puntuaciones por jornada permanecen vacías y se muestran como `0` hasta
-  conectar las estadísticas reales y el cálculo de puntuación.
+- la jornada seleccionada carga las puntuaciones reales calculadas bajo demanda;
+  una jornada sin participación registrada muestra `0` para los jugadores del
+  mercado diario.
 
 La lógica de selección y semilla está en
 `lib/services/fantasy/fantasy-team.service.ts`, mediante
 `createDailyFantasyRoster`. La plantilla inicial se construye con una
 composición válida de posiciones a partir del mercado diario. Esta lógica
 pertenece a la demo fantasy y no al scraper.
+
+## Puntuaciones fantasy por jornada
+
+El endpoint:
+
+```text
+/api/fantasy-round-scores?competition=152&season=186&round=1
+```
+
+descarga el roster, los partidos de la jornada y las estadísticas agregadas de
+cada partido. Devuelve una entrada por jugador con `score`, `matchesPlayed` y
+el desglose de `setsPlayed` y `wonLost`. La regla actual es provisional:
+
+```text
+score = setsPlayed + wonLost
+```
+
+La asociación prioriza el equipo del partido y después el dorsal o el nombre.
+Esto evita asignar estadísticas de otro club cuando varios equipos reutilizan
+el mismo dorsal. La consulta se cachea en memoria del cliente por jornada
+durante la sesión para evitar peticiones duplicadas en desarrollo.

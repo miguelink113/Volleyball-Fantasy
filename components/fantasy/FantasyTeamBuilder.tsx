@@ -10,8 +10,17 @@ import {
 } from "@/lib/services/fantasy/fantasy-team.service";
 import type { PlayerPosition } from "@/domain/player/player.types";
 
-const rounds = [1, 2, 3, 4, 5, 6, 7, 8];
+const rounds = [
+    ...Array.from({ length: 22 }, (_, index) => ({
+        number: index + 1,
+        label: `Jornada ${index + 1}`,
+    })),
+    { number: 23, label: "Cuartos de final" },
+    { number: 24, label: "Semifinales" },
+    { number: 25, label: "Final" },
+];
 const COMPETITION_ID = 152;
+const SEASON_ID = 186;
 
 interface RosterResponse {
     teams: Array<{ rfevbId?: string; name: string }>;
@@ -31,7 +40,18 @@ type RosterPayload =
     | (RosterResponse & { success: true })
     | { success: false; error?: string };
 
+interface RoundScore {
+    playerId: string;
+    score: number;
+}
+
+interface RoundScoresResponse {
+    success: true;
+    scores: RoundScore[];
+}
+
 let rosterRequest: Promise<RosterResponse> | null = null;
+const roundScoreRequests = new Map<number, Promise<RoundScoresResponse>>();
 
 function getDateKey(date = new Date()) {
     return date.toISOString().slice(0, 10);
@@ -65,6 +85,42 @@ async function fetchCompetitionRoster(): Promise<RosterResponse> {
     return rosterRequest;
 }
 
+async function fetchRoundScores(round: number): Promise<RoundScoresResponse> {
+    const cachedRequest = roundScoreRequests.get(round);
+
+    if (cachedRequest) {
+        return cachedRequest;
+    }
+
+    const request = fetch(
+        `/api/fantasy-round-scores?competition=${COMPETITION_ID}` +
+            `&season=${SEASON_ID}&round=${round}`,
+        { cache: "no-store" }
+    )
+        .then(async (response) => {
+            const payload = (await response.json()) as
+                | RoundScoresResponse
+                | { success: false; error?: string };
+
+            if (!response.ok || !payload.success) {
+                throw new Error(
+                    "error" in payload && payload.error
+                        ? payload.error
+                        : "No se pudieron calcular los puntos de la jornada."
+                );
+            }
+
+            return payload;
+        })
+        .catch((error) => {
+            roundScoreRequests.delete(round);
+            throw error;
+        });
+
+    roundScoreRequests.set(round, request);
+    return request;
+}
+
 export function FantasyTeamBuilder() {
     const [players, setPlayers] = useState<FantasyDemoPlayer[]>([]);
     const [catalogPlayers, setCatalogPlayers] = useState<FantasyDemoPlayer[]>([]);
@@ -74,6 +130,7 @@ export function FantasyTeamBuilder() {
     const [dateKey, setDateKey] = useState(() => getDateKey());
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [scoresLoading, setScoresLoading] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -145,6 +202,63 @@ export function FantasyTeamBuilder() {
         setSelectedIds(dailyRoster.initialTeamIds);
         setLineupIds(dailyRoster.initialLineupIds);
     }, [catalogPlayers, dateKey]);
+
+    useEffect(() => {
+        if (catalogPlayers.length === 0) {
+            return;
+        }
+
+        let cancelled = false;
+        // Loading state tracks the asynchronous score request.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setScoresLoading(true);
+
+        fetchRoundScores(selectedRound)
+            .then((response) => {
+                if (cancelled) {
+                    return;
+                }
+
+                const scoresByPlayerId = new Map<string, number>(
+                    response.scores.map((score) => [
+                        score.playerId,
+                        score.score,
+                    ])
+                );
+                const dailyRoster = createDailyFantasyRoster(
+                    catalogPlayers,
+                    dateKey
+                );
+
+                setPlayers(
+                    dailyRoster.players.map((player) => ({
+                        ...player,
+                        weeklyScores: {
+                            [selectedRound]:
+                                scoresByPlayerId.get(player.id) ?? 0,
+                        },
+                    }))
+                );
+            })
+            .catch((scoreError) => {
+                if (!cancelled) {
+                    setError(
+                        scoreError instanceof Error
+                            ? scoreError.message
+                            : "No se pudieron calcular los puntos de la jornada."
+                    );
+                }
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setScoresLoading(false);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [catalogPlayers, dateKey, selectedRound]);
 
     useEffect(() => {
         const interval = window.setInterval(() => {
@@ -237,7 +351,9 @@ export function FantasyTeamBuilder() {
                 </div>
                 <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                     <p className="text-sm text-slate-500">Puntuación jornada {selectedRound}</p>
-                    <p className="mt-2 text-3xl font-bold text-violet-600">{lineupScore}</p>
+                    <p className="mt-2 text-3xl font-bold text-violet-600">
+                        {scoresLoading ? "..." : lineupScore}
+                    </p>
                 </div>
             </section>
 
@@ -375,8 +491,8 @@ export function FantasyTeamBuilder() {
                         className="rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
                     >
                         {rounds.map((round) => (
-                            <option key={round} value={round}>
-                                Jornada {round}
+                            <option key={round.number} value={round.number}>
+                                {round.label}
                             </option>
                         ))}
                     </select>
@@ -392,15 +508,19 @@ export function FantasyTeamBuilder() {
                         </thead>
                         <tbody>
                             {rounds.map((round) => {
-                                const score = calculateLineupScoreForRound(lineupIds, round, players);
+                                const score = calculateLineupScoreForRound(
+                                    lineupIds,
+                                    round.number,
+                                    players
+                                );
 
                                 return (
-                                    <tr key={round} className="border-b border-slate-100">
-                                        <td className="px-3 py-2 text-slate-700">{round}</td>
+                                    <tr key={round.number} className="border-b border-slate-100">
+                                        <td className="px-3 py-2 text-slate-700">{round.label}</td>
                                         <td className={`px-3 py-2 font-semibold ${
-                                            round === selectedRound ? "text-violet-700" : "text-slate-700"
+                                            round.number === selectedRound ? "text-violet-700" : "text-slate-700"
                                         }`}>
-                                            {score}
+                                            {round.number === selectedRound && scoresLoading ? "..." : score}
                                         </td>
                                     </tr>
                                 );

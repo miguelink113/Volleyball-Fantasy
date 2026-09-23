@@ -5,6 +5,7 @@ import {
 
 import {
     scrapeMatch,
+    MatchScraperError,
     type MatchStats,
 } from "@/lib/scraper/fetch-match-statistics";
 
@@ -42,12 +43,25 @@ export async function scrapeCompetition(
         );
 
         // 3. Entramos en MatchStatistics.aspx
-        const stats = await scrapeMatch(
-            match.matchId,
-            match.competitionId,
-            match.categoryId,
-            match.seasonId
-        );
+        let stats: MatchStats;
+
+        try {
+            stats = await scrapeMatch(
+                match.matchId,
+                match.competitionId,
+                match.categoryId,
+                match.seasonId
+            );
+        } catch (error) {
+            if (!(error instanceof MatchScraperError)) {
+                throw error;
+            }
+
+            console.warn(
+                `Se omite el partido ${match.matchId}: ${error.message}`
+            );
+            continue;
+        }
 
         // 4. Relacionamos el partido con sus estadísticas.
         results.push({

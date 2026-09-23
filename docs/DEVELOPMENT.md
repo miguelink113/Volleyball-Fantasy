@@ -65,6 +65,7 @@ Rutas relevantes:
 - `/api/match-statistics`
 - `/api/competition-statistics`
 - `/api/competition-roster`
+- `/api/fantasy-round-scores`
 
 ### Dominio
 
@@ -128,8 +129,11 @@ La demo:
 El catálogo real sí procede del scraper. El mercado, los precios, las compras,
 las ventas, la plantilla y la alineación viven solo en el estado del cliente.
 No hay presupuesto real, transacciones, bloqueo por jornada ni persistencia.
-Las puntuaciones permanecen a cero porque todavía no se han conectado las
-estadísticas reales con el modelo fantasy de la demo.
+La jornada seleccionada consulta `/api/fantasy-round-scores`, que combina el
+roster real con los partidos y estadísticas de RFEVB. La regla provisional de
+la demo es `sets con participación registrada + G-P`; los resultados se
+asignan por equipo, dorsal y nombre cuando es necesario. Mercado y equipo
+siguen viviendo solo en el estado del cliente.
 
 ## Probar el catálogo real
 

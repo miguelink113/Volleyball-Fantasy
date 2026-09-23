@@ -48,7 +48,7 @@ La competición `152` se ha comprobado con 12 equipos y 180 jugadores.
 - Precios provisionales deterministas.
 - Plantilla de hasta 14 jugadores.
 - Alineación de 7 jugadores con validación de posiciones.
-- Puntuación por jornada visible en la interfaz, actualmente sin datos reales.
+- Puntuación por jornada calculada desde las estadísticas reales de RFEVB.
 
 ## No implementado todavía
 
@@ -66,7 +66,7 @@ La competición `152` se ha comprobado con 12 equipos y 180 jugadores.
 - Persistencia de plantilla y alineación por jornada.
 - Bloqueo de alineaciones.
 - Mercado persistente con ventanas de 24 horas.
-- Puntuaciones calculadas desde estadísticas reales.
+- Fórmula de puntuación versionada y reglas fantasy definitivas.
 - Ligas privadas y clasificación.
 
 ### Calidad técnica

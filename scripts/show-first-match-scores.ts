@@ -1,5 +1,4 @@
 import { BasicScoringSystem } from "@/domain/scoring/basic-scoring.system";
-import type { PlayerMatchPerformance } from "@/domain/scoring/scoring.types";
 import { mapScrapedMatch } from "@/lib/domain/map-scraped-match";
 import type { Match } from "@/lib/scraper/fetch-matches";
 import type { MatchStats } from "@/lib/scraper/fetch-match-statistics";
@@ -76,35 +75,22 @@ async function main(): Promise<void> {
         `${statsResponse.match.teams.map((team) => team.name).join(" | ")}.`
     );
     const mapped = mapScrapedMatch(scrapedMatch, statsResponse.match);
+    const setsPlayed = mapped.match.sets?.length ?? 0;
     console.log(
         `[6/7] Datos conectados al dominio: ${mapped.playerStats.length} jugadores, ` +
-        `${mapped.match.sets.length} sets y equipos ` +
+        `${setsPlayed} sets y equipos ` +
         `${mapped.teams.map((team) => team.team.name).join(" | ")}.`
     );
 
     const scoringSystem = new BasicScoringSystem();
-    const setsPlayed = mapped.match.sets.length;
     const scores = mapped.playerStats.map((stats) => {
-        const mappedTeam = mapped.teams.find(
-            (team) => team.team.id === stats.teamId
-        );
-        const player = mappedTeam?.players.find(
-            (candidate) => candidate.id === stats.playerId
-        );
+        const score = scoringSystem.calculate(stats, mapped.match);
 
-        if (!player || !mappedTeam) {
-            throw new Error(`No se encontró el jugador ${stats.playerId}.`);
-        }
-
-        const performance: PlayerMatchPerformance = {
-            player,
-            stats,
-            teamName: mappedTeam.team.name,
-            setsPlayed,
+        return {
+            playerId: stats.playerId,
+            ...score,
         };
-
-        return scoringSystem.score(performance);
-    }).sort((left, right) => right.total - left.total);
+    }).sort((left, right) => right.totalScore - left.totalScore);
 
     console.log(`[7/7] Puntuaciones calculadas con BasicScoringSystem.`);
     console.table(scores);

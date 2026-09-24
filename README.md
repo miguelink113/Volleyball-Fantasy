@@ -18,6 +18,9 @@ La aplicación tiene tres partes diferenciadas:
 La demo fantasy utiliza jugadores reales de la competición RFEVB `152`. El
 mercado diario, los precios y el equipo seleccionado son provisionales y viven
 en memoria; todavía no existe persistencia del catálogo ni del equipo fantasy.
+Los contratos de dominio y el adaptador histórico de partidos ya están
+alineados con la interfaz actual de scoring, aunque el sistema de puntuación
+definitivo todavía pertenece a la fase 2.
 
 ## Inicio rápido
 
@@ -74,6 +77,7 @@ docs/                 Documentación del proyecto
 npm run dev
 npm run build
 npm run start
+npm run test:domain
 npm run test:supabase
 npm run show:first-match-scores
 ```

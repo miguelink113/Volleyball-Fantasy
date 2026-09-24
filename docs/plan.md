@@ -18,7 +18,9 @@ visual actual con la arquitectura persistente objetivo.
 
 - La competición de la demo está fijada a `152`.
 - Los precios se generan para la demo y no representan valor de mercado real.
-- Las puntuaciones de la demo no están conectadas con estadísticas reales.
+- La demo calcula puntuaciones provisionales bajo demanda a partir de
+  estadísticas reales de RFEVB, pero todavía no las persiste ni las versiona
+  como resultados fantasy definitivos.
 - El estado del equipo se pierde al recargar.
 - El HTML de RFEVB es la fuente directa porque aún no hay ingesta persistente.
 
@@ -56,7 +58,9 @@ debe ser la fuente de lectura del producto una vez completada esa fase.
 
 ## Orden recomendado
 
-1. Corregir y estabilizar los contratos actuales de scoring y mapeo de partidos.
+1. Mantener estabilizados los contratos actuales de scoring y mapeo de partidos.
+   La corrección inicial y los tests de regresión están completados con
+   `npm run test:domain`.
 2. Añadir fixtures y tests del scraper para equipos, jugadores, partidos y
    estadísticas.
 3. Crear tablas y RLS para competiciones, temporadas, equipos, jugadores,

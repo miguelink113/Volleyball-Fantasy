@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "test:domain": "tsx scripts/test-domain.ts",
     "test:supabase": "tsx scripts/test-supabase-auth.ts",
     "show:first-match-scores": "tsx scripts/show-first-match-scores.ts"
   },

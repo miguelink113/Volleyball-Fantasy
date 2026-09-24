@@ -1,28 +1,33 @@
+import type { MatchPlayerStats } from "@/domain/match/match-player-stats.types";
+import type { Match } from "@/domain/match/match.types";
 import type {
-    PlayerMatchPerformance,
-    PlayerScore,
+    ScoringCalculationResult,
     ScoringSystem,
 } from "@/domain/scoring/scoring.types";
 
 /**
  * Sistema inicial: un punto por set jugado y el valor de G-P.
  *
- * La interfaz permite sustituir esta implementación sin cambiar
- * el adaptador ni los consumidores de puntuaciones.
+ * Esta implementación es provisional y se mantiene únicamente para conservar
+ * el comportamiento de la demo hasta definir ScoringSystemV1.
  */
 export class BasicScoringSystem implements ScoringSystem {
-    score(performance: PlayerMatchPerformance): PlayerScore {
-        const setsPlayedPoints = Math.max(0, performance.setsPlayed);
-        const gpPoints = performance.stats.pointsWonLost;
+    readonly version = "basic-v1";
+
+    calculate(
+        stats: MatchPlayerStats,
+        _match: Match
+    ): ScoringCalculationResult {
+        const setsPlayedPoints = Math.max(0, stats.setsPlayed);
+        const gpPoints = stats.wonLost;
 
         return {
-            playerId: performance.player.id,
-            playerName: performance.player.name,
-            teamId: performance.stats.teamId,
-            teamName: performance.teamName,
-            setsPlayedPoints,
-            gpPoints,
-            total: setsPlayedPoints + gpPoints,
+            totalScore: setsPlayedPoints + gpPoints,
+            breakdown: {
+                setsPlayed: setsPlayedPoints,
+                wonLost: gpPoints,
+            },
+            isProvisional: true,
         };
     }
 }

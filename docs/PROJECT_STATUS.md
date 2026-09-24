@@ -72,8 +72,8 @@ La competición `152` se ha comprobado con 12 equipos y 180 jugadores.
 ### Calidad técnica
 
 - Fixtures y tests automatizados del scraper.
-- Corrección completa del adaptador histórico de partidos al dominio actual.
-- Alineación de `BasicScoringSystem` con el contrato actual de scoring.
+- Tests unitarios básicos para el contrato de scoring y el adaptador histórico
+  de partidos (`npm run test:domain`).
 - Edición de perfil y recuperación de contraseña.
 - Esquema Supabase y políticas RLS para las nuevas entidades fantasy.
 
@@ -88,3 +88,18 @@ definitiva.
 El scraper tampoco es una base de datos. Consulta RFEVB bajo demanda y
 devuelve resultados. La futura ingesta deberá guardar esos resultados antes de
 que el fantasy pueda utilizarlos como catálogo oficial.
+
+## Estado de la fase 1 de saneamiento
+
+La fase 1 del saneamiento del dominio está completada:
+
+- `BasicScoringSystem` implementa el contrato `ScoringSystem` vigente.
+- `Match`, `Competition`, `Season` y `MatchPlayerStats` se construyen con sus
+  campos actuales.
+- `mapScrapedMatch` separa los DTO del scraper de las entidades del dominio.
+- Los valores estadísticos ausentes del scraper se convierten explícitamente en
+  `0` durante el mapeo.
+- `npm run build` y `npm run test:domain` pasan correctamente.
+
+El scoring sigue siendo provisional (`basic-v1`), no la fórmula definitiva de
+`ScoringSystemV1`.

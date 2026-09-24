@@ -37,6 +37,24 @@ function toNumber(value: number | null): number {
     return value ?? 0;
 }
 
+function splitDisplayName(displayName: string): {
+    firstName: string;
+    lastName: string;
+} {
+    const parts = displayName.trim().split(/\s+/).filter(Boolean);
+
+    return {
+        firstName: parts[0] ?? "",
+        lastName: parts.slice(1).join(" "),
+    };
+}
+
+function getSetsPlayed(stats: PlayerStats): number {
+    return Object.values(stats.startingFormation).filter(
+        (position) => position !== null
+    ).length;
+}
+
 function mapPlayerStats(
     matchId: string,
     teamId: string,
@@ -48,21 +66,21 @@ function mapPlayerStats(
         matchId,
         playerId: player.id,
         teamId,
+        setsPlayed: getSetsPlayed(stats),
         pointsTotal: toNumber(stats.points.total),
-        pointsBp: toNumber(stats.points.bp),
-        pointsWonLost: toNumber(stats.points.wonLost),
+        pointsBreakout: toNumber(stats.points.bp),
+        wonLost: toNumber(stats.points.wonLost),
         serveTotal: toNumber(stats.serve.total),
         serveErrors: toNumber(stats.serve.errors),
-        serveDirectPoints: toNumber(stats.serve.directPoints),
+        serveAces: toNumber(stats.serve.directPoints),
         receptionTotal: toNumber(stats.reception.total),
         receptionErrors: toNumber(stats.reception.errors),
-        receptionPositivePercentage: toNumber(stats.reception.positivePercentage),
-        receptionExcellentPercentage: toNumber(stats.reception.excellentPercentage),
+        receptionPositive: toNumber(stats.reception.positivePercentage),
+        receptionExcellent: toNumber(stats.reception.excellentPercentage),
         attackTotal: toNumber(stats.attack.total),
         attackErrors: toNumber(stats.attack.errors),
-        attackBlocks: toNumber(stats.attack.blocks),
-        attackExcellent: toNumber(stats.attack.excellent),
-        attackExcellentPercentage: toNumber(stats.attack.excellentPercentage),
+        attackBlocked: toNumber(stats.attack.blocks),
+        attackPoints: toNumber(stats.attack.excellent),
         blockPoints: toNumber(stats.block.points),
     };
 }
@@ -73,11 +91,15 @@ export function mapScrapedMatch(
 ): MappedMatch {
     const competition: Competition = {
         id: scrapedMatch.competitionId,
+        rfevbId: scrapedMatch.competitionId,
         name: `Competición ${scrapedMatch.competitionId}`,
     };
     const season: Season = {
         id: scrapedMatch.seasonId,
+        rfevbId: scrapedMatch.seasonId,
+        competitionId: competition.id,
         name: `Temporada ${scrapedMatch.seasonId}`,
+        isCurrent: false,
     };
 
     const mappedTeams = scrapedStats.teams.map((scrapedTeam, index) => {
@@ -90,13 +112,23 @@ export function mapScrapedMatch(
                 ? matchTeamName
                 : scrapedTeam.name;
         const teamId = createStableId("team", teamName);
-        const players = scrapedTeam.players.map((scrapedPlayer) => ({
-            id: createStableId(
+        const players = scrapedTeam.players.map((scrapedPlayer) => {
+            const displayName = scrapedPlayer.name.trim();
+            const names = splitDisplayName(displayName);
+
+            return {
+                id: createStableId(
                 "player",
                 `${teamId}:${scrapedPlayer.number}:${scrapedPlayer.name}`
             ),
-            name: scrapedPlayer.name,
-        }));
+                firstName: names.firstName,
+                lastName: names.lastName,
+                displayName,
+                position: "outside" as const,
+                currentTeamId: teamId,
+                dorsal: scrapedPlayer.number,
+            };
+        });
 
         return {
             team: { id: teamId, name: teamName },
@@ -104,16 +136,24 @@ export function mapScrapedMatch(
         };
     });
 
+    if (mappedTeams.length !== 2) {
+        throw new Error(
+            `Se esperaban dos equipos en las estadísticas y se encontraron ${mappedTeams.length}.`
+        );
+    }
+
     const [homeTeam, awayTeam] = mappedTeams;
     const match: Match = {
         id: scrapedMatch.matchId,
+        rfevbMatchId: scrapedMatch.matchId,
         competitionId: competition.id,
         seasonId: season.id,
-        round: scrapedMatch.round,
+        roundNumber: scrapedMatch.round,
         homeTeamId: homeTeam.team.id,
         awayTeamId: awayTeam.team.id,
-        homeScore: scrapedStats.homeScore ?? 0,
-        awayScore: scrapedStats.awayScore ?? 0,
+        homeSets: scrapedStats.homeScore ?? 0,
+        awaySets: scrapedStats.awayScore ?? 0,
+        status: "COMPLETED",
         sets: scrapedStats.sets.map((set, index) => ({
             setNumber: index + 1,
             homeScore: set.home,
@@ -123,6 +163,12 @@ export function mapScrapedMatch(
 
     const playerStats = scrapedStats.teams.flatMap((scrapedTeam, teamIndex) => {
         const mappedTeam = mappedTeams[teamIndex];
+
+        if (!mappedTeam) {
+            throw new Error(
+                `No se encontró el equipo mapeado para el índice ${teamIndex}.`
+            );
+        }
 
         return scrapedTeam.players.map((scrapedPlayer, playerIndex) =>
             mapPlayerStats(

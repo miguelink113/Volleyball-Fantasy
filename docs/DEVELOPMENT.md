@@ -21,11 +21,14 @@ La aplicación se inicia normalmente en `http://localhost:3000`.
 npm run dev
 npm run build
 npm run start
+npm run test:domain
 npm run test:supabase
 npm run show:first-match-scores
 ```
 
-`npm run test:supabase` requiere las variables descritas en
+`npm run test:domain` ejecuta tests unitarios sin conexión externa sobre el
+contrato de scoring y el adaptador `mapScrapedMatch`. `npm run test:supabase`
+requiere las variables descritas en
 `docs/AUTHENTICATION.md`. `npm run show:first-match-scores` requiere que la
 aplicación esté disponible y utiliza las rutas HTTP del scraper.
 
@@ -151,10 +154,33 @@ npx tsx -e "import { scrapeCompetitionRoster } from './lib/scraper/fetch-competi
 
 La comprobación actual devuelve 12 equipos y 180 jugadores.
 
+## Tests y validación
+
+La validación mínima de cambios de dominio es:
+
+```bash
+npm run test:domain
+npm run build
+```
+
+Los tests unitarios están en `scripts/test-domain.ts` y utilizan `node:assert`
+con `tsx`, por lo que no se introduce un framework adicional. Cubren:
+
+- el contrato y resultado de `BasicScoringSystem`;
+- el mapeo de competición, temporada y partido;
+- la normalización de estadísticas nulas;
+- el cálculo de sets jugados a partir de la formación;
+- el rechazo de partidos que no contienen exactamente dos equipos.
+
+El runner muestra para cada caso qué comportamiento verifica, cuándo comienza,
+si ha terminado correctamente y el motivo concreto del fallo, incluyendo los
+valores real y esperado cuando falla una aserción.
+
+El test de Supabase sigue siendo una prueba de integración y requiere un
+proyecto configurado con las variables de `docs/AUTHENTICATION.md`.
+
 ## Limitaciones conocidas
 
-- El build global tiene errores pendientes en el contrato de scoring y en el
-  adaptador histórico `lib/domain/map-scraped-match.ts`.
 - El scraper depende de HTML externo y necesita pruebas con fixtures.
 - No existe ingesta programada ni almacenamiento de datos deportivos.
 - La demo fantasy no representa todavía el comportamiento final del producto.

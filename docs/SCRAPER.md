@@ -303,24 +303,29 @@ El roster actual usa directamente los identificadores oficiales:
 - `rfevb:team:<id>` para equipos.
 - `rfevb:player:<id>` para jugadores.
 
-El mapeador histórico de partidos todavía genera algunas identidades a partir
-de nombres y dorsales y debe alinearse con el roster oficial antes de la
-ingesta persistente.
+El mapeador histórico de partidos genera identidades estables a partir de
+nombres y dorsales porque las estadísticas de partido no incluyen siempre el
+identificador RFEVB del jugador. Debe alinearse con el roster oficial por
+`rfevbId` antes de la ingesta persistente.
 Los valores estadísticos ausentes se normalizan a `0` en el modelo de dominio.
 
 El sistema de puntuación se define mediante `ScoringSystem`, por lo que puede
-sustituirse sin modificar el adaptador. `BasicScoringSystem` aplica actualmente
-la regla inicial:
+sustituirse sin modificar el adaptador. `BasicScoringSystem` implementa el
+contrato vigente y aplica actualmente la regla inicial:
 
 ```text
 puntuación = sets jugados + G-P
 ```
 
-El scraper actual devuelve estadísticas agregadas del partido, no la
-participación de cada jugador en cada set. Por ello, la primera implementación
-usa el número de sets del partido para los jugadores que aparecen en la tabla
-agregada. Cuando se extraiga la participación por set, solo habrá que cambiar
-ese dato de entrada, no el sistema de puntuación.
+El scraper actual devuelve estadísticas agregadas del partido y una formación
+con cinco posiciones por jugador. El adaptador cuenta las posiciones no nulas
+(`number` o `*`) como sets con participación registrada. Los campos numéricos
+ausentes (`null`) se normalizan a `0`; el adaptador no inventa datos que RFEVB
+no proporcione.
+
+El resultado de `BasicScoringSystem` contiene `totalScore`, `breakdown`,
+`isProvisional` y la versión `basic-v1`. Esta implementación es provisional:
+la fórmula definitiva y versionada `ScoringSystemV1` se definirá en la fase 2.
 
 ## Ejecutar el scraper
 
@@ -466,3 +471,20 @@ La asociación prioriza el equipo del partido y después el dorsal o el nombre.
 Esto evita asignar estadísticas de otro club cuando varios equipos reutilizan
 el mismo dorsal. La consulta se cachea en memoria del cliente por jornada
 durante la sesión para evitar peticiones duplicadas en desarrollo.
+
+## Tests del contrato de dominio
+
+Los tests unitarios del adaptador y del scoring se ejecutan sin RFEVB ni
+Supabase:
+
+```bash
+npm run test:domain
+```
+
+Para modificar `mapScrapedMatch`, deben mantenerse las garantías de que:
+
+- el resultado contiene entidades compatibles con `Competition`, `Season`,
+  `Match`, `Player` y `MatchPlayerStats`;
+- las estadísticas incompletas siguen siendo seguras;
+- un partido sin dos equipos se rechaza explícitamente;
+- los identificadores estables no dependen de objetos de React ni de Supabase.

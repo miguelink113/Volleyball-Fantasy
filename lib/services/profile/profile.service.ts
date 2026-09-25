@@ -15,7 +15,7 @@ export async function updateProfileById(
     supabase: SupabaseClient,
     userId: string,
     updates: {
-        full_name?: string;
+        username?: string;
         email?: string;
     }
 ) {

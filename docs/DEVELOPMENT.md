@@ -137,9 +137,15 @@ La demo:
   - 2 centrales;
   - 2 receptores.
 
-El catálogo real sí procede del scraper. El mercado, los precios, las compras,
-las ventas, la plantilla y la alineación viven solo en el estado del cliente.
-No hay presupuesto real, transacciones, bloqueo por jornada ni persistencia.
+El catálogo real sí procede del scraper. La demo todavía mantiene el mercado,
+las compras, las ventas, la plantilla y la alineación en el cliente; el esquema
+persistente y sus funciones server-side ya están definidos, pero aún falta
+conectar los repositorios y migrar la UI.
+
+La salida de una liga se ejecuta mediante `leave_private_league`. La liga nunca
+queda sin miembros: si sale el propietario, el miembro más antiguo restante
+pasa a ser el nuevo propietario; si el propietario es el único miembro, la
+liga se elimina completamente.
 La jornada seleccionada consulta `/api/fantasy-round-scores`, que combina el
 roster real con los partidos y estadísticas de RFEVB y aplica
 `ScoringSystemV1`. La respuesta incluye `scoringVersion: "v1"`; los resultados

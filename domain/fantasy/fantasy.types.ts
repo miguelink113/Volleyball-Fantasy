@@ -24,16 +24,16 @@ export interface FantasyTeamPlayer {
     playerId: string;
     buyPrice: number;
     joinedAt: Date;
+    joinedRoundId: string;
     leftAt?: Date;
+    leftRoundId?: string;
     isActive: boolean;
 }
 
 export interface FantasyLineup {
     id: string;
     fantasyTeamId: string;
-    roundNumber: number;
-    isLocked: boolean;
-    lockedAt?: Date;
+    roundId: string;
     players: FantasyLineupSlot[];
 }
 
@@ -51,7 +51,7 @@ export interface League {
     createdAt: Date;
 }
 
-export type LeagueMemberRole = 'admin' | 'member';
+export type LeagueMemberRole = 'owner' | 'member';
 
 export interface LeagueMember {
     id: string;

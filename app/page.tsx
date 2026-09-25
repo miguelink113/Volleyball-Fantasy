@@ -35,7 +35,7 @@ export default async function HomePage() {
         </h1>
         <p className="mt-6 text-gray-600">Usuario conectado</p>
         <p className="mt-1 text-xl font-semibold text-gray-800">
-          {profile.full_name || profile.email}
+          {profile.username}
         </p>
         <p className="mt-1 text-gray-500">{profile.email}</p>
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">

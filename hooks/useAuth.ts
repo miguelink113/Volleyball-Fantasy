@@ -10,7 +10,7 @@ import {
 export interface UserProfile {
   id: string;
   email: string;
-  full_name: string | null;
+  username: string;
   created_at: string;
   updated_at: string;
 }
@@ -93,7 +93,7 @@ export function useAuth() {
       async (
           email: string,
           password: string,
-          fullName: string
+          username: string
       ) => {
         setError(null);
 
@@ -104,6 +104,11 @@ export function useAuth() {
           } = await supabase.auth.signUp({
             email,
             password,
+            options: {
+              data: {
+                username,
+              },
+            },
           });
 
           if (authError || !authData.user) {
@@ -113,26 +118,15 @@ export function useAuth() {
             return null;
           }
 
-          const {
-            data: profileData,
-            error: profileError,
-          } = await updateProfileById(
+          const profileData = await getProfileById(
               supabase,
-              authData.user.id,
-              {
-                full_name: fullName,
-              }
+              authData.user.id
           );
-
-          if (profileError) {
-            setError(profileError.message);
-            return null;
-          }
 
           return {
             user: authData.user,
             session: authData.session,
-            profile: profileData,
+            profile: profileData.data,
           };
         } catch (err) {
           const message =
@@ -208,7 +202,7 @@ export function useAuth() {
 
   const updateProfile = useCallback(
       async (updates: {
-        full_name?: string;
+        username?: string;
         email?: string;
       }) => {
         setError(null);

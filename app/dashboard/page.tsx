@@ -60,12 +60,12 @@ export default function DashboardPage() {
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center">
               <span className="text-white text-2xl font-bold">
-                {profile.full_name?.charAt(0).toUpperCase() || "U"}
+                {profile.username.charAt(0).toUpperCase() || "U"}
               </span>
             </div>
             <div>
               <h2 className="text-2xl font-bold text-gray-800">
-                ¡Hola, {profile.full_name}!
+                ¡Hola, {profile.username}!
               </h2>
               <p className="text-gray-600">{profile.email}</p>
             </div>
@@ -83,7 +83,7 @@ export default function DashboardPage() {
               <div>
                 <p className="text-sm text-gray-600">Nombre</p>
                 <p className="text-lg font-medium text-gray-800">
-                  {profile.full_name || "No especificado"}
+                  {profile.username}
                 </p>
               </div>
               <div>

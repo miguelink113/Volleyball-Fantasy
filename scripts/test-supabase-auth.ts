@@ -111,7 +111,7 @@ async function run() {
                 password,
                 email_confirm: true,
                 user_metadata: {
-                    full_name: "Usuario Test 1",
+                    username: "usuario_test_1",
                 },
             });
 
@@ -158,8 +158,8 @@ async function run() {
         );
 
         assert(
-            profile1?.full_name === "Usuario Test 1",
-            "El full_name del perfil coincide con los metadatos."
+            profile1?.username === "usuario_test_1",
+            "El username del perfil coincide con los metadatos."
         );
 
         assert(
@@ -190,7 +190,7 @@ async function run() {
                 password,
                 email_confirm: true,
                 user_metadata: {
-                    full_name: "Usuario Test 2",
+                    username: "usuario_test_2",
                 },
             });
 
@@ -327,34 +327,22 @@ async function run() {
         console.log("7. RLS - ACTUALIZAR SU PROPIO PROFILE");
         console.log("-------------------------------------");
 
-        const previousUpdatedAt = ownProfile.updated_at;
-
         const {
             data: updatedProfile,
             error: updateOwnError,
         } = await client1
             .from("profiles")
             .update({
-                full_name: "Usuario Test 1 Actualizado",
+                username: "usuario_test_updated",
             })
             .eq("id", user1Id)
             .select()
             .single();
 
-        if (updateOwnError) {
-            throw updateOwnError;
-        }
-
         assert(
-            updatedProfile.full_name ===
-            "Usuario Test 1 Actualizado",
-            "El usuario puede actualizar su propio perfil."
+            !!updateOwnError || !updatedProfile,
+            "El username del perfil no puede modificarse directamente."
         );
-
-//        assert(
-//          updatedProfile.updated_at !== previousUpdatedAt,
-//        "updated_at cambia al modificar el perfil."
-//  );
 
         // =========================================================
         // 8. INTENTAR ACTUALIZAR PROFILE DE OTRO
@@ -370,7 +358,7 @@ async function run() {
         } = await client1
             .from("profiles")
             .update({
-                full_name: "ATAQUE",
+                username: "ataque",
             })
             .eq("id", user2Id)
             .select();

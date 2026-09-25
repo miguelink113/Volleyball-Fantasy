@@ -1,7 +1,7 @@
 # Autenticación
 
 La autenticación utiliza Supabase Auth y perfiles almacenados en la tabla
-`profiles`.
+`profiles`. Cada perfil tiene un `username` único; no se almacena `full_name`.
 
 ## Variables de entorno
 

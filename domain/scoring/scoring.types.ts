@@ -12,11 +12,12 @@ export interface ScoringSystem {
     calculate(stats: MatchPlayerStats, match: Match): ScoringCalculationResult;
 }
 
-export interface PlayerRoundScore {
+export interface PlayerMatchScore {
     id: string;
     playerId: string;
+    matchId: string;
     seasonId: string;
-    roundNumber: number;
+    roundId: string;
     score: number;
     breakdown: Record<string, number>;
     scoringVersion: string;

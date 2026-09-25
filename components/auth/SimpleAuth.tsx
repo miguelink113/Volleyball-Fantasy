@@ -21,7 +21,7 @@ export function SimpleAuth() {
   const [formData, setFormData] = useState({
     email: "",
     password: "",
-    fullName: "",
+    username: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
@@ -47,14 +47,17 @@ export function SimpleAuth() {
 
     try {
       if (mode === "register") {
-        if (!formData.fullName.trim()) {
+        if (!/^[A-Za-z0-9_]{3,24}$/.test(formData.username.trim())) {
+          setSuccessMessage(
+              "El username debe tener entre 3 y 24 caracteres: letras, números o _."
+          );
           return;
         }
 
         const result = await signUp(
             formData.email,
             formData.password,
-            formData.fullName.trim()
+            formData.username.trim()
         );
 
         if (!result) {
@@ -76,7 +79,7 @@ export function SimpleAuth() {
         setFormData({
           email: "",
           password: "",
-          fullName: "",
+          username: "",
         });
 
         setMode("login");
@@ -107,7 +110,7 @@ export function SimpleAuth() {
     setFormData({
       email: "",
       password: "",
-      fullName: "",
+      username: "",
     });
   };
 
@@ -141,18 +144,18 @@ export function SimpleAuth() {
           {mode === "register" && (
               <div>
                 <label
-                    htmlFor="fullName"
+                    htmlFor="username"
                     className="block text-sm font-medium text-gray-700 mb-1"
                 >
-                  Nombre Completo
+                  Username
                 </label>
 
                 <input
-                    id="fullName"
+                    id="username"
                     type="text"
-                    name="fullName"
-                    placeholder="Juan Pérez"
-                    value={formData.fullName}
+                    name="username"
+                    placeholder="miguel123"
+                    value={formData.username}
                     onChange={handleInputChange}
                     className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none"
                     required

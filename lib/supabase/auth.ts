@@ -43,7 +43,7 @@ export async function getUserProfile() {
 export async function updateUserProfile(
     userId: string,
     updates: {
-      full_name?: string;
+      username?: string;
       email?: string;
     }
 ) {

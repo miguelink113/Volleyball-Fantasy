@@ -38,6 +38,10 @@ function calculateMatchResult(
         return 0;
     }
 
+    if (match.homeSets === null || match.awaySets === null) {
+        return 0;
+    }
+
     if (stats.teamId === match.homeTeamId) {
         return match.homeSets - match.awaySets;
     }

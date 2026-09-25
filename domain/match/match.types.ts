@@ -10,8 +10,8 @@ export interface Match {
     roundNumber: number;    // Jornada
     homeTeamId: string;     // FK a Team
     awayTeamId: string;     // FK a Team
-    homeSets: number;
-    awaySets: number;
+    homeSets: number | null;
+    awaySets: number | null;
     matchDate?: Date;
     status: MatchStatus;
     sets?: MatchSet[];

@@ -88,16 +88,17 @@ debe ser la fuente de lectura del producto una vez completada esa fase.
 - `matches`
 - `match_player_stats`
 - `player_round_scores`
+- `player_match_scores`
 - `player_market_values`
 - `fantasy_teams`
 - `fantasy_team_players`
-- `fantasy_lineups`
+- `lineups`
 - `market_windows`
 - `market_listings`
 - `transfers`
-- `leagues`
-- `league_members`
-- `league_round_scores`
+- `private_leagues`
+- `private_league_members`
+- `fantasy_scores`
 
 Las identidades deportivas deben priorizar el ID oficial RFEVB. Los nombres
 solo deben utilizarse como apoyo para detectar cambios o resolver registros

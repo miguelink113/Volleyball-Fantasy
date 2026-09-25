@@ -212,10 +212,10 @@ function testScoringSystemV1(): void {
         attack: 4,
         setterAttackBonus: 0,
         blocks: 2,
-        reception: 12,
+        reception: 5,
         matchResult: 2,
     });
-    assert.equal(result.totalScore, 27);
+    assert.equal(result.totalScore, 20);
 }
 
 function testScoringSystemV1ServeRate(): void {
@@ -389,7 +389,7 @@ function testScoringSystemV1PositionBonuses(): void {
     );
 
     assert.equal(libero.breakdown.participation, 0);
-    assert.equal(libero.breakdown.reception, 20);
+    assert.equal(libero.breakdown.reception, 8);
     assert.equal(setter.breakdown.participation, 4);
     assert.equal(setter.breakdown.setterAttackBonus, 5);
     assert.equal(middle.breakdown.blocks, 6);

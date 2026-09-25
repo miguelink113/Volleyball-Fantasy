@@ -110,8 +110,9 @@ datos en Supabase y no contiene lógica de presentación.
 ### Persistencia
 
 `lib/supabase/` contiene clientes y sincronización de sesión. La persistencia
-de competiciones, jugadores, equipos, partidos, mercado y equipos fantasy aún
-no está implementada.
+de competiciones, jugadores, equipos, partidos, mercado y equipos fantasy está
+definida en `supabase/migrations/20260925123000_create_fantasy_schema.sql`;
+todavía falta conectar los repositorios y la ingesta con esas tablas.
 
 ## Demo fantasy actual
 

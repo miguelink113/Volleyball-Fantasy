@@ -7,8 +7,9 @@
     "build": "next build",
     "start": "next start",
     "test:domain": "tsx scripts/test-domain.ts",
+    "test:match-parser": "tsx scripts/test-match-parser.ts",
     "test:supabase": "tsx scripts/test-supabase-auth.ts",
-    "show:first-match-scores": "tsx scripts/show-first-match-scores.ts"
+    "show:match-scores": "tsx scripts/show-match-scores.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

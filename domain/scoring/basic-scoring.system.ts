@@ -8,8 +8,8 @@ import type {
 /**
  * Sistema inicial: un punto por set jugado y el valor de G-P.
  *
- * Esta implementación es provisional y se mantiene únicamente para conservar
- * el comportamiento de la demo hasta definir ScoringSystemV1.
+ * Esta implementación histórica se mantiene únicamente por compatibilidad.
+ * Los nuevos flujos deben utilizar ScoringSystemV1.
  */
 export class BasicScoringSystem implements ScoringSystem {
     readonly version = "basic-v1";

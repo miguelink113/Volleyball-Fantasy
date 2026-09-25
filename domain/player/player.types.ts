@@ -1,4 +1,10 @@
-export type PlayerPosition = 'setter' | 'opposite' | 'outside' | 'middle' | 'libero';
+export type PlayerPosition =
+    | 'setter'
+    | 'opposite'
+    | 'outside'
+    | 'middle'
+    | 'libero'
+    | 'unknown';
 
 export interface Player {
     id: string;             // UUID interno de base de datos

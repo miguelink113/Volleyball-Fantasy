@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { BasicScoringSystem } from "@/domain/scoring/basic-scoring.system";
 import type { Match } from "@/domain/match/match.types";
+import type { MatchPlayerStats } from "@/domain/match/match-player-stats.types";
+import {
+    SCORING_SYSTEM_V1_VERSION,
+    ScoringSystemV1,
+} from "@/domain/scoring/scoring-v1.system";
 import { mapScrapedMatch } from "@/lib/domain/map-scraped-match";
 import type { Match as ScrapedMatch } from "@/lib/scraper/fetch-matches";
 import type {
@@ -120,6 +125,7 @@ function testBasicScoringSystem(): void {
             matchId: "match-1",
             playerId: "player-1",
             teamId: "home",
+            position: "outside",
             setsPlayed: 3,
             pointsTotal: 12,
             pointsBreakout: 2,
@@ -135,6 +141,7 @@ function testBasicScoringSystem(): void {
             attackErrors: 2,
             attackBlocked: 3,
             attackPoints: 9,
+            attackExcellentPercentage: 45,
             blockPoints: 1,
         },
         match
@@ -149,6 +156,245 @@ function testBasicScoringSystem(): void {
         },
         isProvisional: true,
     });
+}
+
+function createDomainStats(
+    overrides: Partial<MatchPlayerStats> = {}
+): MatchPlayerStats {
+    return {
+        matchId: "match-1",
+        playerId: "player-1",
+        teamId: "home",
+        position: "outside",
+        setsPlayed: 3,
+        pointsTotal: 12,
+        pointsBreakout: 2,
+        wonLost: 5,
+        serveTotal: 10,
+        serveErrors: 1,
+        serveAces: 2,
+        receptionTotal: 8,
+        receptionErrors: 1,
+        receptionPositive: 75,
+        receptionExcellent: 50,
+        attackTotal: 20,
+        attackErrors: 2,
+        attackBlocked: 3,
+        attackPoints: 9,
+        attackExcellentPercentage: 45,
+        blockPoints: 1,
+        ...overrides,
+    };
+}
+
+function testScoringSystemV1(): void {
+    const scoringSystem = new ScoringSystemV1();
+    const match: Match = {
+        id: "match-1",
+        rfevbMatchId: "match-1",
+        competitionId: "152",
+        seasonId: "186",
+        roundNumber: 1,
+        homeTeamId: "home",
+        awayTeamId: "away",
+        homeSets: 3,
+        awaySets: 1,
+        status: "COMPLETED",
+    };
+
+    const result = scoringSystem.calculate(createDomainStats(), match);
+
+    assert.equal(scoringSystem.version, SCORING_SYSTEM_V1_VERSION);
+    assert.equal(result.isProvisional, false);
+    assert.deepEqual(result.breakdown, {
+        participation: 3,
+        serve: 4,
+        attack: 4,
+        setterAttackBonus: 0,
+        blocks: 2,
+        reception: 12,
+        matchResult: 2,
+    });
+    assert.equal(result.totalScore, 27);
+}
+
+function testScoringSystemV1ServeRate(): void {
+    const scoringSystem = new ScoringSystemV1();
+    const result = scoringSystem.calculate(
+        createDomainStats({
+            setsPlayed: 4,
+            serveTotal: 17,
+            serveErrors: 3,
+            serveAces: 2,
+            attackPoints: 0,
+            attackExcellentPercentage: 45,
+            attackErrors: 0,
+            attackBlocked: 0,
+            blockPoints: 0,
+            receptionTotal: 0,
+        }),
+        {
+            id: "match-1",
+            rfevbMatchId: "match-1",
+            competitionId: "152",
+            seasonId: "186",
+            roundNumber: 1,
+            homeTeamId: "home",
+            awayTeamId: "away",
+            homeSets: 0,
+            awaySets: 0,
+            status: "SCHEDULED",
+        }
+    );
+
+    assert.equal(result.breakdown.serve, 5);
+}
+
+function testScoringSystemV1DoesNotDoubleCountAmbiguousTotals(): void {
+    const scoringSystem = new ScoringSystemV1();
+    const match: Match = {
+        id: "match-1",
+        rfevbMatchId: "match-1",
+        competitionId: "152",
+        seasonId: "186",
+        roundNumber: 1,
+        homeTeamId: "home",
+        awayTeamId: "away",
+        homeSets: 0,
+        awaySets: 0,
+        status: "SCHEDULED",
+    };
+
+    const result = scoringSystem.calculate(
+        createDomainStats({
+            setsPlayed: 0,
+            pointsTotal: 999,
+            pointsBreakout: 999,
+            wonLost: 999,
+            serveTotal: 0,
+            serveErrors: 0,
+            serveAces: 0,
+            receptionTotal: 0,
+            receptionErrors: 0,
+            receptionPositive: 100,
+            receptionExcellent: 100,
+            attackTotal: 0,
+            attackErrors: 0,
+            attackBlocked: 0,
+            attackPoints: 0,
+            blockPoints: 0,
+            position: "outside",
+        }),
+        match
+    );
+
+    assert.equal(result.totalScore, 0);
+    assert.equal(result.breakdown.reception, 0);
+    assert.equal(result.breakdown.matchResult, 0);
+}
+
+function testScoringSystemV1PenalizesLoss(): void {
+    const scoringSystem = new ScoringSystemV1();
+    const result = scoringSystem.calculate(
+        createDomainStats({
+            teamId: "home",
+            setsPlayed: 0,
+            serveErrors: 0,
+            attackErrors: 0,
+            attackBlocked: 0,
+            receptionErrors: 0,
+            serveAces: 0,
+            attackPoints: 0,
+            blockPoints: 0,
+            receptionTotal: 0,
+        }),
+        {
+            id: "match-1",
+            rfevbMatchId: "match-1",
+            competitionId: "152",
+            seasonId: "186",
+            roundNumber: 1,
+            homeTeamId: "home",
+            awayTeamId: "away",
+            homeSets: 1,
+            awaySets: 3,
+            status: "COMPLETED",
+        }
+    );
+
+    assert.equal(result.totalScore, -2);
+    assert.equal(result.breakdown.matchResult, -2);
+}
+
+function testScoringSystemV1PositionBonuses(): void {
+    const scoringSystem = new ScoringSystemV1();
+    const match: Match = {
+        id: "match-1",
+        rfevbMatchId: "match-1",
+        competitionId: "152",
+        seasonId: "186",
+        roundNumber: 1,
+        homeTeamId: "home",
+        awayTeamId: "away",
+        homeSets: 3,
+        awaySets: 0,
+        status: "COMPLETED",
+    };
+
+    const libero = scoringSystem.calculate(
+        createDomainStats({
+            position: "libero",
+            setsPlayed: 0,
+            serveAces: 0,
+            serveErrors: 0,
+            attackPoints: 0,
+            attackErrors: 0,
+            attackBlocked: 0,
+            blockPoints: 0,
+            receptionTotal: 10,
+            receptionErrors: 0,
+            receptionPositive: 50,
+            receptionExcellent: 50,
+        }),
+        match
+    );
+    const middle = scoringSystem.calculate(
+        createDomainStats({
+            position: "middle",
+            setsPlayed: 0,
+            serveAces: 0,
+            serveErrors: 0,
+            attackPoints: 0,
+            attackErrors: 0,
+            attackBlocked: 0,
+            blockPoints: 2,
+            receptionTotal: 0,
+        }),
+        match
+    );
+    const setter = scoringSystem.calculate(
+        createDomainStats({
+            position: "setter",
+            setsPlayed: 4,
+            serveTotal: 0,
+            serveErrors: 0,
+            serveAces: 0,
+            attackPoints: 0,
+            attackErrors: 0,
+            attackBlocked: 0,
+            blockPoints: 0,
+            receptionTotal: 0,
+        }),
+        match
+    );
+
+    assert.equal(libero.breakdown.participation, 0);
+    assert.equal(libero.breakdown.reception, 20);
+    assert.equal(setter.breakdown.participation, 4);
+    assert.equal(setter.breakdown.setterAttackBonus, 5);
+    assert.equal(middle.breakdown.blocks, 6);
+    assert.equal(Number.isInteger(libero.totalScore), true);
+    assert.equal(Number.isInteger(middle.totalScore), true);
 }
 
 function testMatchMapping(): void {
@@ -172,13 +418,14 @@ function testMatchMapping(): void {
     assert.equal(playerStats.wonLost, 5);
     assert.equal(playerStats.serveAces, 2);
     assert.equal(playerStats.attackBlocked, 3);
+    assert.equal(playerStats.attackExcellentPercentage, 45);
 
     const player = mapped.teams[0]?.players[0];
     assert.ok(player);
     assert.equal(player.firstName, "Ana");
     assert.equal(player.lastName, "García");
     assert.equal(player.displayName, "Ana García");
-    assert.equal(player.position, "outside");
+    assert.equal(player.position, "unknown");
 }
 
 function testNullStatisticsBecomeZero(): void {
@@ -230,6 +477,7 @@ function testNullStatisticsBecomeZero(): void {
         matchId: "match-1",
         playerId: "player:team-equipo-local-7-ana-garcia",
         teamId: "team:equipo-local",
+        position: "unknown",
         setsPlayed: 3,
         pointsTotal: 0,
         pointsBreakout: 0,
@@ -245,6 +493,7 @@ function testNullStatisticsBecomeZero(): void {
         attackErrors: 0,
         attackBlocked: 0,
         attackPoints: 0,
+        attackExcellentPercentage: 0,
         blockPoints: 0,
     });
 }
@@ -280,6 +529,41 @@ const tests: DomainTest[] = [
             "Comprueba que competición, temporada, partido, jugador y " +
             "estadísticas adoptan el contrato del dominio.",
         run: testMatchMapping,
+    },
+    {
+        name: "ScoringSystemV1",
+        description:
+            "Comprueba la versión, las ponderaciones de acciones, las " +
+            "penalizaciones y el bonus por victoria.",
+        run: testScoringSystemV1,
+    },
+    {
+        name: "ScoringSystemV1 evita doble conteo",
+        description:
+            "Comprueba que Tot, BP y G-P no añaden puntos duplicados y que " +
+            "la recepción sin intentos no puntúa.",
+        run: testScoringSystemV1DoesNotDoubleCountAmbiguousTotals,
+    },
+    {
+        name: "ScoringSystemV1 normaliza el saque por sets",
+        description:
+            "Comprueba que el saque usa total de saques menos errores más " +
+            "puntos directos, dividido entre los sets jugados.",
+        run: testScoringSystemV1ServeRate,
+    },
+    {
+        name: "ScoringSystemV1 penaliza derrota",
+        description:
+            "Comprueba que un jugador recibe el malus de resultado cuando " +
+            "su equipo pierde el partido.",
+        run: testScoringSystemV1PenalizesLoss,
+    },
+    {
+        name: "Bonus posicional de ScoringSystemV1",
+        description:
+            "Comprueba el multiplicador entero de recepción del líbero y " +
+            "bloqueos del central.",
+        run: testScoringSystemV1PositionBonuses,
     },
     {
         name: "Normalización de estadísticas ausentes",

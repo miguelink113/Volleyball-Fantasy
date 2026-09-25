@@ -1,15 +1,17 @@
 import type { Player } from "@/domain/player/player.types";
+import { ScoringSystemV1 } from "@/domain/scoring/scoring-v1.system";
 import type { MatchWithStats } from "@/lib/scraper/fetch-competition-statistics";
 import type { PlayerStats } from "@/lib/scraper/fetch-match-statistics";
+import { mapScrapedMatch } from "@/lib/domain/map-scraped-match";
 
 export interface FantasyRoundPlayerScore {
     playerId: string;
     score: number;
     breakdown: {
-        setsPlayed: number;
-        wonLost: number;
+        [key: string]: number;
     };
     matchesPlayed: number;
+    scoringVersion: string;
 }
 
 function normalize(value: string): string {
@@ -19,12 +21,6 @@ function normalize(value: string): string {
         .toLowerCase()
         .replace(/\s+/g, " ")
         .trim();
-}
-
-function getSetsPlayed(stats: PlayerStats): number {
-    return Object.values(stats.startingFormation).filter(
-        (position) => position !== null
-    ).length;
 }
 
 function findPlayer(
@@ -71,12 +67,8 @@ function findTeamPlayers(
 }
 
 /**
- * Regla provisional de la demo:
- * puntos fantasy = sets con participación registrada + G-P.
- *
- * Los datos de RFEVB son agregados por partido. Por eso se suman todos los
- * partidos de la jornada y se marca la puntuación como provisional en la UI
- * hasta disponer de una fórmula versionada y persistida.
+ * Calcula la puntuación de los jugadores de una jornada con ScoringSystemV1.
+ * La persistencia histórica debe guardar también scoringVersion.
  */
 export function calculateFantasyRoundScores(
     matches: MatchWithStats[],
@@ -84,9 +76,11 @@ export function calculateFantasyRoundScores(
     teamNameById: Map<string, string>
 ): FantasyRoundPlayerScore[] {
     const scores = new Map<string, FantasyRoundPlayerScore>();
+    const scoringSystem = new ScoringSystemV1();
 
     for (const result of matches) {
         const teamNames = [result.match.homeTeam, result.match.awayTeam];
+        const mapped = mapScrapedMatch(result.match, result.stats);
 
         result.stats.teams.forEach((teamStats, teamIndex) => {
             const teamName = normalize(teamNames[teamIndex] ?? "");
@@ -103,21 +97,37 @@ export function calculateFantasyRoundScores(
                     continue;
                 }
 
-                const setsPlayed = getSetsPlayed(playerStats);
-                const wonLost = playerStats.points.wonLost ?? 0;
+                const mappedTeam = mapped.teams[teamIndex];
+                const mappedPlayer = mappedTeam?.players.find(
+                    (candidate) => candidate.dorsal === playerStats.number
+                );
+                const mappedStats = mapped.playerStats.find(
+                    (candidate) =>
+                        candidate.teamId === mappedTeam?.team.id &&
+                        candidate.playerId === mappedPlayer?.id
+                );
+
+                if (!mappedStats) {
+                    continue;
+                }
+
+                const score = scoringSystem.calculate(
+                    { ...mappedStats, position: player.position },
+                    mapped.match
+                );
                 const current = scores.get(player.id) ?? {
                     playerId: player.id,
                     score: 0,
-                    breakdown: {
-                        setsPlayed: 0,
-                        wonLost: 0,
-                    },
+                    breakdown: {},
                     matchesPlayed: 0,
+                    scoringVersion: scoringSystem.version,
                 };
 
-                current.score += setsPlayed + wonLost;
-                current.breakdown.setsPlayed += setsPlayed;
-                current.breakdown.wonLost += wonLost;
+                current.score += score.totalScore;
+                Object.entries(score.breakdown).forEach(([key, value]) => {
+                    current.breakdown[key] =
+                        (current.breakdown[key] ?? 0) + value;
+                });
                 current.matchesPlayed += 1;
                 scores.set(player.id, current);
             }

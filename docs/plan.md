@@ -18,9 +18,9 @@ visual actual con la arquitectura persistente objetivo.
 
 - La competición de la demo está fijada a `152`.
 - Los precios se generan para la demo y no representan valor de mercado real.
-- La demo calcula puntuaciones provisionales bajo demanda a partir de
-  estadísticas reales de RFEVB, pero todavía no las persiste ni las versiona
-  como resultados fantasy definitivos.
+- La demo calcula puntuaciones con `ScoringSystemV1` bajo demanda a partir de
+  estadísticas reales de RFEVB, pero todavía no las persiste como resultados
+  fantasy definitivos.
 - El estado del equipo se pierde al recargar.
 - El HTML de RFEVB es la fuente directa porque aún no hay ingesta persistente.
 
@@ -68,7 +68,8 @@ debe ser la fuente de lectura del producto una vez completada esa fase.
 4. Implementar la ingesta idempotente con reintentos y marcas de sincronización.
 5. Crear un servicio de catálogo que sustituya la consulta directa desde la
    UI por datos persistidos.
-6. Versionar el cálculo de puntuación por partido y jornada.
+6. Persistir el cálculo de `ScoringSystemV1` por partido y jornada, guardando
+   siempre `scoringVersion`.
 7. Persistir mercado, precios, presupuesto, compras, ventas, plantilla y
    alineación.
 8. Añadir bloqueo de alineaciones y cierre de jornadas.

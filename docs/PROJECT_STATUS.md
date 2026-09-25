@@ -38,6 +38,14 @@ El proyecto tiene tres bloques con distinto nivel de madurez:
 
 La competición `152` se ha comprobado con 12 equipos y 180 jugadores.
 
+### Scoring
+
+- `ScoringSystemV1` implementado sobre las estadísticas realmente extraídas
+  por RFEVB.
+- Fórmula documentada en `docs/SCORING.md`.
+- Desglose por componente y bonus/malus por resultado.
+- Versión `v1` disponible para persistir resultados históricos.
+
 ### Demo fantasy
 
 - Ruta visual `/fantasy`.
@@ -66,7 +74,7 @@ La competición `152` se ha comprobado con 12 equipos y 180 jugadores.
 - Persistencia de plantilla y alineación por jornada.
 - Bloqueo de alineaciones.
 - Mercado persistente con ventanas de 24 horas.
-- Fórmula de puntuación versionada y reglas fantasy definitivas.
+- Persistencia de resultados de `ScoringSystemV1` por partido y jornada.
 - Ligas privadas y clasificación.
 
 ### Calidad técnica
@@ -93,7 +101,6 @@ que el fantasy pueda utilizarlos como catálogo oficial.
 
 La fase 1 del saneamiento del dominio está completada:
 
-- `BasicScoringSystem` implementa el contrato `ScoringSystem` vigente.
 - `Match`, `Competition`, `Season` y `MatchPlayerStats` se construyen con sus
   campos actuales.
 - `mapScrapedMatch` separa los DTO del scraper de las entidades del dominio.
@@ -101,5 +108,7 @@ La fase 1 del saneamiento del dominio está completada:
   `0` durante el mapeo.
 - `npm run build` y `npm run test:domain` pasan correctamente.
 
-El scoring sigue siendo provisional (`basic-v1`), no la fórmula definitiva de
-`ScoringSystemV1`.
+La fórmula `ScoringSystemV1` ya está definida, probada y utilizada por la demo,
+el endpoint de puntuaciones y `show:match-scores`. `BasicScoringSystem`
+(`basic-v1`) se conserva únicamente como compatibilidad histórica y no forma
+parte del flujo activo.

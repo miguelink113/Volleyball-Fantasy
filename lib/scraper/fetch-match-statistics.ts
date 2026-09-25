@@ -244,6 +244,10 @@ function getRowCells(
 ): string[] {
     return $(row)
         .find("td")
+        .filter((_, cell) => {
+            const className = $(cell).attr("class") ?? "";
+            return !className.includes("AdditionalColumn_show_sm_xs");
+        })
         .map((_, cell) =>
             $(cell)
                 .text()
@@ -295,6 +299,28 @@ function extractTeamName(
     $: cheerio.CheerioAPI,
     table: any
 ): string {
+    const teamGrid = $(table)
+        .parents("[id*='RG_HomeTeam'], [id*='RG_GuestTeam']")
+        .first();
+
+    if (teamGrid.length > 0) {
+        const gridId = teamGrid.attr("id") ?? "";
+        const teamNameSelector = gridId.includes("Guest")
+            ? "[id*='TeamName_Guest']"
+            : "[id*='TeamName_Home']";
+        const teamName = teamGrid
+            .closest("[id*='RPL_MatchStats_']")
+            .find(teamNameSelector)
+            .first()
+            .text()
+            .replace(/\s+/g, " ")
+            .trim();
+
+        if (teamName) {
+            return teamName;
+        }
+    }
+
     /*
      * Primera opción:
      * buscar encabezados anteriores.
@@ -399,7 +425,7 @@ function parsePlayerRow(
      * Las filas de totales, cabeceras, etc.
      * no tienen dorsal numérico.
      */
-    if (!Number.isInteger(number)) {
+    if (!Number.isInteger(number) || number <= 0) {
         return null;
     }
 

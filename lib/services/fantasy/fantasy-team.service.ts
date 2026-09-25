@@ -144,6 +144,7 @@ export function validateLineup(
         opposite: 0,
         middle: 0,
         outside: 0,
+        unknown: 0,
     };
 
     const missing: string[] = [];
@@ -174,7 +175,9 @@ export function validateLineup(
                         ? 1
                         : position === "middle"
                             ? 2
-                            : 2;
+                            : position === "outside"
+                                ? 2
+                                : 0;
 
         if (total > required) {
             errors.push(

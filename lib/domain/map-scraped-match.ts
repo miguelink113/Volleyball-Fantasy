@@ -66,6 +66,7 @@ function mapPlayerStats(
         matchId,
         playerId: player.id,
         teamId,
+        position: player.position,
         setsPlayed: getSetsPlayed(stats),
         pointsTotal: toNumber(stats.points.total),
         pointsBreakout: toNumber(stats.points.bp),
@@ -81,6 +82,9 @@ function mapPlayerStats(
         attackErrors: toNumber(stats.attack.errors),
         attackBlocked: toNumber(stats.attack.blocks),
         attackPoints: toNumber(stats.attack.excellent),
+        attackExcellentPercentage: toNumber(
+            stats.attack.excellentPercentage
+        ),
         blockPoints: toNumber(stats.block.points),
     };
 }
@@ -124,7 +128,7 @@ export function mapScrapedMatch(
                 firstName: names.firstName,
                 lastName: names.lastName,
                 displayName,
-                position: "outside" as const,
+                position: "unknown" as const,
                 currentTeamId: teamId,
                 dorsal: scrapedPlayer.number,
             };

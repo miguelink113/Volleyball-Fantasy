@@ -68,6 +68,7 @@ docs/                 Documentación del proyecto
 - [Estado del proyecto](docs/PROJECT_STATUS.md)
 - [Desarrollo local y arquitectura](docs/DEVELOPMENT.md)
 - [Scraper y endpoints](docs/SCRAPER.md)
+- [Sistema de puntuación](docs/SCORING.md)
 - [Autenticación](docs/AUTHENTICATION.md)
 - [Plan de evolución](docs/plan.md)
 
@@ -78,6 +79,7 @@ npm run dev
 npm run build
 npm run start
 npm run test:domain
+npm run test:match-parser -- 1 1
 npm run test:supabase
-npm run show:first-match-scores
+npm run show:match-scores -- 1 1
 ```

@@ -22,15 +22,22 @@ npm run dev
 npm run build
 npm run start
 npm run test:domain
+npm run test:match-parser -- 1 1
 npm run test:supabase
-npm run show:first-match-scores
+npm run show:match-scores -- 1 1
 ```
 
 `npm run test:domain` ejecuta tests unitarios sin conexión externa sobre el
 contrato de scoring y el adaptador `mapScrapedMatch`. `npm run test:supabase`
 requiere las variables descritas en
-`docs/AUTHENTICATION.md`. `npm run show:first-match-scores` requiere que la
-aplicación esté disponible y utiliza las rutas HTTP del scraper.
+`docs/AUTHENTICATION.md`. `npm run show:match-scores -- <jornada> <partido>`
+requiere que la aplicación esté disponible y utiliza las rutas HTTP del
+scraper.
+
+`npm run test:match-parser -- <jornada> <partido>` consulta las mismas rutas
+HTTP que la demo, selecciona un partido concreto y muestra los valores
+extraídos por el parser para cada jugador. Sirve para verificar directamente
+las columnas de saque, recepción, ataque y bloqueo antes de aplicar el scoring.
 
 ## Separación de responsabilidades
 
@@ -133,9 +140,9 @@ El catálogo real sí procede del scraper. El mercado, los precios, las compras,
 las ventas, la plantilla y la alineación viven solo en el estado del cliente.
 No hay presupuesto real, transacciones, bloqueo por jornada ni persistencia.
 La jornada seleccionada consulta `/api/fantasy-round-scores`, que combina el
-roster real con los partidos y estadísticas de RFEVB. La regla provisional de
-la demo es `sets con participación registrada + G-P`; los resultados se
-asignan por equipo, dorsal y nombre cuando es necesario. Mercado y equipo
+roster real con los partidos y estadísticas de RFEVB y aplica
+`ScoringSystemV1`. La respuesta incluye `scoringVersion: "v1"`; los resultados
+se asignan por equipo, dorsal y nombre cuando es necesario. Mercado y equipo
 siguen viviendo solo en el estado del cliente.
 
 ## Probar el catálogo real
@@ -166,11 +173,14 @@ npm run build
 Los tests unitarios están en `scripts/test-domain.ts` y utilizan `node:assert`
 con `tsx`, por lo que no se introduce un framework adicional. Cubren:
 
-- el contrato y resultado de `BasicScoringSystem`;
+- el contrato y resultado de `ScoringSystemV1`;
 - el mapeo de competición, temporada y partido;
 - la normalización de estadísticas nulas;
 - el cálculo de sets jugados a partir de la formación;
 - el rechazo de partidos que no contienen exactamente dos equipos.
+- la fórmula versionada `ScoringSystemV1`, sus penalizaciones y el bonus por
+  resultado;
+- la exclusión de campos estadísticos ambiguos para evitar doble conteo.
 
 El runner muestra para cada caso qué comportamiento verifica, cuándo comienza,
 si ha terminado correctamente y el motivo concreto del fallo, incluyendo los

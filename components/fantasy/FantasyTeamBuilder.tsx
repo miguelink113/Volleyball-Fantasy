@@ -22,6 +22,10 @@ const rounds = [
 const COMPETITION_ID = 152;
 const SEASON_ID = 186;
 
+function displayPosition(position: PlayerPosition): string {
+    return position === "unknown" ? "DESCONOCIDO" : position;
+}
+
 interface RosterResponse {
     teams: Array<{ rfevbId?: string; name: string }>;
     players: Array<{
@@ -43,6 +47,7 @@ type RosterPayload =
 interface RoundScore {
     playerId: string;
     score: number;
+    scoringVersion: string;
 }
 
 interface RoundScoresResponse {
@@ -381,7 +386,7 @@ export function FantasyTeamBuilder() {
                                 <div className="min-w-0 flex-1">
                                     <p className="truncate font-semibold text-slate-900">{player.name}</p>
                                     <p className="text-sm text-slate-600">
-                                        {player.club} · {player.position} · {player.price}M
+                                        {player.club} · {displayPosition(player.position)} · {player.price}M
                                     </p>
                                 </div>
                                 <button
@@ -434,7 +439,7 @@ export function FantasyTeamBuilder() {
                                         >
                                             <div className="min-w-0 flex-1">
                                                 <p className="truncate font-semibold text-slate-900">{player.name}</p>
-                                                <p className="text-sm text-slate-600">{player.club} · {player.position}</p>
+                                                <p className="text-sm text-slate-600">{player.club} · {displayPosition(player.position)}</p>
                                             </div>
                                             <button
                                                 type="button"
@@ -463,7 +468,7 @@ export function FantasyTeamBuilder() {
                                 lineupPlayers.map((player) => (
                                     <div key={player.id} className="flex items-center justify-between rounded bg-slate-50 px-3 py-2 text-sm text-slate-700">
                                         <span>{player.name}</span>
-                                        <span>{player.position}</span>
+                                        <span>{displayPosition(player.position)}</span>
                                     </div>
                                 ))
                             ) : (

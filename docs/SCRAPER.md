@@ -285,6 +285,10 @@ La posición se normaliza a los valores del dominio:
 setter | opposite | outside | middle | libero
 ```
 
+Si la posición no puede resolverse desde el roster, el dominio utiliza
+`unknown` y la presentación debe mostrar `DESCONOCIDO`. No se sustituye
+silenciosamente por `outside`.
+
 En la comprobación actual de la competición `152` se obtienen 12 equipos y
 180 jugadores.
 
@@ -310,12 +314,8 @@ identificador RFEVB del jugador. Debe alinearse con el roster oficial por
 Los valores estadísticos ausentes se normalizan a `0` en el modelo de dominio.
 
 El sistema de puntuación se define mediante `ScoringSystem`, por lo que puede
-sustituirse sin modificar el adaptador. `BasicScoringSystem` implementa el
-contrato vigente y aplica actualmente la regla inicial:
-
-```text
-puntuación = sets jugados + G-P
-```
+sustituirse sin modificar el adaptador. La demo y los scripts utilizan
+`ScoringSystemV1` (versión `v1`).
 
 El scraper actual devuelve estadísticas agregadas del partido y una formación
 con cinco posiciones por jugador. El adaptador cuenta las posiciones no nulas
@@ -323,9 +323,14 @@ con cinco posiciones por jugador. El adaptador cuenta las posiciones no nulas
 ausentes (`null`) se normalizan a `0`; el adaptador no inventa datos que RFEVB
 no proporcione.
 
-El resultado de `BasicScoringSystem` contiene `totalScore`, `breakdown`,
-`isProvisional` y la versión `basic-v1`. Esta implementación es provisional:
-la fórmula definitiva y versionada `ScoringSystemV1` se definirá en la fase 2.
+La fórmula definitiva de la fase 2 está en `ScoringSystemV1`, cuya versión es
+`v1`. Usa únicamente acciones y porcentajes extraídos por RFEVB y el resultado
+calculado desde los sets del partido. No suma `points.total`, `BP` ni `G-P`
+para evitar doble conteo o depender de una semántica ambigua. El detalle de la
+fórmula está en [`docs/SCORING.md`](SCORING.md).
+
+`BasicScoringSystem` (`basic-v1`) se conserva solo como compatibilidad de código
+histórico y no debe utilizarse en la demo, scripts ni resultados persistidos.
 
 ## Ejecutar el scraper
 
@@ -370,39 +375,79 @@ lib/
 * `fetch-competition-roster.ts`: obtiene equipos y jugadores de una
   competición y los adapta a `Team` y `Player`.
 - `lib/services/fantasy/fantasy-round-score.service.ts`: relaciona las
-  estadísticas de una jornada con el roster y agrega la puntuación provisional.
+  estadísticas de una jornada con el roster y agrega la puntuación de
+  `ScoringSystemV1`.
 
 Los datos obtenidos todavía no se almacenan en una base de datos. Consultar
 RFEVB desde una ruta HTTP sirve para la demo y para pruebas, pero no sustituye
 un proceso de ingesta programado.
 
-## Mostrar puntuaciones del primer partido de la jornada 1
+## Mostrar puntuaciones de un partido
 
 Con Next.js ejecutándose en `http://localhost:3000`, el siguiente comando
-selecciona la jornada 1, toma su primer partido, obtiene sus estadísticas y
-muestra todos los jugadores ordenados por puntuación:
+recibe el número de jornada y el número de partido dentro de esa jornada,
+obtiene sus estadísticas y muestra todos los jugadores ordenados por
+puntuación:
 
 ```bash
-npm run show:first-match-scores
+npm run show:match-scores -- <jornada> <partido>
 ```
 
-Se puede utilizar otra URL base con `FANTASY_API_URL`.
+Ejemplo para el segundo partido de la jornada 1:
+
+```bash
+npm run show:match-scores -- 1 2
+```
+
+El número de partido empieza en `1` y sigue el orden devuelto por
+`/api/matches`. Se puede utilizar otra URL base con `FANTASY_API_URL`.
 
 El script informa de cada fase:
 
-1. Consulta `/api/matches` filtrando por competición `152`, temporada `186` y
-   jornada `1`.
-2. Selecciona el primer partido devuelto.
-3. Muestra el anfitrión y el visitante obtenidos del listado de partidos.
-4. Consulta `/api/match-statistics` usando el `matchId` y los identificadores
+1. Valida los argumentos de jornada y número de partido.
+2. Consulta `/api/matches` filtrando por competición `152`, temporada `186` y
+   la jornada indicada.
+3. Selecciona el partido indicado dentro de la jornada.
+4. Muestra el equipo local y el visitante obtenidos del listado de partidos.
+5. Consulta `/api/match-statistics` usando el `matchId` y los identificadores
    de competición, categoría y temporada del partido seleccionado.
-5. Comprueba cuántos equipos y jugadores devuelve el scraper.
-6. Ejecuta `mapScrapedMatch`, que relaciona los jugadores con sus equipos. El
+6. Comprueba cuántos equipos y jugadores devuelve el scraper.
+7. Ejecuta `mapScrapedMatch`, que relaciona los jugadores con sus equipos, y
+   cruza cada jugador con el roster oficial para recuperar su posición real
+   mediante equipo, dorsal y nombre de respaldo. El
    primer bloque de estadísticas se asigna al anfitrión y el segundo al
    visitante; los nombres del listado de partidos se usan como fuente
    principal.
-7. Aplica `BasicScoringSystem` y muestra una tabla con jugador, equipo, G-P,
-   puntos por sets y puntuación total.
+8. Aplica `ScoringSystemV1` y muestra una tabla con jugador, equipo, posición,
+   participación, saque, ataque, bloqueos, recepción, resultado y total.
+
+## Probar el parser de estadísticas
+
+Para inspeccionar los valores extraídos por RFEVB antes de aplicar cualquier
+fórmula fantasy:
+
+```bash
+npm run test:match-parser -- <jornada> <partido>
+```
+
+Por ejemplo:
+
+```bash
+npm run test:match-parser -- 1 1
+```
+
+El comando utiliza la misma convención que `show:match-scores`, consulta
+`/api/matches` y `/api/match-statistics`, valida que solo haya jugadores con
+dorsales positivos y nombres de equipo resueltos, y muestra por jugador:
+
+- puntos totales;
+- saques totales, errores y puntos directos;
+- recepciones, errores y porcentajes;
+- ataques, errores, ataques bloqueados y ataques efectivos;
+- bloqueos realizados.
+
+Estos son valores del parser. No incluyen bonus, penalizaciones ni diferencias
+de sets del sistema fantasy.
 
 ## Probar equipos y jugadores directamente
 
@@ -460,12 +505,9 @@ El endpoint:
 ```
 
 descarga el roster, los partidos de la jornada y las estadísticas agregadas de
-cada partido. Devuelve una entrada por jugador con `score`, `matchesPlayed` y
-el desglose de `setsPlayed` y `wonLost`. La regla actual es provisional:
-
-```text
-score = setsPlayed + wonLost
-```
+cada partido. Devuelve una entrada por jugador con `score`, `matchesPlayed`, `scoringVersion`
+y el desglose de `ScoringSystemV1`. La respuesta utiliza la versión `v1`; no
+se aplica el scoring histórico `basic-v1`.
 
 La asociación prioriza el equipo del partido y después el dorsal o el nombre.
 Esto evita asignar estadísticas de otro club cuando varios equipos reutilizan

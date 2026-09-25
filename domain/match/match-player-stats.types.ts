@@ -1,8 +1,11 @@
+import type { PlayerPosition } from "@/domain/player/player.types";
+
 export interface MatchPlayerStats {
     id?: string;
     matchId: string;
     playerId: string;
     teamId: string;
+    position: PlayerPosition;
     setsPlayed: number;
 
     // Puntos directos y balance
@@ -26,6 +29,7 @@ export interface MatchPlayerStats {
     attackErrors: number;
     attackBlocked: number;
     attackPoints: number;
+    attackExcellentPercentage: number;
 
     // Bloqueo
     blockPoints: number;

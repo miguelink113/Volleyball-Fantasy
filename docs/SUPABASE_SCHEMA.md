@@ -1,6 +1,6 @@
 # Modelo persistente de Supabase
 
-La migración `supabase/migrations/20260925123000_create_fantasy_schema.sql`
+La migración `../supabase/migrations/20260925190000_create_fantasy_schema.sql`
 crea el modelo base de la fase 3.
 
 ## Capas

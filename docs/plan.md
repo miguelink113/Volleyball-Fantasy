@@ -66,7 +66,7 @@ debe ser la fuente de lectura del producto una vez completada esa fase.
 3. Crear tablas y RLS para competiciones, temporadas, equipos, jugadores,
    partidos, estadísticas, ligas privadas y equipos fantasy. La migración
    inicial está en
-   `supabase/migrations/20260925123000_create_fantasy_schema.sql`.
+   `../supabase/migrations/20260925190000_create_fantasy_schema.sql`.
 4. Implementar la ingesta idempotente con reintentos y marcas de sincronización.
 5. Crear un servicio de catálogo que sustituya la consulta directa desde la
    UI por datos persistidos.

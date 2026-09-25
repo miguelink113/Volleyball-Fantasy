@@ -18,7 +18,7 @@ La aplicación tiene tres partes diferenciadas:
 La demo fantasy utiliza jugadores reales de la competición RFEVB `152`. El
 mercado diario, los precios y el equipo seleccionado son provisionales y viven
 en memoria; el esquema persistente inicial está definido en
-`supabase/migrations/20260925123000_create_fantasy_schema.sql`, aunque la demo
+`supabase/migrations/20260925190000_create_fantasy_schema.sql`, aunque la demo
 todavía no está conectada a esos repositorios.
 Los contratos de dominio y el adaptador histórico de partidos ya están
 alineados con la interfaz actual de scoring, aunque el sistema de puntuación

@@ -4,18 +4,30 @@
 
 - Node.js compatible con Next.js 16.
 - npm.
-- Un proyecto Supabase solo para las funciones de autenticación y sus pruebas.
+- proyecto Supabase configurado con variables de entorno.
 
-## Puesta en marcha
+## Inicio rápido
 
 ```bash
 npm install
 npm run dev
 ```
 
-La aplicación se inicia normalmente en `http://localhost:3000`.
+La aplicación queda disponible en `http://localhost:3000`.
 
-## Comandos disponibles
+## Variables de entorno
+
+Necesarias para autenticación y soporte de Supabase:
+
+```text
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
+SUPABASE_SECRET_KEY=...
+```
+
+Consulta `docs/AUTHENTICATION.md` para más detalle.
+
+## Comandos útiles
 
 ```bash
 npm run dev
@@ -25,132 +37,21 @@ npm run test:supabase
 npm run show:first-match-scores
 ```
 
-`npm run test:supabase` requiere las variables descritas en
-`docs/AUTHENTICATION.md`. `npm run show:first-match-scores` requiere que la
-aplicación esté disponible y utiliza las rutas HTTP del scraper.
+- `npm run test:supabase`: valida auth y perfiles en Supabase.
+- `npm run show:first-match-scores`: intenta consultar el scraper y mostrar resultados de ejemplo.
 
-## Separación de responsabilidades
+## Flujo de trabajo recomendado
 
-El proyecto distingue estas capas:
+1. iniciar la aplicación en local;
+2. comprobar el scraper con una competición real como `152`;
+3. validar la autenticación con Supabase;
+4. revisar la demo fantasy en `/fantasy`;
+5. usar `docs/ARCHITECTURE.md` para entender límites entre cliente, servidor y scraper.
 
-### Presentación
-
-La presentación muestra información y recoge interacciones del usuario. No
-debe conocer HTML de RFEVB, hacer peticiones directas a la web externa ni
-decidir reglas persistentes.
-
-- `app/`: páginas y rutas HTTP de Next.js.
-- `components/`: componentes React.
-- `components/fantasy/FantasyTeamBuilder.tsx`: interfaz de la demo fantasy.
-- `hooks/`: estado interactivo del cliente, principalmente autenticación.
-
-La sección fantasy se divide visualmente en:
-
-- **Mercado de fichajes**: jugadores disponibles, precios provisionales y
-  acciones de comprar/vender.
-- **Mi equipo y alineación**: plantilla seleccionada, titulares y errores de
-  composición.
-- **Puntuación por jornada**: consulta de la puntuación calculada para la
-  alineación actual.
-
-### Control de aplicación
-
-Las rutas de `app/api/` son la entrada HTTP. Validan parámetros, invocan
-servicios o scrapers y convierten los errores en respuestas HTTP. No son el
-modelo de dominio ni una capa de persistencia.
-
-Rutas relevantes:
-
-- `/api/matches`
-- `/api/match-statistics`
-- `/api/competition-statistics`
-- `/api/competition-roster`
-
-### Dominio
-
-`domain/` contiene contratos TypeScript de las entidades deportivas y fantasy:
-
-- `Competition`, `Season`, `Team` y `Player`;
-- `Match` y estadísticas de jugador;
-- tipos de fantasy, alineaciones y ligas;
-- contratos de puntuación.
-
-Los tipos de dominio describen datos y contratos. No deben depender de
-Cheerio, React, Supabase ni de la estructura HTML de RFEVB.
-
-### Servicios de aplicación y reglas
-
-`lib/services/` contiene lógica reutilizable que no pertenece a la vista:
-
-- `lib/services/fantasy/`: validación de plantilla y alineación, cálculo de
-  puntuación de la demo y selección diaria del mercado;
-- `lib/services/profile/`: acceso relacionado con perfiles;
-- futuras capas de ingesta y repositorios.
-
-`createDailyFantasyRoster` genera un mercado temporal determinista. La regla
-de selección diaria está aquí, no en el componente visual.
-
-### Scraper
-
-`lib/scraper/` es el adaptador hacia RFEVB. Descarga HTML, lo interpreta y
-devuelve datos de scraper o entidades compatibles con el dominio. No guarda
-datos en Supabase y no contiene lógica de presentación.
-
-### Persistencia
-
-`lib/supabase/` contiene clientes y sincronización de sesión. La persistencia
-de competiciones, jugadores, equipos, partidos, mercado y equipos fantasy aún
-no está implementada.
-
-## Demo fantasy actual
-
-La ruta `/fantasy` carga jugadores reales mediante:
-
-```text
-/api/competition-roster?competition=152
-```
-
-La demo:
-
-- utiliza nombres, equipos, posiciones e identificadores procedentes de RFEVB;
-- crea un mercado en memoria de 30 jugadores;
-- usa una semilla UTC `YYYY-MM-DD`;
-- mantiene el mismo mercado durante el día y lo cambia al día siguiente;
-- asigna precios provisionales deterministas;
-- crea inicialmente una plantilla de hasta 14 jugadores;
-- valida una alineación de 7 jugadores:
-  - 1 colocador;
-  - 1 líbero;
-  - 1 opuesto;
-  - 2 centrales;
-  - 2 receptores.
-
-El catálogo real sí procede del scraper. El mercado, los precios, las compras,
-las ventas, la plantilla y la alineación viven solo en el estado del cliente.
-No hay presupuesto real, transacciones, bloqueo por jornada ni persistencia.
-Las puntuaciones permanecen a cero porque todavía no se han conectado las
-estadísticas reales con el modelo fantasy de la demo.
-
-## Probar el catálogo real
-
-Con `npm run dev` ejecutándose:
+## Rutas de prueba relevantes
 
 ```text
 http://localhost:3000/api/competition-roster?competition=152
+http://localhost:3000/api/matches?competition=152&season=186
+http://localhost:3000/api/match-statistics?matchId=13881&competition=152&category=362&season=186
 ```
-
-También se puede ejecutar directamente:
-
-```bash
-npx tsx -e "import { scrapeCompetitionRoster } from './lib/scraper/fetch-competition-roster.ts'; scrapeCompetitionRoster(152).then((roster) => console.log(JSON.stringify({ teams: roster.teams.length, players: roster.players.length }, null, 2))).catch((error) => { console.error(error); process.exit(1); });"
-```
-
-La comprobación actual devuelve 12 equipos y 180 jugadores.
-
-## Limitaciones conocidas
-
-- El build global tiene errores pendientes en el contrato de scoring y en el
-  adaptador histórico `lib/domain/map-scraped-match.ts`.
-- El scraper depende de HTML externo y necesita pruebas con fixtures.
-- No existe ingesta programada ni almacenamiento de datos deportivos.
-- La demo fantasy no representa todavía el comportamiento final del producto.

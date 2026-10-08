@@ -4,7 +4,9 @@
 
 - Node.js compatible con Next.js 16.
 - npm.
-- Un proyecto Supabase solo para las funciones de autenticación y sus pruebas.
+- Un proyecto Supabase para autenticación.
+- Para probar la estructura remota: la URI de conexión a PostgreSQL del
+  proyecto en `SUPABASE_REMOTE_DB_URL`.
 
 ## Puesta en marcha
 
@@ -24,6 +26,7 @@ npm run start
 npm run test:domain
 npm run test:match-parser -- 1 1
 npm run test:supabase
+npm run test:supabase:schema
 npm run show:match-scores -- 1 1
 ```
 
@@ -33,6 +36,23 @@ requiere las variables descritas en
 `docs/AUTHENTICATION.md`. `npm run show:match-scores -- <jornada> <partido>`
 requiere que la aplicación esté disponible y utiliza las rutas HTTP del
 scraper.
+
+`npm run test:supabase:schema` conecta directamente a la base PostgreSQL
+remota y comprueba la estructura esperada de sus tablas, columnas, relaciones,
+índices, RLS, políticas y grants. No crea ni modifica objetos: todas sus
+consultas se ejecutan en una transacción `READ ONLY`. Configura
+`SUPABASE_REMOTE_DB_URL` en `.env.local` usando la cadena de conexión de
+Supabase; no la publiques ni la guardes en Git. Si es posible, utiliza un rol
+de base de datos con permisos de lectura únicamente.
+Obtén la URI desde **Connect** en el Dashboard del proyecto y usa **Session
+pooler** si la conexión directa no está disponible desde tu red. Si el test
+indica que falta `SUPABASE_REMOTE_DB_URL`, confirma que añadiste esa variable
+exacta a `.env.local` en la raíz del repositorio, además de las variables de
+Auth.
+
+Esta verificación observa el estado remoto actual: no demuestra por sí sola que
+la migración pueda reconstruir una base vacía ni prueba las escrituras/RPC del
+flujo fantasy.
 
 `npm run test:match-parser -- <jornada> <partido>` consulta las mismas rutas
 HTTP que la demo, selecciona un partido concreto y muestra los valores

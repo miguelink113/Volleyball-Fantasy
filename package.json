@@ -9,6 +9,7 @@
     "test:domain": "tsx scripts/test-domain.ts",
     "test:match-parser": "tsx scripts/test-match-parser.ts",
     "test:supabase": "tsx scripts/test-supabase-auth.ts",
+    "test:supabase:schema": "tsx scripts/test-supabase-schema.ts",
     "show:match-scores": "tsx scripts/show-match-scores.ts"
   },
   "dependencies": {
@@ -23,10 +24,12 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.1",
+    "pg": "^8.23.0",
     "supabase": "^2.118.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.12",

@@ -63,3 +63,25 @@ supabase db push
 
 La migración requiere el esquema estándar `auth.users` proporcionado por
 Supabase y crea el trigger que inicializa `profiles.username`.
+
+## Comprobar el esquema remoto
+
+`npm run test:supabase:schema` inspecciona el esquema actualmente desplegado
+mediante una conexión PostgreSQL de solo lectura configurada en
+`SUPABASE_REMOTE_DB_URL` dentro de `.env.local`. Obtén la URI desde el botón
+**Connect** del Dashboard de Supabase (URI de conexión PostgreSQL); si la
+conexión directa no está disponible en tu red, usa la opción **Session
+pooler**. Comprueba las 19 tablas y sus columnas esperadas,
+tipos/nullabilidad relevantes, relaciones compuestas, índice de propiedad
+activa, habilitación de RLS, políticas de lectura y permisos de las RPC.
+
+La prueba inicia una transacción `READ ONLY` y ejecuta únicamente consultas a
+catálogos (`information_schema` y `pg_catalog`); no crea ni modifica objetos y
+no aplica migraciones. Protege la URI como una credencial: no la incluyas en
+Git, mensajes ni registros. Se recomienda proporcionar un usuario PostgreSQL
+de solo lectura.
+
+La comprobación valida la estructura que existe en remoto, no que la migración
+se pueda aplicar desde cero ni que las escrituras de negocio funcionen. La
+migración debe aplicarse mediante el flujo de migraciones Supabase, no pegando
+el SQL en producción para esta prueba.

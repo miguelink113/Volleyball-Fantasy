@@ -20,23 +20,37 @@ presentación, y permitir añadir temporadas y competiciones futuras.
 3. **Diseño de persistencia**: migración
    `../supabase/migrations/20260925190000_create_fantasy_schema.sql` con tablas,
    relaciones, restricciones, índices, RLS y RPC para operaciones fantasy.
+   Migración adicional
+   `../supabase/migrations/20261008120000_require_rfevb_ids.sql` que refuerza
+   `rfevb_id NOT NULL` en `competitions`, `seasons`, `teams` y `players` como
+   invariante del catálogo.
 4. **Verificación remota del esquema (Fase 3A)**: `npm run test:supabase:schema`
    ejecutado con éxito contra el proyecto Supabase remoto. Confirma las 19
    tablas, columnas, tipos, RLS, FKs compuestas, constraints, índice de
-   propiedad activa, políticas de lectura, permisos RPC y trigger de perfil.
-   No se detectaron discrepancias entre la migración aplicada y el modelo
-   documentado.
+   propiedad activa, políticas de lectura, permisos RPC, trigger de perfil y
+   `rfevb_id NOT NULL` en las tablas clave. No se detectaron discrepancias
+   entre la migración aplicada y el modelo documentado.
+5. **Ingesta idempotente del catálogo (Fase 4)**: cliente administrativo
+   server-only, mappers puros con validación estricta de `rfevb_id`, y script
+   `scripts/ingest-roster.ts` que puebla `competitions`, `seasons`, `teams` y
+   `players` mediante upsert con `onConflict: "season_id,rfevb_id"`. Ejecución
+   verificada dos veces consecutivas sobre la competición 152, temporada 186:
+   12 equipos y 180 jugadores sin duplicación.
 
 ### Aún no conectado
 
-- La ingesta de datos RFEVB a Supabase.
-- Los repositorios de lectura/escritura para las tablas del catálogo y fantasy.
+- La ingesta de `rounds`, `matches` y `match_player_stats` (misma mecánica
+  que el roster, otra entidad).
+- Los repositorios de lectura para el catálogo persistido y su exposición en
+  los endpoints HTTP de producto.
 - Las operaciones persistentes de ligas, plantilla, alineación y mercado desde
   la UI.
 - La persistencia del scoring y el ranking privado.
 
-La ruta `/fantasy` continúa siendo una demo: mercado, plantilla, presupuesto y
-alineación permanecen en memoria. Auth y perfiles sí utilizan Supabase.
+El catálogo de equipos y jugadores ya vive en Supabase. La ruta `/fantasy`,
+sin embargo, todavía lee RFEVB en vivo: mercado, plantilla, presupuesto y
+alineación permanecen en memoria. Migrar esas lecturas a Supabase es el
+objetivo de la Fase 5. Auth y perfiles ya utilizan Supabase.
 
 ## Decisiones vigentes
 
@@ -83,19 +97,48 @@ Completada.
 **Criterio de salida cumplido:** el test remoto pasa y confirma que el
 proyecto desplegó el modelo esperado.
 
-## Fase 4 — Ingesta idempotente RFEVB
+## Fase 4 — Ingesta idempotente RFEVB ✅
 
-1. Revisar scripts y contratos ya existentes; no sustituir el scraper.
-2. Crear mappers explícitos scraper → dominio → persistencia SQL.
-3. Implementar scripts administrativos para competición, temporada, equipos,
-   jugadores, jornadas, partidos y estadísticas.
-4. Usar IDs RFEVB y claves naturales para upsert idempotente; registrar errores
-   y permitir reintentos.
-5. Mantener service-role/credenciales fuera del navegador.
-6. Comparar conteos con RFEVB para cada competición y temporada disponible.
+Completada.
 
-**Criterio de salida:** ejecutar la ingesta varias veces no duplica registros
-ni mezcla competición o temporada.
+1. ✅ Revisión de scripts y contratos existentes; el scraper RFEVB se ha
+   conservado como fuente y no se ha modificado.
+2. ✅ Mappers explícitos scraper → dominio → persistencia SQL en
+   `lib/services/ingestion/`:
+    - `mapTeam`: convierte `ScrapedCompetitionTeam` en una fila para `teams`.
+    - `mapPlayer`: convierte `ScrapedCompetitionPlayer` en una fila para
+      `players`, resolviendo `team_id` desde un mapa `rfevbId → UUID`.
+    - Ambos rechazan explícitamente equipos y jugadores sin `rfevbId`, sin
+      nombre y sin equipo resoluble.
+    - Tests unitarios en `npm run test:ingestion-mappers` (11 casos).
+3. ✅ Script administrativo `scripts/ingest-roster.ts` que cubre
+   competición, temporada, equipos y jugadores. Los scripts para `rounds`,
+   `matches` y `match_player_stats` se abordan en la Fase 5, reutilizando el
+   mismo patrón.
+4. ✅ Upsert idempotente con `onConflict: "season_id,rfevb_id"` en `teams` y
+   `players`, y `onConflict: "rfevb_id"` en `competitions`. El script verifica
+   conteos contra RFEVB al final y aborta si hay discrepancia.
+5. ✅ Cliente administrativo aislado en `lib/supabase/admin.server.ts`, con
+   protección contra ejecución en navegador (`typeof window !== "undefined"`
+   lanza) y test reproducible en `npm run test:supabase:admin`. La secret key
+   no se expone al cliente.
+6. ✅ Conteos verificados contra RFEVB tras ejecución repetida: 12 equipos y
+   180 jugadores en la competición 152, temporada 186, sin duplicación.
+
+**Criterio de salida cumplido:** ejecutar la ingesta varias veces no duplica
+registros ni mezcla competición o temporada. Los UUIDs de competición y
+temporada permanecen estables entre ejecuciones.
+
+**Comandos:**
+
+```bash
+npm run test:ingestion-mappers
+npm run test:supabase:admin
+npx tsx scripts/ingest-roster.ts \
+  --competition=152 \
+  --season=186 \
+  --season-name="2025/26"
+ ```
 
 ## Fase 5 — Catálogo persistente
 

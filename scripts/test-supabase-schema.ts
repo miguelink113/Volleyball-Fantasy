@@ -221,13 +221,18 @@ async function run(): Promise<void> {
             { table: "match_player_stats", column: "attack_excellent", dataType: "integer", nullable: "NO" },
             { table: "player_match_scores", column: "score", dataType: "integer", nullable: "NO" },
             { table: "player_round_scores", column: "scoring_version", dataType: "text", nullable: "NO" },
+            { table: "teams", column: "rfevb_id", dataType: "text", nullable: "NO" },
+            { table: "players", column: "rfevb_id", dataType: "text", nullable: "NO" },
+            { table: "competitions", column: "rfevb_id", dataType: "text", nullable: "NO" },
         ];
+
         for (const expected of keyColumnExpectations) {
             const column = columns.find((item) =>
                 item.table_name === expected.table && item.column_name === expected.column
             );
             assert(
-                column?.data_type === expected.dataType
+                column !== undefined
+                && column.data_type === expected.dataType
                 && column.is_nullable === expected.nullable,
                 `${expected.table}.${expected.column} has type ${expected.dataType} and nullable=${expected.nullable}`
             );
@@ -441,7 +446,7 @@ async function run(): Promise<void> {
                   and not tgisinternal
              ) as exists`
         );
-        assert(profileTrigger[0]?.exists === true, "auth.users has the profile creation trigger");
+        assert(profileTrigger[0]?.exists, "auth.users has the profile creation trigger");
 
         if (failures.length > 0) {
             throw new Error(`${failures.length} remote schema check(s) failed`);

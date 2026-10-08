@@ -2,15 +2,16 @@
 
 ## Resumen
 
-Las fases 1–3 del plan están completadas en código/diseño y verificadas en
-remoto: dominio, scoring, migración Supabase y validación del esquema remoto
-mediante `npm run test:supabase:schema`. El test se ejecutó con éxito contra
-el proyecto Supabase y no detectó discrepancias entre la migración aplicada y
-el modelo documentado.
+Las fases 1–4 del plan están completadas. Dominio, scoring, migración
+Supabase, verificación remota del esquema e **ingesta idempotente del catálogo
+deportivo** están operativas. El catálogo de la competición 152 (temporada
+186) ya está persistido en Supabase: 12 equipos y 180 jugadores, verificados
+     mediante ejecución repetida sin duplicación.
 
-Auth y perfiles se conectan a Supabase. La ingesta de catálogo y el producto
-fantasy persistente todavía no están conectados: `/fantasy` continúa siendo
-una demo en memoria.
+Auth y perfiles se conectan a Supabase. La ingesta de partidos y estadísticas
+todavía no está implementada. La UI de producto (`/fantasy`) continúa siendo
+una demo en memoria que consulta RFEVB en vivo; la migración a datos
+persistidos corresponde a la Fase 5.
 
 ## Implementado
 
@@ -30,9 +31,11 @@ una demo en memoria.
 - Perfil `username` único; no existe `full_name`.
 - Trigger de perfil y política de lectura propia documentados en la migración.
 
-### Esquema Supabase diseñado
+### Esquema Supabase
 
 - Migración `supabase/migrations/20260925190000_create_fantasy_schema.sql`.
+- Migración `supabase/migrations/20261008120000_require_rfevb_ids.sql` que
+  exige `rfevb_id NOT NULL` en `competitions`, `seasons`, `teams` y `players`.
 - Catálogo deportivo, rondas, valores de mercado, ligas, membresías, equipos,
   plantilla, alineaciones, puntuaciones y transacciones.
 - Claves foráneas y restricciones para aislar competición/temporada y evitar
@@ -40,9 +43,6 @@ una demo en memoria.
 - RLS, políticas de lectura y RPC para mutaciones fantasy.
 - Propiedad de la liga transferida al miembro restante más antiguo; si sale el
   único miembro, se elimina la liga.
-- Test remoto de estructura: `npm run test:supabase:schema`. Comprueba tablas,
-  columnas, tipos relevantes, constraints clave, RLS, políticas y permisos
-  RPC, sin modificar la base.
 
 ### Verificación remota del esquema (Fase 3A)
 
@@ -51,37 +51,34 @@ una demo en memoria.
 - Confirma las 19 tablas, columnas, tipos, RLS, FKs compuestas, constraints,
   índice de propiedad activa, políticas de lectura, permisos RPC y trigger de
   perfil.
+- Verifica además que `rfevb_id` es `NOT NULL` en `competitions`, `teams` y
+  `players`.
 - No se detectaron discrepancias entre la migración aplicada y el modelo
   documentado.
-- Única incidencia resuelta durante la verificación: la constraint
-  `rounds_check` se presentaba como `CHECK ((starts_at <= ends_at))` y el test
-  esperaba `CHECK (starts_at <= ends_at)`. Se corrigió normalizando la
-  comparación en `scripts/test-supabase-schema.ts`, sin modificar la base.
 
-## Demo fantasy actual
+### Ingesta idempotente del catálogo (Fase 4)
 
-La ruta `/fantasy` carga catálogo y estadísticas mediante endpoints que
-consultan RFEVB. El mercado diario, los precios, compras/ventas, plantilla y
-alineación son provisionales y viven en memoria. Recargar puede reiniciar el
-estado. No se escriben estos datos fantasy en Supabase.
+- Cliente administrativo server-only en `lib/supabase/admin.server.ts`, con
+  protección contra ejecución en navegador y test reproducible
+  (`npm run test:supabase:admin`).
+- Mappers puros `mapTeam` y `mapPlayer` en `lib/services/ingestion/`, con
+  validación estricta de `rfevb_id` (invariante del sistema).
+- Tests unitarios de mappers en `npm run test:ingestion-mappers`.
+- Script administrativo `scripts/ingest-roster.ts` que realiza:
+  1. Upsert idempotente de `competitions` y `seasons`.
+  2. Scrape del roster desde RFEVB.
+  3. Upsert idempotente de `teams` y `players` con
+     `onConflict: "season_id,rfevb_id"`.
+  4. Verificación de conteos contra RFEVB.
+- Ejecución verificada dos veces consecutivas sobre la competición 152,
+  temporada 186: 12 equipos y 180 jugadores, sin duplicación.
 
-## Pendiente
+## Cargar el catálogo en local
 
-1. Implementar ingesta manual idempotente RFEVB → normalización → Supabase.
-2. Crear repositorios y servir el catálogo de producto desde persistencia.
-3. Conectar ligas, equipos, mercado y transferencias con sus RPC.
-4. Implementar la escritura y validación server-side de alineaciones.
-5. Persistir scoring por partido/jornada y clasificación por liga privada.
-6. Migrar la UI fantasy desde estado en memoria.
-7. Añadir tests end-to-end multiusuario y preparar staging/despliegue.
+Con `.env.local` configurado (URL, publishable key y secret key de Supabase):
 
-## Verificación del esquema remoto
-
-1. Añadir `SUPABASE_REMOTE_DB_URL` a `.env.local` usando la URI de PostgreSQL
-   del proyecto (Session pooler si Direct Connection no está disponible por
-   IPv6).
-2. Preferir credenciales de base de datos con permisos de lectura.
-3. Ejecutar:
-
-   ```bash
-   npm run test:supabase:schema
+```bash
+npx tsx scripts/ingest-roster.ts \
+  --competition=152 \
+  --season=186 \
+  --season-name="2025/26"

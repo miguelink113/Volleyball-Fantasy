@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Plus, Star } from "lucide-react";
+import { Star } from "lucide-react";
 import { PLAYERS, SLOT_POSITIONS } from "@/lib/data";
 import { PlayerCard } from "./PlayerCard";
 import { PlayerAvatar } from "./PlayerAvatar";

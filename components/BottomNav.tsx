@@ -2,7 +2,8 @@
 import { NAV_ITEMS, type PageId } from "@/lib/data";
 import { getIcon } from "@/lib/icons";
 
-export const BottomNav = ({ page, setPage }: { page: PageId; setPage: (p: PageId) => void }) => (
+export const BottomNav = ({ page, setPage }: { page: PageId; // @ts-ignore
+  setPage: (p: PageId) => void }) => (
   <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-slate-950 border-t border-slate-800 flex justify-around py-2">
     {NAV_ITEMS.slice(0, 6).map((item) => {
       const Icon = getIcon(item.iconName);

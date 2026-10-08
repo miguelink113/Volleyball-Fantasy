@@ -140,6 +140,24 @@ function sorted(values: readonly string[]): string[] {
     return [...values].sort();
 }
 
+/**
+ * PostgreSQL envuelve siempre la expresión de un CHECK en un par de paréntesis
+ * externos y, si la migración original ya incluía paréntesis propios, la
+ * definición que devuelve `pg_get_constraintdef` muestra paréntesis dobles.
+ *
+ * Esta función elimina los paréntesis redundantes y normaliza los espacios
+ * para poder comparar fragmentos de constraints sin depender del formato
+ * exacto que devuelva el motor.
+ */
+function normalizeConstraintDefinition(definition: string): string {
+    return definition
+        .toLowerCase()
+        .replace(/\s+/g, " ")
+        .replace(/\(\s*\(/g, "(")
+        .replace(/\)\s*\)/g, ")")
+        .trim();
+}
+
 async function run(): Promise<void> {
     const connectionString = requiredEnv("SUPABASE_REMOTE_DB_URL");
     const client = new Client({
@@ -210,7 +228,7 @@ async function run(): Promise<void> {
             );
             assert(
                 column?.data_type === expected.dataType
-                    && column.is_nullable === expected.nullable,
+                && column.is_nullable === expected.nullable,
                 `${expected.table}.${expected.column} has type ${expected.dataType} and nullable=${expected.nullable}`
             );
         }
@@ -224,7 +242,7 @@ async function run(): Promise<void> {
         );
         assert(
             rlsRows.length === tableNames.length
-                && rlsRows.every((table) => table.relrowsecurity),
+            && rlsRows.every((table) => table.relrowsecurity),
             "RLS is enabled on all 19 application tables"
         );
 
@@ -237,11 +255,14 @@ async function run(): Promise<void> {
              where n.nspname = 'public' and c.relname = any($1::text[])`,
             [tableNames]
         );
-        const hasConstraint = (table: TableName, fragment: string) =>
-            constraints.some((constraint) =>
+        const hasConstraint = (table: TableName, fragment: string) => {
+            const normalizedFragment = normalizeConstraintDefinition(fragment);
+            return constraints.some((constraint) =>
                 constraint.table_name === table
-                && constraint.definition.toLowerCase().includes(fragment.toLowerCase())
+                && normalizeConstraintDefinition(constraint.definition)
+                    .includes(normalizedFragment)
             );
+        };
         const checkHasExactValues = (
             table: TableName,
             column: string,
@@ -345,8 +366,8 @@ async function run(): Promise<void> {
         );
         assert(
             indexes.length === 1
-                && indexes[0].indexdef.toLowerCase().includes("unique")
-                && /where\s+\(?is_active\)?/.test(indexes[0].indexdef.toLowerCase()),
+            && indexes[0].indexdef.toLowerCase().includes("unique")
+            && /where\s+\(?is_active\)?/.test(indexes[0].indexdef.toLowerCase()),
             "active ownership of a player is unique within a league"
         );
 

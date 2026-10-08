@@ -20,9 +20,12 @@ presentación, y permitir añadir temporadas y competiciones futuras.
 3. **Diseño de persistencia**: migración
    `../supabase/migrations/20260925190000_create_fantasy_schema.sql` con tablas,
    relaciones, restricciones, índices, RLS y RPC para operaciones fantasy.
-   Esta fase cuenta con una prueba que inspecciona la estructura remota de solo
-   lectura; falta ejecutarla contra el proyecto remoto con credenciales de
-   conexión configuradas.
+4. **Verificación remota del esquema (Fase 3A)**: `npm run test:supabase:schema`
+   ejecutado con éxito contra el proyecto Supabase remoto. Confirma las 19
+   tablas, columnas, tipos, RLS, FKs compuestas, constraints, índice de
+   propiedad activa, políticas de lectura, permisos RPC y trigger de perfil.
+   No se detectaron discrepancias entre la migración aplicada y el modelo
+   documentado.
 
 ### Aún no conectado
 
@@ -31,7 +34,6 @@ presentación, y permitir añadir temporadas y competiciones futuras.
 - Las operaciones persistentes de ligas, plantilla, alineación y mercado desde
   la UI.
 - La persistencia del scoring y el ranking privado.
-- La ejecución efectiva de la prueba del esquema contra el proyecto remoto.
 
 La ruta `/fantasy` continúa siendo una demo: mercado, plantilla, presupuesto y
 alineación permanecen en memoria. Auth y perfiles sí utilizan Supabase.
@@ -61,21 +63,25 @@ alineación permanecen en memoria. Auth y perfiles sí utilizan Supabase.
 - No se incluyen pagos, ligas públicas, mercado entre participantes, chat ni
   automatización del scraper.
 
-## Fase 3A — Verificación remota de Supabase y documentación
+## Fase 3A — Verificación remota de Supabase y documentación ✅
 
-1. Ejecutar `npm run test:supabase:schema` contra el proyecto remoto con
+Completada.
+
+1. ✅ Ejecutar `npm run test:supabase:schema` contra el proyecto remoto con
    `SUPABASE_REMOTE_DB_URL` en `.env.local`.
-2. Confirmar estructura de tablas/columnas, tipos relevantes, relaciones
+2. ✅ Confirmar estructura de tablas/columnas, tipos relevantes, relaciones
    compuestas, índices, RLS, políticas y permisos RPC.
-3. Corregir discrepancias entre la migración y el esquema real mediante nuevas
-   migraciones correctivas cuando la migración original ya esté aplicada.
-4. Mantener la prueba estrictamente de lectura: no ejecuta migraciones ni
-   mutaciones de negocio. La base remota no debe probarse con `db reset`.
-5. Mantener documentación y estado del proyecto sincronizados con lo que está
-   realmente conectado y lo que sigue siendo diseño.
+3. ✅ Corregir discrepancias entre la migración y el esquema real. La única
+   discrepancia detectada fue el formato de la constraint
+   `rounds_check` (`CHECK ((starts_at <= ends_at))`); se resolvió normalizando
+   la comparación en el test, sin tocar la base.
+4. ✅ Mantener la prueba estrictamente de lectura: no ejecuta migraciones ni
+   mutaciones de negocio. La base remota no se prueba con `db reset`.
+5. ✅ Mantener documentación y estado del proyecto sincronizados con lo que
+   está realmente conectado y lo que sigue siendo diseño.
 
-**Criterio de salida:** el test remoto pasa y confirma que el proyecto desplegó
-el modelo esperado; cualquier discrepancia está corregida y documentada.
+**Criterio de salida cumplido:** el test remoto pasa y confirma que el
+proyecto desplegó el modelo esperado.
 
 ## Fase 4 — Ingesta idempotente RFEVB
 

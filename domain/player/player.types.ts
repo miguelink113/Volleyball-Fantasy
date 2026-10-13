@@ -8,7 +8,7 @@ export type PlayerPosition =
 
 export interface Player {
     id: string;             // UUID interno de base de datos
-    rfevbId?: string;       // ID oficial global RFEVB (si aplica)
+    rfevbId: string;       // ID oficial global RFEVB (obligatorio)
     firstName: string;
     lastName: string;
     displayName: string;    // Nombre deportivo habitual

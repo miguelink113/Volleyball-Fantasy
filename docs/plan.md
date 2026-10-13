@@ -142,13 +142,13 @@ npx tsx scripts/ingest-roster.ts \
 
 ## Fase 5 — Catálogo persistente
 
-1. Crear repositorios y servicios Supabase tipados para el catálogo deportivo.
-2. Cambiar lecturas de producto de RFEVB en vivo a datos persistidos.
-3. Mantener los endpoints y herramientas de diagnóstico existentes cuando
-   sigan siendo útiles.
-4. Probar mappers, errores de persistencia y consultas aisladas por temporada.
+1. Crear tabla `team_source_aliases` y servicio de auto-resolución para normalizar las discrepancias de nombres de equipos en los datos de la RFEVB.
+2. Crear repositorios y servicios Supabase tipados para el catálogo deportivo (incluyendo partidos y estadísticas resueltas).
+3. Cambiar lecturas de producto de RFEVB en vivo a datos persistidos.
+4. Mantener los endpoints y herramientas de diagnóstico existentes cuando sigan siendo útiles.
+5. Probar mappers, errores de persistencia, resolución de alias y consultas aisladas por temporada.
 
-**Criterio de salida:** la UI consume el catálogo normalizado desde Supabase.
+**Criterio de salida:** la UI consume el catálogo normalizado desde Supabase y la ingesta cruza limpiamente los equipos sin IDs de las actas de partido.
 
 ## Fase 6 — Ligas y equipos fantasy
 

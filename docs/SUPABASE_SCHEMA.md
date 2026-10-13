@@ -6,8 +6,7 @@ crea el modelo base de la fase 3.
 ## Capas
 
 - Identidad: `profiles` contiene un `username` único asociado a `auth.users`.
-- Datos deportivos: `competitions`, `seasons`, `teams`, `players`,
-  `rounds`, `matches`, `match_player_stats`.
+- Datos deportivos: `competitions`, `seasons`, `teams`, `players`, `team_source_aliases` (para resolución de inconsistencias del scraper), `rounds`, `matches`, `match_player_stats`.
 - Fantasy privado: `private_leagues`, `private_league_members`,
   `fantasy_teams`, `fantasy_team_players`, `lineups`, `lineup_players`,
   `transactions`.
@@ -36,7 +35,8 @@ entre temporadas futuras.
   completamente.
 - Los resultados guardan siempre `scoring_version`.
 - `unknown` es una posición válida para datos incompletos del scraper.
-
+- Los nombres inestables de los equipos extraídos por el scraper se normalizan a través de la tabla `team_source_aliases` para mantener la integridad referencial hacia el `team_id` oficial sin contaminar la entidad del equipo.
+- 
 ## Seguridad
 
 Las tablas deportivas son legibles por usuarios autenticados. Las tablas de

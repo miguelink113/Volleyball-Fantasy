@@ -8,10 +8,11 @@ deportivo** están operativas. El catálogo de la competición 152 (temporada
 186) ya está persistido en Supabase: 12 equipos y 180 jugadores, verificados
      mediante ejecución repetida sin duplicación.
 
-Auth y perfiles se conectan a Supabase. La ingesta de partidos y estadísticas
-todavía no está implementada. La UI de producto (`/fantasy`) continúa siendo
-una demo en memoria que consulta RFEVB en vivo; la migración a datos
-persistidos corresponde a la Fase 5.
+Auth y perfiles se conectan a Supabase.
+La ingesta de partidos y estadísticas todavía no está implementada.
+Durante el diseño de la ingesta de partidos, se diagnosticó una inconsistencia estructural en la fuente de datos (RFEVB):
+discrepancia de nombres de equipo sin IDs técnicos en las actas.
+Se ha decidido implementar una resolución de alias (`team_source_aliases`) antes de iniciar la Fase 5.
 
 ## Implementado
 
@@ -72,6 +73,12 @@ persistidos corresponde a la Fase 5.
   4. Verificación de conteos contra RFEVB.
 - Ejecución verificada dos veces consecutivas sobre la competición 152,
   temporada 186: 12 equipos y 180 jugadores, sin duplicación.
+
+### Tareas bloqueantes antes de la Fase 5
+- [ ] **Migración Supabase:** Crear tabla `team_source_aliases` (`competition_id`, `season_id`, `source`, `alias`, `normalized_alias`, `team_id`).
+- [ ] **Backend:** Crear servicio `TeamAliasResolver` para insertar alias de origen `roster` y auto-resolver los de origen `matches` mediante normalización de strings.
+- [ ] **Dominio:** Modificar `mapScrapedMatch` para recibir un contexto estricto de nombres pre-resuelto (`MatchMappingContext`) en lugar de intentar hacer fuzzy matching interno.
+- [ ] **Tests:** Añadir fixtures a los tests de dominio con los nombres desalineados reales de la RFEVB.
 
 ## Cargar el catálogo en local
 

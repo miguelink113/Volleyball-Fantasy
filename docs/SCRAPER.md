@@ -332,6 +332,14 @@ fórmula está en [`docs/SCORING.md`](SCORING.md).
 `BasicScoringSystem` (`basic-v1`) se conserva solo como compatibilidad de código
 histórico y no debe utilizarse en la demo, scripts ni resultados persistidos.
 
+### Resolución de Nombres de Equipo (DataProject)
+
+Se ha verificado mediante inspección directa del HTML (Oct 2026) que DataProject **no inyecta IDs técnicos (`TeamID` ni `PlayerID`)** en el DOM de las actas centrales de los partidos (`MatchStatistics.aspx`). Los 12 `TeamID` que aparecen en el código fuente corresponden al menú de navegación global, imposibilitando extraerlos para asociarlos a las estadísticas.
+
+Además, los nombres de los equipos difieren sistemáticamente entre la página de la plantilla oficial (ej. `CV Melilla`) y el acta del partido (ej. `Club Voleibol Melilla`).
+
+**Decisión Técnica (Opción 3a):** Implementar una tabla de alias en la base de datos (`team_source_aliases`) para unificar y auto-resolver asíncronamente los nombres de origen antes de pasarlos al mapper estricto del dominio.
+
 ## Ejecutar el scraper
 
 Instalar dependencias:

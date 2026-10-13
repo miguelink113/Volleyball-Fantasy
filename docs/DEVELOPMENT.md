@@ -5,8 +5,7 @@
 - Node.js compatible con Next.js 16.
 - npm.
 - Un proyecto Supabase para autenticación.
-- Para probar la estructura remota: la URI de conexión a PostgreSQL del
-  proyecto en `SUPABASE_REMOTE_DB_URL`.
+- Para probar la estructura remota: la URI de conexión a PostgreSQL del proyecto en `SUPABASE_REMOTE_DB_URL`.
 
 ## Puesta en marcha
 
@@ -24,40 +23,36 @@ npm run dev
 npm run build
 npm run start
 npm run test:domain
+npm run test:team-alias-resolver
+npm run diagnose:team-aliases
 npm run test:match-parser -- 1 1
 npm run test:supabase
 npm run test:supabase:schema
+npm run test:supabase:admin
+npm run test:ingestion-mappers
+npm run ingest:roster -- --competition=152 --season=186 --season-name="2025/26"
 npm run show:match-scores -- 1 1
 ```
 
-`npm run test:domain` ejecuta tests unitarios sin conexión externa sobre el
-contrato de scoring y el adaptador `mapScrapedMatch`. `npm run test:supabase`
-requiere las variables descritas en
-`docs/AUTHENTICATION.md`. `npm run show:match-scores -- <jornada> <partido>`
-requiere que la aplicación esté disponible y utiliza las rutas HTTP del
-scraper.
+`npm run test:domain` ejecuta tests unitarios sin conexión externa sobre el contrato de scoring y el adaptador `mapScrapedMatch`. `npm run test:supabase` requiere las variables descritas en `docs/AUTHENTICATION.md`.
 
-`npm run test:supabase:schema` conecta directamente a la base PostgreSQL
-remota y comprueba la estructura esperada de sus tablas, columnas, relaciones,
-índices, RLS, políticas y grants. No crea ni modifica objetos: todas sus
-consultas se ejecutan en una transacción `READ ONLY`. Configura
-`SUPABASE_REMOTE_DB_URL` en `.env.local` usando la cadena de conexión de
-Supabase; no la publiques ni la guardes en Git. Si es posible, utiliza un rol
-de base de datos con permisos de lectura únicamente.
-Obtén la URI desde **Connect** en el Dashboard del proyecto y usa **Session
-pooler** si la conexión directa no está disponible desde tu red. Si el test
-indica que falta `SUPABASE_REMOTE_DB_URL`, confirma que añadiste esa variable
-exacta a `.env.local` en la raíz del repositorio, además de las variables de
-Auth.
+`npm run test:team-alias-resolver` valida el normalizador de nombres de equipo contra casos unitarios y contra las fixtures reales generadas por `npm run diagnose:team-aliases`.
 
-Esta verificación observa el estado remoto actual: no demuestra por sí sola que
-la migración pueda reconstruir una base vacía ni prueba las escrituras/RPC del
-flujo fantasy.
+`npm run diagnose:team-aliases` recorre las competiciones de `scripts/fixtures/rfevb-competitions.json`, compara los nombres del roster con los de las actas de partido y reporta colisiones y nombres sin resolver. No toca Supabase; solo lee RFEVB. Escribe las fixtures en `scripts/fixtures/team-alias-fixtures.json`.
 
-`npm run test:match-parser -- <jornada> <partido>` consulta las mismas rutas
-HTTP que la demo, selecciona un partido concreto y muestra los valores
-extraídos por el parser para cada jugador. Sirve para verificar directamente
-las columnas de saque, recepción, ataque y bloqueo antes de aplicar el scoring.
+`npm run show:match-scores -- <jornada> <partido>` requiere que la aplicación esté disponible y utiliza las rutas HTTP del scraper.
+
+`npm run test:supabase:schema` conecta directamente a la base PostgreSQL remota y comprueba la estructura esperada de sus tablas, columnas, relaciones, índices, RLS, políticas y grants. No crea ni modifica objetos: todas sus consultas se ejecutan en una transacción `READ ONLY`.
+
+Configura `SUPABASE_REMOTE_DB_URL` en `.env.local` usando la cadena de conexión de Supabase; no la publiques ni la guardes en Git. Si es posible, utiliza un rol de base de datos con permisos de lectura únicamente.
+
+Obtén la URI desde **Connect** en el Dashboard del proyecto y usa **Session pooler** si la conexión directa no está disponible desde tu red. Si el test indica que falta `SUPABASE_REMOTE_DB_URL`, confirma que añadiste esa variable exacta a `.env.local` en la raíz del repositorio, además de las variables de Auth.
+
+Esta verificación observa el estado remoto actual: no demuestra por sí sola que la migración pueda reconstruir una base vacía ni prueba las escrituras/RPC del flujo fantasy.
+
+`npm run test:match-parser -- <jornada> <partido>` consulta las mismas rutas HTTP que la demo, selecciona un partido concreto y muestra los valores extraídos por el parser para cada jugador. Sirve para verificar directamente las columnas de saque, recepción, ataque y bloqueo antes de aplicar el scoring.
+
+`npm run ingest:roster -- --competition=<id> --season=<id> --season-name=<n>` es la ingesta idempotente de `competitions`, `seasons`, `teams`, `players` y los aliases `source: "roster"`. Verifica los conteos contra RFEVB al final y aborta si no coinciden.
 
 ## Separación de responsabilidades
 
@@ -65,9 +60,7 @@ El proyecto distingue estas capas:
 
 ### Presentación
 
-La presentación muestra información y recoge interacciones del usuario. No
-debe conocer HTML de RFEVB, hacer peticiones directas a la web externa ni
-decidir reglas persistentes.
+La presentación muestra información y recoge interacciones del usuario. No debe conocer HTML de RFEVB, hacer peticiones directas a la web externa ni decidir reglas persistentes.
 
 - `app/`: páginas y rutas HTTP de Next.js.
 - `components/`: componentes React.
@@ -76,18 +69,13 @@ decidir reglas persistentes.
 
 La sección fantasy se divide visualmente en:
 
-- **Mercado de fichajes**: jugadores disponibles, precios provisionales y
-  acciones de comprar/vender.
-- **Mi equipo y alineación**: plantilla seleccionada, titulares y errores de
-  composición.
-- **Puntuación por jornada**: consulta de la puntuación calculada para la
-  alineación actual.
+- **Mercado de fichajes:** jugadores disponibles, precios provisionales y acciones de comprar/vender.
+- **Mi equipo y alineación:** plantilla seleccionada, titulares y errores de composición.
+- **Puntuación por jornada:** consulta de la puntuación calculada para la alineación actual.
 
 ### Control de aplicación
 
-Las rutas de `app/api/` son la entrada HTTP. Validan parámetros, invocan
-servicios o scrapers y convierten los errores en respuestas HTTP. No son el
-modelo de dominio ni una capa de persistencia.
+Las rutas de `app/api/` son la entrada HTTP. Validan parámetros, invocan servicios o scrapers y convierten los errores en respuestas HTTP. No son el modelo de dominio ni una capa de persistencia.
 
 Rutas relevantes:
 
@@ -101,38 +89,33 @@ Rutas relevantes:
 
 `domain/` contiene contratos TypeScript de las entidades deportivas y fantasy:
 
-- `Competition`, `Season`, `Team` y `Player`;
-- `Match` y estadísticas de jugador;
-- tipos de fantasy, alineaciones y ligas;
-- contratos de puntuación.
+- `Competition`, `Season`, `Team` y `Player`.
+- `Match` y estadísticas de jugador.
+- Tipos de fantasy, alineaciones y ligas.
+- Contratos de puntuación.
 
-Los tipos de dominio describen datos y contratos. No deben depender de
-Cheerio, React, Supabase ni de la estructura HTML de RFEVB.
+Los tipos de dominio describen datos y contratos. No deben depender de Cheerio, React, Supabase ni de la estructura HTML de RFEVB.
 
 ### Servicios de aplicación y reglas
 
 `lib/services/` contiene lógica reutilizable que no pertenece a la vista:
 
-- `lib/services/fantasy/`: validación de plantilla y alineación, cálculo de
-  puntuación de la demo y selección diaria del mercado;
-- `lib/services/profile/`: acceso relacionado con perfiles;
-- futuras capas de ingesta y repositorios.
+- `lib/services/fantasy/`: validación de plantilla y alineación, cálculo de puntuación de la demo y selección diaria del mercado.
+- `lib/services/ingestion/`: mappers (`mapTeam`, `mapPlayer`) y `TeamAliasResolver` para cruzar nombres desalineados entre roster y actas.
+- `lib/services/profile/`: acceso relacionado con perfiles.
+- Futuras capas de ingesta de partidos y repositorios.
 
-`createDailyFantasyRoster` genera un mercado temporal determinista. La regla
-de selección diaria está aquí, no en el componente visual.
+`createDailyFantasyRoster` genera un mercado temporal determinista. La regla de selección diaria está aquí, no en el componente visual.
 
 ### Scraper
 
-`lib/scraper/` es el adaptador hacia RFEVB. Descarga HTML, lo interpreta y
-devuelve datos de scraper o entidades compatibles con el dominio. No guarda
-datos en Supabase y no contiene lógica de presentación.
+`lib/scraper/` es el adaptador hacia RFEVB. Descarga HTML, lo interpreta y devuelve datos de scraper o entidades compatibles con el dominio. No guarda datos en Supabase y no contiene lógica de presentación.
 
 ### Persistencia
 
-`lib/supabase/` contiene clientes y sincronización de sesión. La persistencia
-de competiciones, jugadores, equipos, partidos, mercado y equipos fantasy está
-definida en `../supabase/migrations/20260925190000_create_fantasy_schema.sql`;
-todavía falta conectar los repositorios y la ingesta con esas tablas.
+`lib/supabase/` contiene clientes y sincronización de sesión. La persistencia de competiciones, jugadores, equipos, partidos, mercado y equipos fantasy está definida en las migraciones de `../supabase/migrations/`.
+
+El catálogo de las cuatro ligas 25/26 ya está persistido; todavía falta conectar la ingesta de partidos, los repositorios de lectura y migrar la UI para que deje de leer RFEVB en vivo.
 
 ## Demo fantasy actual
 
@@ -144,37 +127,30 @@ La ruta `/fantasy` carga jugadores reales mediante:
 
 La demo:
 
-- utiliza nombres, equipos, posiciones e identificadores procedentes de RFEVB;
-- crea un mercado en memoria de 30 jugadores;
-- usa una semilla UTC `YYYY-MM-DD`;
-- mantiene el mismo mercado durante el día y lo cambia al día siguiente;
-- asigna precios provisionales deterministas;
-- crea inicialmente una plantilla de hasta 14 jugadores;
-- valida una alineación de 7 jugadores:
-  - 1 colocador;
-  - 1 líbero;
-  - 1 opuesto;
-  - 2 centrales;
+- Utiliza nombres, equipos, posiciones e identificadores procedentes de RFEVB.
+- Crea un mercado en memoria de 30 jugadores.
+- Usa una semilla UTC `YYYY-MM-DD`.
+- Mantiene el mismo mercado durante el día y lo cambia al día siguiente.
+- Asigna precios provisionales deterministas.
+- Crea inicialmente una plantilla de hasta 14 jugadores.
+- Valida una alineación de siete jugadores:
+  - 1 colocador.
+  - 1 líbero.
+  - 1 opuesto.
+  - 2 centrales.
   - 2 receptores.
 
-El catálogo real sí procede del scraper. La demo todavía mantiene el mercado,
-las compras, las ventas, la plantilla y la alineación en el cliente; el esquema
-persistente y sus funciones server-side ya están definidos, pero aún falta
-conectar los repositorios y migrar la UI.
+El catálogo real sí procede del scraper. La demo todavía mantiene el mercado, las compras, las ventas, la plantilla y la alineación en el cliente; el esquema persistente y sus funciones server-side ya están definidos, pero aún falta conectar los repositorios y migrar la UI.
 
-La salida de una liga se ejecuta mediante `leave_private_league`. La liga nunca
-queda sin miembros: si sale el propietario, el miembro más antiguo restante
-pasa a ser el nuevo propietario; si el propietario es el único miembro, la
-liga se elimina completamente.
-La jornada seleccionada consulta `/api/fantasy-round-scores`, que combina el
-roster real con los partidos y estadísticas de RFEVB y aplica
-`ScoringSystemV1`. La respuesta incluye `scoringVersion: "v1"`; los resultados
-se asignan por equipo, dorsal y nombre cuando es necesario. Mercado y equipo
-siguen viviendo solo en el estado del cliente.
+La salida de una liga se ejecuta mediante `leave_private_league`. La liga nunca queda sin miembros: si sale el propietario, el miembro más antiguo restante pasa a ser el nuevo propietario; si el propietario es el único miembro, la liga se elimina completamente.
+
+La jornada seleccionada consulta `/api/fantasy-round-scores`, que combina el roster real con los partidos y estadísticas de RFEVB y aplica `ScoringSystemV1`. La respuesta incluye `scoringVersion: "v1"`; los resultados se asignan por equipo, dorsal y nombre cuando es necesario.
+
+Mercado y equipo siguen viviendo solo en el estado del cliente.
 
 ## Probar el catálogo real
 
-Con `npm run dev` ejecutándose:
+Con `npm run dev` ejecutándose, abre:
 
 ```text
 http://localhost:3000/api/competition-roster?competition=152
@@ -186,7 +162,7 @@ También se puede ejecutar directamente:
 npx tsx -e "import { scrapeCompetitionRoster } from './lib/scraper/fetch-competition-roster.ts'; scrapeCompetitionRoster(152).then((roster) => console.log(JSON.stringify({ teams: roster.teams.length, players: roster.players.length }, null, 2))).catch((error) => { console.error(error); process.exit(1); });"
 ```
 
-La comprobación actual devuelve 12 equipos y 180 jugadores.
+La comprobación actual devuelve 12 equipos y 180 jugadores para la competición 152.
 
 ## Tests y validación
 
@@ -194,30 +170,28 @@ La validación mínima de cambios de dominio es:
 
 ```bash
 npm run test:domain
+npm run test:team-alias-resolver
 npm run build
 ```
 
-Los tests unitarios están en `scripts/test-domain.ts` y utilizan `node:assert`
-con `tsx`, por lo que no se introduce un framework adicional. Cubren:
+Los tests unitarios están en `scripts/` y utilizan `node:assert` con `tsx`, por lo que no se introduce un framework adicional. Cubren:
 
-- el contrato y resultado de `ScoringSystemV1`;
-- el mapeo de competición, temporada y partido;
-- la normalización de estadísticas nulas;
-- el cálculo de sets jugados a partir de la formación;
-- el rechazo de partidos que no contienen exactamente dos equipos.
-- la fórmula versionada `ScoringSystemV1`, sus penalizaciones y el bonus por
-  resultado;
-- la exclusión de campos estadísticos ambiguos para evitar doble conteo.
+- El contrato y resultado de `ScoringSystemV1`.
+- El mapeo de competición, temporada y partido.
+- El mapeo con `MatchMappingContext` pre-resuelto.
+- La normalización de estadísticas nulas.
+- El cálculo de sets jugados a partir de la formación.
+- El rechazo de partidos que no contienen exactamente dos equipos.
+- La fórmula versionada `ScoringSystemV1`, sus penalizaciones y el bonus por resultado.
+- La exclusión de campos estadísticos ambiguos para evitar doble conteo.
+- El normalizador de nombres de equipo contra casos unitarios y contra fixtures reales de las cuatro ligas 25/26.
 
-El runner muestra para cada caso qué comportamiento verifica, cuándo comienza,
-si ha terminado correctamente y el motivo concreto del fallo, incluyendo los
-valores real y esperado cuando falla una aserción.
+El runner muestra para cada caso qué comportamiento verifica, cuándo comienza, si ha terminado correctamente y el motivo concreto del fallo, incluyendo los valores real y esperado cuando falla una aserción.
 
-El test de Supabase sigue siendo una prueba de integración y requiere un
-proyecto configurado con las variables de `docs/AUTHENTICATION.md`.
+El test de Supabase sigue siendo una prueba de integración y requiere un proyecto configurado con las variables de `docs/AUTHENTICATION.md`.
 
 ## Limitaciones conocidas
 
 - El scraper depende de HTML externo y necesita pruebas con fixtures.
-- No existe ingesta programada ni almacenamiento de datos deportivos.
+- No existe ingesta programada ni almacenamiento de partidos y estadísticas.
 - La demo fantasy no representa todavía el comportamiento final del producto.

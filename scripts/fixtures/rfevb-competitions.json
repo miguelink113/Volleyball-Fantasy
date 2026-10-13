@@ -1,0 +1,34 @@
+{
+  "competitions": [
+    {
+      "label": "Superliga Masculina 25/26",
+      "competitionId": 152,
+      "seasonId": 186
+    },
+    {
+      "label": "Superliga Femenina 25/26",
+      "competitionId": 151,
+      "seasonId": 185
+    },
+    {
+      "label": "Superliga 2 Masculina 25/26 - Fase Regular",
+      "competitionId": 153,
+      "seasonId": 187
+    },
+    {
+      "label": "Superliga 2 Masculina 25/26 - Fase Final",
+      "competitionId": 153,
+      "seasonId": 188
+    },
+    {
+      "label": "Superliga 2 Femenina 25/26 - Fase Regular",
+      "competitionId": 150,
+      "seasonId": 183
+    },
+    {
+      "label": "Superliga 2 Femenina 25/26 - Fase Final",
+      "competitionId": 150,
+      "seasonId": 184
+    }
+  ]
+}

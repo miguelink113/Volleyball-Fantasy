@@ -5,8 +5,9 @@ config({ path: resolve(process.cwd(), ".env.local") });
 import { createAdminClient } from "@/lib/supabase/admin.server";
 
 import { scrapeCompetitionRoster } from "@/lib/scraper/fetch-competition-roster";
-import {mapTeam} from "@/lib/services/ingestion/map.team";
-import {mapPlayer} from "@/lib/services/ingestion/map.player";
+import { mapTeam } from "@/lib/services/ingestion/map.team";
+import { mapPlayer } from "@/lib/services/ingestion/map.player";
+import { TeamAliasResolver } from "@/lib/services/ingestion/team-alias-resolver";
 
 interface Args {
     competitionRfevbId: string;
@@ -111,7 +112,10 @@ async function main() {
     const supabase = createAdminClient();
 
     console.log("→ Asegurando competición…");
-    const competitionId = await upsertCompetition(supabase, args.competitionRfevbId);
+    const competitionId = await upsertCompetition(
+        supabase,
+        args.competitionRfevbId
+    );
 
     console.log("→ Asegurando temporada…");
     const seasonId = await upsertSeason(
@@ -154,7 +158,7 @@ async function main() {
     }
     console.log(`  ${teamRows.length} equipos upsertados`);
 
-    // --- Construir mapa rfevbId → UUID ---
+    // --- Construir mapas rfevbId → UUID / nombre ---
     console.log("→ Resolviendo UUIDs de equipos…");
     const { data: insertedTeams, error: teamsSelectError } = await supabase
         .from("teams")
@@ -179,6 +183,43 @@ async function main() {
     }
     console.log(`  ${teamIdByRfevbId.size} equipos resueltos a UUID`);
 
+    const teamNameByRfevbId = new Map<string, string>(
+        roster.teams.map((t) => [t.rfevbId ?? "", t.name])
+    );
+
+    // --- Registrar aliases del roster ---
+    // Sin esto, el resolver no tiene contra qué comparar los nombres de
+    // las actas de partido. Es idempotente: upsert por
+    // (season_id, normalized_alias).
+    console.log("→ Registrando aliases del roster…");
+    const aliasResolver = new TeamAliasResolver(supabase);
+
+    const aliasInputs = insertedTeams.map((row) => {
+        const rfevbId = row.rfevb_id;
+        if (!rfevbId) {
+            throw new Error(
+                `Team without rfevb_id while registering aliases (id=${row.id}).`
+            );
+        }
+        const name = teamNameByRfevbId.get(rfevbId);
+        if (!name) {
+            throw new Error(
+                `No roster name for team rfevb_id=${rfevbId}.`
+            );
+        }
+        return {
+            teamId: row.id,
+            source: "roster" as const,
+            alias: name,
+        };
+    });
+
+    const aliasesInserted = await aliasResolver.registerAliases(
+        { competitionId, seasonId },
+        aliasInputs
+    );
+    console.log(`  ${aliasesInserted} aliases de roster registrados`);
+
     // --- Upsert players ---
     console.log("→ Ingestando jugadores…");
     const playerRows = roster.players.map((player) =>
@@ -195,7 +236,9 @@ async function main() {
             .upsert(playerRows, { onConflict: "season_id,rfevb_id" });
 
         if (playersUpsertError) {
-            throw new Error(`Upsert players failed: ${playersUpsertError.message}`);
+            throw new Error(
+                `Upsert players failed: ${playersUpsertError.message}`
+            );
         }
         console.log(`  ${playerRows.length} jugadores upsertados`);
     }

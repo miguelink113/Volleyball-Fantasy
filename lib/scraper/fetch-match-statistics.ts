@@ -206,7 +206,7 @@ async function getMatchHtml(
 
             cache: "no-store",
 
-            signal: AbortSignal.timeout(10_000),
+            signal: AbortSignal.timeout(30_000),
         });
     } catch (error) {
         throw new MatchScraperError(

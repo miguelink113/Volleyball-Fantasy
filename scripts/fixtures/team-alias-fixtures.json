@@ -1,0 +1,834 @@
+{
+  "generatedAt": "2026-10-13T22:23:07.437Z",
+  "competitions": [
+    {
+      "competitionId": "152",
+      "seasonId": "186",
+      "label": "Superliga Masculina",
+      "teams": [
+        {
+          "rfevbId": "1318",
+          "rosterName": "Bus Leader San Roque",
+          "normalized": "bus leader san roque",
+          "actaNames": [
+            "Bus Leader San Roque"
+          ]
+        },
+        {
+          "rfevbId": "1310",
+          "rosterName": "Cisneros La Laguna",
+          "normalized": "cisneros laguna",
+          "actaNames": [
+            "Cisneros La Laguna"
+          ]
+        },
+        {
+          "rfevbId": "1315",
+          "rosterName": "Conectabalear CV Manacor",
+          "normalized": "conectabalear manacor",
+          "actaNames": [
+            "Conectabalear CV Manacor"
+          ]
+        },
+        {
+          "rfevbId": "1312",
+          "rosterName": "Conqueridor Valencia",
+          "normalized": "conqueridor valencia",
+          "actaNames": [
+            "Conqueridor Valencia"
+          ]
+        },
+        {
+          "rfevbId": "1313",
+          "rosterName": "CV Guaguas",
+          "normalized": "guaguas",
+          "actaNames": [
+            "CV Guaguas"
+          ]
+        },
+        {
+          "rfevbId": "1316",
+          "rosterName": "CV Melilla",
+          "normalized": "melilla",
+          "actaNames": [
+            "Club Voleibol Melilla",
+            "CV Melilla"
+          ]
+        },
+        {
+          "rfevbId": "1319",
+          "rosterName": "Grupo Herce Soria",
+          "normalized": "grupo herce soria",
+          "actaNames": [
+            "Grupo Herce Soria Voleibol",
+            "Grupo Herce Soria"
+          ]
+        },
+        {
+          "rfevbId": "1320",
+          "rosterName": "Instercap Asisa Tarragona SPiSP",
+          "normalized": "instercap asisa tarragona spisp",
+          "actaNames": [
+            "Instercap Asisa Tarragona SPiSP"
+          ]
+        },
+        {
+          "rfevbId": "1311",
+          "rosterName": "Pamesa Voleibol Teruel",
+          "normalized": "pamesa teruel",
+          "actaNames": [
+            "Pamesa Teruel Vb",
+            "Pamesa Voleibol Teruel"
+          ]
+        },
+        {
+          "rfevbId": "1317",
+          "rosterName": "Servigroup Playas de Benidorm",
+          "normalized": "servigroup playas benidorm",
+          "actaNames": [
+            "Servigroup Playas de Benidorm"
+          ]
+        },
+        {
+          "rfevbId": "1314",
+          "rosterName": "UC3M Voleibol Leganés",
+          "normalized": "uc3m leganes",
+          "actaNames": [
+            "UC3M Voleibol Leganes"
+          ]
+        },
+        {
+          "rfevbId": "1321",
+          "rosterName": "Unicaja Costa de Almería",
+          "normalized": "unicaja costa almeria",
+          "actaNames": [
+            "Unicaja Costa de Almeria",
+            "Unicaja Costa de Almería"
+          ]
+        }
+      ],
+      "unmatchedActaNames": [],
+      "collisions": [],
+      "stats": {
+        "rosterTeams": 12,
+        "uniqueActaNames": 16,
+        "matchedActaNames": 16,
+        "unmatchedActaNames": 0
+      }
+    },
+    {
+      "competitionId": "151",
+      "seasonId": "185",
+      "label": "Superliga Femenina",
+      "teams": [
+        {
+          "rfevbId": "1257",
+          "rosterName": "Arenal Emevé",
+          "normalized": "arenal emeve",
+          "actaNames": [
+            "Arenal Emevé"
+          ]
+        },
+        {
+          "rfevbId": "1282",
+          "rosterName": "Avarca de Menorca",
+          "normalized": "avarca menorca",
+          "actaNames": [
+            "Avarca de Menorca"
+          ]
+        },
+        {
+          "rfevbId": "1286",
+          "rosterName": "Club Voleibol Melilla",
+          "normalized": "melilla",
+          "actaNames": [
+            "Club Voleibol Melilla"
+          ]
+        },
+        {
+          "rfevbId": "1288",
+          "rosterName": "CV Sayre CC La Ballena",
+          "normalized": "sayre cc ballena",
+          "actaNames": [
+            "CV Sayre CC La Ballena"
+          ]
+        },
+        {
+          "rfevbId": "1279",
+          "rosterName": "CV Tenerife Libby's La Laguna",
+          "normalized": "tenerife libbys laguna",
+          "actaNames": [
+            "CV Tenerife Libby's La Laguna"
+          ]
+        },
+        {
+          "rfevbId": "1276",
+          "rosterName": "DSV CV Sant Cugat",
+          "normalized": "dsv sant cugat",
+          "actaNames": [
+            "DSV CV Sant Cugat"
+          ]
+        },
+        {
+          "rfevbId": "1275",
+          "rosterName": "Emalsa Gran Canaria",
+          "normalized": "emalsa gran canaria",
+          "actaNames": [
+            "Emalsa Gran Canaria"
+          ]
+        },
+        {
+          "rfevbId": "1274",
+          "rosterName": "F. Cajasol Andalucía VB",
+          "normalized": "f cajasol andalucia",
+          "actaNames": [
+            "Fundación Cajasol Andalucía",
+            "F. Cajasol Andalucía VB"
+          ]
+        },
+        {
+          "rfevbId": "1278",
+          "rosterName": "Feel Alcobendas",
+          "normalized": "feel alcobendas",
+          "actaNames": [
+            "Feel Alcobendas"
+          ]
+        },
+        {
+          "rfevbId": "1289",
+          "rosterName": "Heidelberg Volkswagen",
+          "normalized": "heidelberg volkswagen",
+          "actaNames": [
+            "Heidelberg Volkswagen"
+          ]
+        },
+        {
+          "rfevbId": "1287",
+          "rosterName": "Kiele Socuellamos",
+          "normalized": "kiele socuellamos",
+          "actaNames": [
+            "Kiele Socuellamos"
+          ]
+        },
+        {
+          "rfevbId": "1280",
+          "rosterName": "OCISA Haro Rioja Voley",
+          "normalized": "ocisa haro rioja",
+          "actaNames": [
+            "OCISA Haro Rioja Voley"
+          ]
+        }
+      ],
+      "unmatchedActaNames": [],
+      "collisions": [],
+      "stats": {
+        "rosterTeams": 12,
+        "uniqueActaNames": 13,
+        "matchedActaNames": 13,
+        "unmatchedActaNames": 0
+      }
+    },
+    {
+      "competitionId": "153",
+      "seasonId": "187",
+      "label": "Superliga 2 Masculina",
+      "teams": [
+        {
+          "rfevbId": "1354",
+          "rosterName": "AD Voleibol Rivas",
+          "normalized": "ad rivas",
+          "actaNames": [
+            "AD Voleibol Rivas"
+          ]
+        },
+        {
+          "rfevbId": "1350",
+          "rosterName": "Almendralejo Extremadura",
+          "normalized": "almendralejo extremadura",
+          "actaNames": [
+            "CV Almendralejo Extremadura"
+          ]
+        },
+        {
+          "rfevbId": "1330",
+          "rosterName": "Arenal Emevé",
+          "normalized": "arenal emeve",
+          "actaNames": [
+            "Arenal Emevé"
+          ]
+        },
+        {
+          "rfevbId": "1322",
+          "rosterName": "Arona Spring In Motion",
+          "normalized": "arona spring in motion",
+          "actaNames": [
+            "Arona Spring in Motion"
+          ]
+        },
+        {
+          "rfevbId": "1343",
+          "rosterName": "Barça Voleibol",
+          "normalized": "barca",
+          "actaNames": [
+            "Barça Voleibol"
+          ]
+        },
+        {
+          "rfevbId": "1355",
+          "rosterName": "CDE Parla Vóley",
+          "normalized": "cde parla",
+          "actaNames": [
+            "CDE Parla Vóley"
+          ]
+        },
+        {
+          "rfevbId": "1331",
+          "rosterName": "CID Jovellanos",
+          "normalized": "cid jovellanos",
+          "actaNames": [
+            "CID Jovellanos"
+          ]
+        },
+        {
+          "rfevbId": "1338",
+          "rosterName": "Cisneros La Laguna",
+          "normalized": "cisneros laguna",
+          "actaNames": [
+            "Cisneros La Laguna"
+          ]
+        },
+        {
+          "rfevbId": "1329",
+          "rosterName": "Club Vigo Voleibol",
+          "normalized": "vigo",
+          "actaNames": [
+            "Club Vigo Voleibol"
+          ]
+        },
+        {
+          "rfevbId": "1348",
+          "rosterName": "Club Voleibol Collado Villalba",
+          "normalized": "collado villalba",
+          "actaNames": [
+            "CV Collado Villalba",
+            "Cox Energy Collado Villalba",
+            "COX Energy Collado Villalba",
+            "Cox Energy CV Collado Villalba"
+          ]
+        },
+        {
+          "rfevbId": "1328",
+          "rosterName": "Club Voley Palma",
+          "normalized": "palma",
+          "actaNames": [
+            "Club Voley Palma",
+            "Mayurqa Voley Palma"
+          ]
+        },
+        {
+          "rfevbId": "1340",
+          "rosterName": "CN Sabadell",
+          "normalized": "cn sabadell",
+          "actaNames": [
+            "CN Sabadell"
+          ]
+        },
+        {
+          "rfevbId": "1349",
+          "rosterName": "Conqueridor Valencia",
+          "normalized": "conqueridor valencia",
+          "actaNames": [
+            "Conqueridor Valencia"
+          ]
+        },
+        {
+          "rfevbId": "1346",
+          "rosterName": "Cratevo Volei Arenys",
+          "normalized": "cratevo arenys",
+          "actaNames": [
+            "Cratevo Vòlei Arenys"
+          ]
+        },
+        {
+          "rfevbId": "1351",
+          "rosterName": "CV Almoradí",
+          "normalized": "almoradi",
+          "actaNames": [
+            "CV Almoradí"
+          ]
+        },
+        {
+          "rfevbId": "1347",
+          "rosterName": "CV Gemavi Vinaròs",
+          "normalized": "gemavi vinaros",
+          "actaNames": [
+            "CV Gemavi Vinaròs"
+          ]
+        },
+        {
+          "rfevbId": "1337",
+          "rosterName": "CV Gupane Guía",
+          "normalized": "gupane guia",
+          "actaNames": [
+            "CV Gupane Guía"
+          ]
+        },
+        {
+          "rfevbId": "1342",
+          "rosterName": "CV Roquetes",
+          "normalized": "roquetes",
+          "actaNames": [
+            "CV Roquetes"
+          ]
+        },
+        {
+          "rfevbId": "1327",
+          "rosterName": "Familycash Xátiva Voleibol",
+          "normalized": "familycash xativa",
+          "actaNames": [
+            "Familycash Xátiva Voleibol"
+          ]
+        },
+        {
+          "rfevbId": "1326",
+          "rosterName": "Galdakao Boleibol Taldea",
+          "normalized": "galdakao boleibol taldea",
+          "actaNames": [
+            "Galdakao Boleibol Taldea"
+          ]
+        },
+        {
+          "rfevbId": "1323",
+          "rosterName": "Grupo Alfil-Marbella-Costa del Vóley",
+          "normalized": "grupo alfil marbella costa",
+          "actaNames": [
+            "Grupo Alfil-Marbella-Costa del Vóley"
+          ]
+        },
+        {
+          "rfevbId": "1353",
+          "rosterName": "Grupo Egido Pinto",
+          "normalized": "grupo egido pinto",
+          "actaNames": [
+            "Grupo Egido Pinto"
+          ]
+        },
+        {
+          "rfevbId": "1339",
+          "rosterName": "Indescar Zaragoza",
+          "normalized": "indescar zaragoza",
+          "actaNames": [
+            "Indescar Zaragoza"
+          ]
+        },
+        {
+          "rfevbId": "1332",
+          "rosterName": "Intasa San Sadurniño",
+          "normalized": "intasa san sadurnino",
+          "actaNames": [
+            "Intasa San Sadurniño"
+          ]
+        },
+        {
+          "rfevbId": "1341",
+          "rosterName": "Mediterráneo Castellón",
+          "normalized": "mediterraneo castellon",
+          "actaNames": [
+            "Mediterráneo Castellón",
+            "CV Mediterráneo Castellón"
+          ]
+        },
+        {
+          "rfevbId": "1352",
+          "rosterName": "Mintonette Almería",
+          "normalized": "mintonette almeria",
+          "actaNames": [
+            "Mintonette Almería"
+          ]
+        },
+        {
+          "rfevbId": "1325",
+          "rosterName": "Rodi Balafia Volei Lleida",
+          "normalized": "rodi balafia lleida",
+          "actaNames": [
+            "Rodi Balafia Volei Lleida",
+            "Rodi Balàfia Vòlei"
+          ]
+        },
+        {
+          "rfevbId": "1333",
+          "rosterName": "Rotogal Boiro Voleibol",
+          "normalized": "rotogal boiro",
+          "actaNames": [
+            "Rotogal Boiro Voleibol"
+          ]
+        },
+        {
+          "rfevbId": "1334",
+          "rosterName": "SUAC Canarias",
+          "normalized": "suac canarias",
+          "actaNames": [
+            "SUAC Canarias"
+          ]
+        },
+        {
+          "rfevbId": "1324",
+          "rosterName": "Textil Santanderina",
+          "normalized": "textil santanderina",
+          "actaNames": [
+            "Textil Santanderina"
+          ]
+        },
+        {
+          "rfevbId": "1344",
+          "rosterName": "UBE L´Illa Grau",
+          "normalized": "ube l illa grau",
+          "actaNames": [
+            "UBE L´Illa Grau"
+          ]
+        },
+        {
+          "rfevbId": "1335",
+          "rosterName": "Universidad de Valladolid",
+          "normalized": "universidad valladolid",
+          "actaNames": [
+            "Universidad de Valladolid"
+          ]
+        },
+        {
+          "rfevbId": "1345",
+          "rosterName": "Vikings Volei Prat",
+          "normalized": "vikings prat",
+          "actaNames": [
+            "Vikings Volei Prat"
+          ]
+        },
+        {
+          "rfevbId": "1336",
+          "rosterName": "Voleibol Dumbria",
+          "normalized": "dumbria",
+          "actaNames": [
+            "Voleibol Dumbria"
+          ]
+        }
+      ],
+      "unmatchedActaNames": [],
+      "collisions": [],
+      "stats": {
+        "rosterTeams": 34,
+        "uniqueActaNames": 40,
+        "matchedActaNames": 40,
+        "unmatchedActaNames": 0
+      }
+    },
+    {
+      "competitionId": "150",
+      "seasonId": "183",
+      "label": "Superliga 2 Femenina",
+      "teams": [
+        {
+          "rfevbId": "1290",
+          "rosterName": "Aceites Abril Voleyourense",
+          "normalized": "aceites abril voleyourense",
+          "actaNames": [
+            "Aceites Abril Voleyourense"
+          ]
+        },
+        {
+          "rfevbId": "1263",
+          "rosterName": "Algar Surmenor",
+          "normalized": "algar surmenor",
+          "actaNames": [
+            "Algar Surmenor"
+          ]
+        },
+        {
+          "rfevbId": "1273",
+          "rosterName": "Arona",
+          "normalized": "arona",
+          "actaNames": [
+            "Arona"
+          ]
+        },
+        {
+          "rfevbId": "1297",
+          "rosterName": "AVK Voleibol Sant Just",
+          "normalized": "sant just",
+          "actaNames": [
+            "Voleibol Sant Just",
+            "AVK Voleibol Sant Just"
+          ]
+        },
+        {
+          "rfevbId": "1293",
+          "rosterName": "Barnadental Premiá de Dalt",
+          "normalized": "barnadental premia dalt",
+          "actaNames": [
+            "Barnadental CV Premiá de Dalt"
+          ]
+        },
+        {
+          "rfevbId": "1302",
+          "rosterName": "Camporrosso Finestrat Medsur",
+          "normalized": "camporrosso finestrat medsur",
+          "actaNames": [
+            "Camporrosso Finestrat Medsur"
+          ]
+        },
+        {
+          "rfevbId": "1303",
+          "rosterName": "CDU Atarfe",
+          "normalized": "cdu atarfe",
+          "actaNames": [
+            "CDU Atarfe"
+          ]
+        },
+        {
+          "rfevbId": "1309",
+          "rosterName": "Clínica Inmuv. Descubre Fuentes",
+          "normalized": "clinica inmuv descubre fuentes",
+          "actaNames": [
+            "Clínica Inmuv. Descubre Fuentes"
+          ]
+        },
+        {
+          "rfevbId": "1305",
+          "rosterName": "CV Paterna Liceo",
+          "normalized": "paterna liceo",
+          "actaNames": [
+            "CV Paterna Liceo"
+          ]
+        },
+        {
+          "rfevbId": "1292",
+          "rosterName": "CV Sant Cugat",
+          "normalized": "sant cugat",
+          "actaNames": [
+            "CV Sant Cugat"
+          ]
+        },
+        {
+          "rfevbId": "1299",
+          "rosterName": "CV Sant Quirze",
+          "normalized": "sant quirze",
+          "actaNames": [
+            "CV Sant Quirze"
+          ]
+        },
+        {
+          "rfevbId": "1255",
+          "rosterName": "CV Torrelavega",
+          "normalized": "torrelavega",
+          "actaNames": [
+            "CV Torrelavega"
+          ]
+        },
+        {
+          "rfevbId": "1294",
+          "rosterName": "CV Vall D´Hebrón",
+          "normalized": "vall d hebron",
+          "actaNames": [
+            "CV Vall D´Hebrón"
+          ]
+        },
+        {
+          "rfevbId": "1277",
+          "rosterName": "CVB Barça",
+          "normalized": "cvb barca",
+          "actaNames": [
+            "CVB Barça"
+          ]
+        },
+        {
+          "rfevbId": "1295",
+          "rosterName": "CVS U Energía Sóller",
+          "normalized": "cvs u energia soller",
+          "actaNames": [
+            "CVS U Energía Sóller"
+          ]
+        },
+        {
+          "rfevbId": "1296",
+          "rosterName": "Élite Vóley El Rosario",
+          "normalized": "rosario",
+          "actaNames": [
+            "Élite Vóley El Rosario"
+          ]
+        },
+        {
+          "rfevbId": "1304",
+          "rosterName": "Emalsa Gran Canaria",
+          "normalized": "emalsa gran canaria",
+          "actaNames": [
+            "Emalsa Gran Canaria"
+          ]
+        },
+        {
+          "rfevbId": "1258",
+          "rosterName": "Extremadura Arroyo",
+          "normalized": "extremadura arroyo",
+          "actaNames": [
+            "Extremadura Arroyo"
+          ]
+        },
+        {
+          "rfevbId": "1281",
+          "rosterName": "Fedes Ascensores La Laguna",
+          "normalized": "fedes ascensores laguna",
+          "actaNames": [
+            "Fedes Ascensores La Laguna"
+          ]
+        },
+        {
+          "rfevbId": "1306",
+          "rosterName": "Grupo Renovak CV Sant Joan",
+          "normalized": "grupo renovak sant joan",
+          "actaNames": [
+            "Grupo Renovak CV Sant Joan"
+          ]
+        },
+        {
+          "rfevbId": "1301",
+          "rosterName": "Guía CDV UFPC",
+          "normalized": "guia ufpc",
+          "actaNames": [
+            "CDV Guía",
+            "Guía CDV UFP Canarias",
+            "Guía CDV UFPC",
+            "Guía CDV UFPC Canarias"
+          ]
+        },
+        {
+          "rfevbId": "1300",
+          "rosterName": "Indescar Zaragoza",
+          "normalized": "indescar zaragoza",
+          "actaNames": [
+            "Indescar Zaragoza"
+          ]
+        },
+        {
+          "rfevbId": "1268",
+          "rosterName": "JS Hotels Cide Palma",
+          "normalized": "js hotels cide palma",
+          "actaNames": [
+            "JS Hotels Cide Palma"
+          ]
+        },
+        {
+          "rfevbId": "1254",
+          "rosterName": "Madrid Chamberí",
+          "normalized": "madrid chamberi",
+          "actaNames": [
+            "Madrid Chamberí"
+          ]
+        },
+        {
+          "rfevbId": "1265",
+          "rosterName": "Mairena Voley Club",
+          "normalized": "mairena",
+          "actaNames": [
+            "Mairena Voley Club"
+          ]
+        },
+        {
+          "rfevbId": "1259",
+          "rosterName": "RGC Covadonga",
+          "normalized": "rgc covadonga",
+          "actaNames": [
+            "RGC Covadonga"
+          ]
+        },
+        {
+          "rfevbId": "1261",
+          "rosterName": "Santa Cruz Cuesta Piedra",
+          "normalized": "santa cruz cuesta piedra",
+          "actaNames": [
+            "Santa Cruz Cuesta Piedra"
+          ]
+        },
+        {
+          "rfevbId": "1307",
+          "rosterName": "Servigroup Playas Benidorm",
+          "normalized": "servigroup playas benidorm",
+          "actaNames": [
+            "Servigroup Playas Benidorm"
+          ]
+        },
+        {
+          "rfevbId": "1264",
+          "rosterName": "UC3M Voleibol Leganés",
+          "normalized": "uc3m leganes",
+          "actaNames": [
+            "UC3M Voleibol Leganés"
+          ]
+        },
+        {
+          "rfevbId": "1260",
+          "rosterName": "UCAM Torrejón",
+          "normalized": "ucam torrejon",
+          "actaNames": [
+            "UCAM Torrejón"
+          ]
+        },
+        {
+          "rfevbId": "1308",
+          "rosterName": "Universidad de Granada",
+          "normalized": "universidad granada",
+          "actaNames": [
+            "Universidad de Granada"
+          ]
+        },
+        {
+          "rfevbId": "1298",
+          "rosterName": "Vallbona Protegim",
+          "normalized": "vallbona protegim",
+          "actaNames": [
+            "Vallbona Protegim"
+          ]
+        },
+        {
+          "rfevbId": "1267",
+          "rosterName": "Volei Grau Castelló",
+          "normalized": "grau castello",
+          "actaNames": [
+            "Grau Elite Castelló"
+          ]
+        },
+        {
+          "rfevbId": "1291",
+          "rosterName": "Voleibol Astillero",
+          "normalized": "astillero",
+          "actaNames": [
+            "Voleibol Astillero"
+          ]
+        },
+        {
+          "rfevbId": "1283",
+          "rosterName": "VP Madrid",
+          "normalized": "vp madrid",
+          "actaNames": [
+            "VP Madrid"
+          ]
+        },
+        {
+          "rfevbId": "1256",
+          "rosterName": "Zalaeta",
+          "normalized": "zalaeta",
+          "actaNames": [
+            "Zalaeta"
+          ]
+        }
+      ],
+      "unmatchedActaNames": [
+        "CV Granollers"
+      ],
+      "collisions": [],
+      "stats": {
+        "rosterTeams": 36,
+        "uniqueActaNames": 41,
+        "matchedActaNames": 40,
+        "unmatchedActaNames": 1
+      }
+    }
+  ]
+}

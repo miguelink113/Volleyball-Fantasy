@@ -23,6 +23,37 @@ export interface MappedMatch {
     playerStats: MatchPlayerStats[];
 }
 
+/**
+ * Equipo ya resuelto por el `TeamAliasResolver` a partir del nombre crudo
+ * que devuelve el scraper.
+ *
+ * - `teamId`   es el UUID interno de Supabase (columna `teams.id`).
+ * - `rfevbId`  es el ID oficial RFEVB (columna `teams.rfevb_id`), obligatorio
+ *              en el dominio y clave natural del catálogo.
+ * - `name`     es el nombre canónico preferido (normalmente el del roster).
+ */
+export interface ResolvedMatchTeam {
+    teamId: string;
+    rfevbId: string;
+    name: string;
+}
+
+/**
+ * Contexto pre-resuelto para `mapScrapedMatch`.
+ *
+ * El mapper no hace fuzzy matching ni consulta la base: cuando recibe un
+ * contexto, confía en los identificadores resueltos. Cuando no lo recibe,
+ * mantiene el comportamiento histórico de derivar IDs estables a partir
+ * de los nombres, necesario para los tests de dominio y para los flujos
+ * que aún no pasan por el resolver.
+ */
+export interface MatchMappingContext {
+    competitionId: string;
+    seasonId: string;
+    home: ResolvedMatchTeam;
+    away: ResolvedMatchTeam;
+}
+
 function createStableId(prefix: string, value: string): string {
     return `${prefix}:${value
         .trim()
@@ -91,15 +122,20 @@ function mapPlayerStats(
 
 export function mapScrapedMatch(
     scrapedMatch: ScrapedMatch,
-    scrapedStats: MatchStats
+    scrapedStats: MatchStats,
+    context?: MatchMappingContext
 ): MappedMatch {
+    const competitionId =
+        context?.competitionId ?? scrapedMatch.competitionId;
+    const seasonId = context?.seasonId ?? scrapedMatch.seasonId;
+
     const competition: Competition = {
-        id: scrapedMatch.competitionId,
+        id: competitionId,
         rfevbId: scrapedMatch.competitionId,
         name: `Competición ${scrapedMatch.competitionId}`,
     };
     const season: Season = {
-        id: scrapedMatch.seasonId,
+        id: seasonId,
         rfevbId: scrapedMatch.seasonId,
         competitionId: competition.id,
         name: `Temporada ${scrapedMatch.seasonId}`,
@@ -107,24 +143,38 @@ export function mapScrapedMatch(
     };
 
     const mappedTeams = scrapedStats.teams.map((scrapedTeam, index) => {
+        const resolved = index === 0 ? context?.home : context?.away;
         const matchTeamName =
             index === 0
                 ? scrapedMatch.homeTeam
                 : scrapedMatch.awayTeam;
-        const teamName =
+        const fallbackName =
             matchTeamName && matchTeamName !== "Desconocido"
                 ? matchTeamName
                 : scrapedTeam.name;
-        const teamId = createStableId("team", teamName);
+
+        const teamName = resolved?.name ?? fallbackName;
+        const teamId =
+            resolved?.teamId ?? createStableId("team", fallbackName);
+        // Cuando el contexto está presente usamos el rfevbId oficial.
+        // En el camino sin contexto (tests, flujos históricos) generamos
+        // un rfevbId sintético claramente marcado para no confundirlo
+        // con un ID real de RFEVB, que siempre es numérico.
+        const teamRfevbId =
+            resolved?.rfevbId ?? createStableId("synth-team", fallbackName);
+
         const players = scrapedTeam.players.map((scrapedPlayer) => {
             const displayName = scrapedPlayer.name.trim();
             const names = splitDisplayName(displayName);
+            const playerKey = `${teamId}:${scrapedPlayer.number}:${scrapedPlayer.name}`;
 
             return {
-                id: createStableId(
-                "player",
-                `${teamId}:${scrapedPlayer.number}:${scrapedPlayer.name}`
-            ),
+                id: createStableId("player", playerKey),
+                // El acta de RFEVB no expone PlayerID, así que no podemos
+                // conocer el rfevbId real aquí. Generamos uno sintético
+                // determinista. El cruce con el roster oficial se hará en
+                // un paso posterior (PlayerAliasResolver).
+                rfevbId: createStableId("synth-player", playerKey),
                 firstName: names.firstName,
                 lastName: names.lastName,
                 displayName,
@@ -135,7 +185,7 @@ export function mapScrapedMatch(
         });
 
         return {
-            team: { id: teamId, name: teamName },
+            team: { id: teamId, rfevbId: teamRfevbId, name: teamName },
             players,
         };
     });

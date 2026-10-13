@@ -18,6 +18,10 @@ const expectedTables = {
         "id", "competition_id", "season_id", "rfevb_id", "name", "active",
         "created_at", "updated_at",
     ],
+    team_source_aliases: [
+        "id", "competition_id", "season_id", "team_id", "source",
+        "alias", "normalized_alias", "created_at", "updated_at",
+    ],
     players: [
         "id", "competition_id", "season_id", "team_id", "rfevb_id", "first_name",
         "last_name", "display_name", "position", "dorsal", "active", "created_at",
@@ -241,22 +245,22 @@ async function run(): Promise<void> {
         const { rows: rlsRows } = await client.query<RlsRecord>(
             `select c.relname, c.relrowsecurity
              from pg_class c
-             join pg_namespace n on n.oid = c.relnamespace
+                      join pg_namespace n on n.oid = c.relnamespace
              where n.nspname = 'public' and c.relname = any($1::text[])`,
             [tableNames]
         );
         assert(
             rlsRows.length === tableNames.length
             && rlsRows.every((table) => table.relrowsecurity),
-            "RLS is enabled on all 19 application tables"
+            "RLS is enabled on all 20 application tables"
         );
 
         const { rows: constraints } = await client.query<ConstraintRecord>(
             `select c.relname as table_name, con.contype as constraint_type,
                     pg_get_constraintdef(con.oid) as definition
              from pg_constraint con
-             join pg_class c on c.oid = con.conrelid
-             join pg_namespace n on n.oid = c.relnamespace
+                      join pg_class c on c.oid = con.conrelid
+                      join pg_namespace n on n.oid = c.relnamespace
              where n.nspname = 'public' and c.relname = any($1::text[])`,
             [tableNames]
         );
@@ -303,6 +307,7 @@ async function run(): Promise<void> {
             ["profiles", "FOREIGN KEY (id) REFERENCES auth.users(id)"],
             ["seasons", "FOREIGN KEY (competition_id) REFERENCES competitions(id)"],
             ["teams", "FOREIGN KEY (competition_id, season_id) REFERENCES seasons(competition_id, id)"],
+            ["team_source_aliases", "FOREIGN KEY (competition_id, season_id, team_id) REFERENCES teams(competition_id, season_id, id)"],
             ["players", "FOREIGN KEY (competition_id, season_id, team_id) REFERENCES teams(competition_id, season_id, id)"],
             ["rounds", "FOREIGN KEY (competition_id, season_id) REFERENCES seasons(competition_id, id)"],
             ["matches", "FOREIGN KEY (competition_id, season_id, round_id) REFERENCES rounds(competition_id, season_id, id)"],
@@ -386,6 +391,7 @@ async function run(): Promise<void> {
             ["private_league_members", "members read members", "SELECT"],
             ["fantasy_teams", "members read fantasy teams", "SELECT"],
             ["fantasy_scores", "members read fantasy scores", "SELECT"],
+            ["team_source_aliases", "authenticated users read team aliases", "SELECT"],
         ];
         for (const [table, policy, command] of requiredPolicies) {
             assert(
@@ -444,7 +450,7 @@ async function run(): Promise<void> {
                 where tgrelid = 'auth.users'::regclass
                   and tgname = 'on_auth_user_created'
                   and not tgisinternal
-             ) as exists`
+            ) as exists`
         );
         assert(profileTrigger[0]?.exists, "auth.users has the profile creation trigger");
 

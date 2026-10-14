@@ -49,7 +49,7 @@ Lo que debe hacer:
 Responsable de extraer datos desde la web de RFEVB y convertirlos a modelos del dominio.
 
 - `lib/scraper/`: descarga, parseo y normalización.
-- `scripts/`: utilidades de diagnóstico y pruebas.
+- `scripts/`: ingesta (`ingest/`), herramientas de inspección (`tools/`), tests (`tests/`) y fixtures (`fixtures/`).
 
 Lo que debe hacer:
 
@@ -101,7 +101,7 @@ La base actual permite evolucionar hacia una ingesta persistente con un catálog
 - catálogo deportivo persistido (competiciones, temporadas, equipos, jugadores)
   para las 4 competiciones 25/26: 94 equipos y 1449 jugadores;
 - ingesta idempotente de jornadas, partidos y estadísticas de jugador
-  (`scripts/ingest-matches.ts`), con resolución de nombres de equipo y cruce de
+  (`../scripts/ingest/ingest-matches.ts`), con resolución de nombres de equipo y cruce de
   jugadores de acta → roster;
 - aliases de nombres de equipo persistidos en `team_source_aliases`;
 - `ScoringSystemV1` versionado y probado, aplicable a las estadísticas

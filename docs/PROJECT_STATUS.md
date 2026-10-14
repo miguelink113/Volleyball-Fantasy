@@ -45,7 +45,7 @@ Auth y perfiles se conectan a Supabase. La ingesta de partidos y estadísticas t
 - Cliente administrativo server-only en `lib/supabase/admin.server.ts`, con protección contra ejecución en navegador y test reproducible (`npm run test:supabase:admin`).
 - Mappers puros `mapTeam` y `mapPlayer` en `lib/services/ingestion/`, con validación estricta de `rfevb_id` (invariante del sistema).
 - Tests unitarios de mappers en `npm run test:ingestion-mappers`.
-- Script administrativo `scripts/ingest-roster.ts` que realiza:
+- Script administrativo `../scripts/ingest/ingest-roster.ts` que realiza:
   1. Upsert idempotente de `competitions` y `seasons`.
   2. Scrape del roster desde RFEVB.
   3. Upsert idempotente de `teams` y `players` con `onConflict: "season_id,rfevb_id"`.
@@ -75,10 +75,10 @@ Auth y perfiles se conectan a Supabase. La ingesta de partidos y estadísticas t
 Con `.env.local` configurado (URL, publishable key y secret key de Supabase):
 
 ```bash
-npx tsx scripts/ingest-roster.ts --competition=152 --season=186 --season-name="2025/26"
-npx tsx scripts/ingest-roster.ts --competition=151 --season=185 --season-name="2025/26"
-npx tsx scripts/ingest-roster.ts --competition=153 --season=187 --season-name="2025/26"
-npx tsx scripts/ingest-roster.ts --competition=150 --season=183 --season-name="2025/26"
+npx tsx scripts/ingest/ingest-roster.ts --competition=152 --season=186 --season-name="2025/26"
+npx tsx scripts/ingest/ingest-roster.ts --competition=151 --season=185 --season-name="2025/26"
+npx tsx scripts/ingest/ingest-roster.ts --competition=153 --season=187 --season-name="2025/26"
+npx tsx scripts/ingest/ingest-roster.ts --competition=150 --season=183 --season-name="2025/26"
 ```
 
 Cada ejecución es idempotente y verifica los conteos contra RFEVB al final.
@@ -87,7 +87,7 @@ Cada ejecución es idempotente y verifica los conteos contra RFEVB al final.
 
 ### Fase 5.1 — Ingesta de partidos ✅
 
-- Script `scripts/ingest-matches.ts` con ingesta idempotente de
+- Script `../scripts/ingest/ingest-matches.ts` con ingesta idempotente de
   `rounds`, `matches` y `match_player_stats`.
 - `rounds.starts_at` / `ends_at` derivados de las fechas reales de los
   partidos de cada jornada (00:00 del primer día → 00:00 del día siguiente

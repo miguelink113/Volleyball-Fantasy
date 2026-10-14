@@ -2,7 +2,7 @@ import type { Player } from "@/domain/player/player.types";
 import { ScoringSystemV1 } from "@/domain/scoring/scoring-v1.system";
 import type { MatchWithStats } from "@/lib/scraper/fetch-competition-statistics";
 import type { PlayerStats } from "@/lib/scraper/fetch-match-statistics";
-import { mapScrapedMatch } from "@/lib/domain/map-scraped-match";
+import { mapScrapedMatch } from "@/lib/services/ingestion/map-scraped-match";
 
 export interface FantasyRoundPlayerScore {
     playerId: string;

@@ -6,7 +6,7 @@ import {
     SCORING_SYSTEM_V1_VERSION,
     ScoringSystemV1,
 } from "@/domain/scoring/scoring-v1.system";
-import { mapScrapedMatch } from "@/lib/domain/map-scraped-match";
+import { mapScrapedMatch } from "@/lib/services/ingestion/map-scraped-match";
 import type { Match as ScrapedMatch } from "@/lib/scraper/fetch-matches";
 import type {
     MatchStats,
@@ -65,6 +65,7 @@ function createScrapedMatch(): ScrapedMatch {
         round: 1,
         homeTeam: "Equipo Local",
         awayTeam: "Equipo Visitante",
+        matchDate: null,                      // ← añadir esta línea
         url: "https://example.test/match-1",
     };
 }

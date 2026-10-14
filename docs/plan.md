@@ -32,7 +32,7 @@ presentación, y permitir añadir temporadas y competiciones futuras.
    entre la migración aplicada y el modelo documentado.
 5. **Ingesta idempotente del catálogo (Fase 4)**: cliente administrativo
    server-only, mappers puros con validación estricta de `rfevb_id`, y script
-   `scripts/ingest-roster.ts` que puebla `competitions`, `seasons`, `teams` y
+   `../scripts/ingest/ingest-roster.ts` que puebla `competitions`, `seasons`, `teams` y
    `players` mediante upsert con `onConflict: "season_id,rfevb_id"`. Ejecución
    verificada dos veces consecutivas sobre la competición 152, temporada 186:
    12 equipos y 180 jugadores sin duplicación.
@@ -111,7 +111,7 @@ Completada.
     - Ambos rechazan explícitamente equipos y jugadores sin `rfevbId`, sin
       nombre y sin equipo resoluble.
     - Tests unitarios en `npm run test:ingestion-mappers` (11 casos).
-3. ✅ Script administrativo `scripts/ingest-roster.ts` que cubre
+3. ✅ Script administrativo `../scripts/ingest/ingest-roster.ts` que cubre
    competición, temporada, equipos y jugadores. Los scripts para `rounds`,
    `matches` y `match_player_stats` se abordan en la Fase 5, reutilizando el
    mismo patrón.
@@ -134,7 +134,7 @@ temporada permanecen estables entre ejecuciones.
 ```bash
 npm run test:ingestion-mappers
 npm run test:supabase:admin
-npx tsx scripts/ingest-roster.ts \
+npx tsx scripts/ingest/ingest-roster.ts \
   --competition=152 \
   --season=186 \
   --season-name="2025/26"
@@ -146,7 +146,7 @@ npx tsx scripts/ingest-roster.ts \
 
 Completada para la competición 152 / temporada 186 (Superliga Masculina 25/26).
 
-- Script `scripts/ingest-matches.ts`, idempotente, con upsert por
+- Script `../scripts/ingest/ingest-matches.ts`, idempotente, con upsert por
   `(season_id, round_number)`, `(season_id, rfevb_match_id)` y
   `(match_id, player_id)`.
 - `starts_at` / `ends_at` derivados de las fechas reales de cada jornada con

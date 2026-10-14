@@ -74,7 +74,7 @@ console.log("  ✔ rechaza equipos sin nombre");
 assert.throws(
     () =>
         mapTeam(
-            { ...fixtureTeam, rfevbId: undefined },
+            { ...fixtureTeam, rfevbId: undefined as unknown as string },
             { competitionId: COMPETITION_UUID, seasonId: SEASON_UUID }
         ),
     /without rfevbId/
@@ -152,7 +152,7 @@ console.log("  ✔ rechaza jugadores sin displayName");
 assert.throws(
     () =>
         mapPlayer(
-            { ...fixturePlayer, rfevbId: undefined },
+            { ...fixturePlayer, rfevbId: undefined as unknown as string },
             { competitionId: COMPETITION_UUID, seasonId: SEASON_UUID, teamIdByRfevbId }
         ),
     /without rfevbId/

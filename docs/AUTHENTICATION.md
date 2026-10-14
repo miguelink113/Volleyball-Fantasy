@@ -14,7 +14,7 @@ SUPABASE_SECRET_KEY=...
 ```
 
 Las dos primeras variables se utilizan en la aplicación. La clave secreta
-solo se utiliza en `scripts/test-supabase-auth.ts` para preparar y limpiar
+solo se utiliza en `../scripts/tests/test-supabase-auth.ts` para preparar y limpiar
 usuarios de prueba. No debe exponerse en el navegador ni incluirse en Git.
 
 Para verificar la estructura de la base de datos remota, obtén la URI en el

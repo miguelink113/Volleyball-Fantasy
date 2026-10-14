@@ -292,7 +292,7 @@ En la comprobación actual de la competición `152` se obtienen 12 equipos y
 
 ## Integración con el dominio deportivo
 
-`lib/domain/map-scraped-match.ts` contiene el adaptador histórico para
+`../lib/services/ingestion/map-scraped-match.ts` contiene el adaptador histórico para
 transformar un partido y sus estadísticas extraídas en las interfaces del
 dominio:
 
@@ -386,8 +386,7 @@ lib/
   estadísticas de una jornada con el roster y agrega la puntuación de
   `ScoringSystemV1`.
 
-Los datos scrapeados se persisten mediante scripts/ingest-roster.ts (catálogo) y scripts/ingest-matches.ts (jornadas, partidos y estadísticas). Las rutas HTTP siguen leyendo RFEVB en vivo para la demo; migrarlas al catálogo persistido es parte de la Fase 5.4. La ingesta no está programada: se ejecuta manualmente.
-
+Los datos scrapeados se persisten mediante `scripts/ingest/ingest-roster.ts` (catálogo) y `scripts/ingest/ingest-matches.ts` (jornadas, partidos y estadísticas). Las rutas HTTP siguen leyendo RFEVB en vivo para la demo; migrarlas al catálogo persistido es parte de la Fase 5.4. La ingesta no está programada: se ejecuta manualmente.
 ## Mostrar puntuaciones de un partido
 
 Con Next.js ejecutándose en `http://localhost:3000`, el siguiente comando
@@ -479,9 +478,8 @@ estables se construyen con el identificador oficial (`rfevb:team:<id>` y
 ## Uso del catálogo real en la demo fantasy
 
 La demo de `/fantasy` consume `/api/competition-roster?competition=152` al
-cargarse, en lugar del catálogo fijo de `lib/data/season-25-26/players.ts`.
-El componente relaciona cada jugador con el nombre de su equipo mediante
-`currentTeamId` y conserva el `id` estable del scraper.
+cargarse. El componente relaciona cada jugador con el nombre de su equipo
+mediante `currentTeamId` y conserva el `id` estable del scraper.
 
 Para que la demo sea manejable mientras se define el mercado persistente, crea
 un mercado diario de 30 jugadores. La selección utiliza una semilla

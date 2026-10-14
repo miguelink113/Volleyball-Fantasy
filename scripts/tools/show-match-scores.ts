@@ -1,5 +1,5 @@
 import { ScoringSystemV1 } from "@/domain/scoring/scoring-v1.system";
-import { mapScrapedMatch } from "@/lib/domain/map-scraped-match";
+import { mapScrapedMatch } from "@/lib/services/ingestion/map-scraped-match";
 import type { Player } from "@/domain/player/player.types";
 import type { Match } from "@/lib/scraper/fetch-matches";
 import type { MatchStats } from "@/lib/scraper/fetch-match-statistics";

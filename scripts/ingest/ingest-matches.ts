@@ -13,7 +13,7 @@ import {
     mapScrapedMatch,
     type MatchMappingContext,
     type ResolvedMatchTeam,
-} from "@/lib/domain/map-scraped-match";
+} from "@/lib/services/ingestion/map-scraped-match";
 import { TeamAliasResolver } from "@/lib/services/ingestion/team-alias-resolver";
 
 const MADRID_TZ = "Europe/Madrid";

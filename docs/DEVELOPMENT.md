@@ -179,7 +179,7 @@ npm run test:team-alias-resolver
 npm run build
 ```
 
-Los tests unitarios están en `scripts/` y utilizan `node:assert` con `tsx`, por lo que no se introduce un framework adicional. Cubren:
+Los tests unitarios están en `scripts/tests/` y utilizan `node:assert` con `tsx`, por lo que no se introduce un framework adicional.
 
 - El contrato y resultado de `ScoringSystemV1`.
 - El mapeo de competición, temporada y partido.

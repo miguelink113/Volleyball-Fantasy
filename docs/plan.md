@@ -25,7 +25,7 @@ presentación, y permitir añadir temporadas y competiciones futuras.
    `rfevb_id NOT NULL` en `competitions`, `seasons`, `teams` y `players` como
    invariante del catálogo.
 4. **Verificación remota del esquema (Fase 3A)**: `npm run test:supabase:schema`
-   ejecutado con éxito contra el proyecto Supabase remoto. Confirma las 19
+   ejecutado con éxito contra el proyecto Supabase remoto. Confirma las 20
    tablas, columnas, tipos, RLS, FKs compuestas, constraints, índice de
    propiedad activa, políticas de lectura, permisos RPC, trigger de perfil y
    `rfevb_id NOT NULL` en las tablas clave. No se detectaron discrepancias
@@ -142,13 +142,55 @@ npx tsx scripts/ingest-roster.ts \
 
 ## Fase 5 — Catálogo persistente
 
-1. Crear tabla `team_source_aliases` y servicio de auto-resolución para normalizar las discrepancias de nombres de equipos en los datos de la RFEVB.
-2. Crear repositorios y servicios Supabase tipados para el catálogo deportivo (incluyendo partidos y estadísticas resueltas).
-3. Cambiar lecturas de producto de RFEVB en vivo a datos persistidos.
-4. Mantener los endpoints y herramientas de diagnóstico existentes cuando sigan siendo útiles.
-5. Probar mappers, errores de persistencia, resolución de alias y consultas aisladas por temporada.
+### Fase 5.1 — Ingesta de partidos ✅
 
-**Criterio de salida:** la UI consume el catálogo normalizado desde Supabase y la ingesta cruza limpiamente los equipos sin IDs de las actas de partido.
+Completada para la competición 152 / temporada 186 (Superliga Masculina 25/26).
+
+- Script `scripts/ingest-matches.ts`, idempotente, con upsert por
+  `(season_id, round_number)`, `(season_id, rfevb_match_id)` y
+  `(match_id, player_id)`.
+- `starts_at` / `ends_at` derivados de las fechas reales de cada jornada con
+  conversión Europe/Madrid → UTC y manejo de DST.
+- Cruce de jugadores de acta → roster por nombre primero, dorsal como fallback.
+- Registro de aliases `source: "matches"` con `ignoreDuplicates: true` para no
+  pisar los de `source: "roster"`.
+- Resultado: 25 jornadas, 150/150 partidos, 3859 stats, 0 equipos sin resolver,
+  1 partido sin stats, 73 stats sin cruce de jugador (1.9 %).
+
+### Fase 5.2 — Ingesta de valores de mercado (pendiente)
+
+- Sembrar `player_market_values` con 9M fijos para todos los jugadores de cada
+  temporada.
+
+### Fase 5.3 — Repositorios de lectura (pendiente)
+
+- Crear `lib/repositories/` con funciones tipadas que devuelvan entidades del
+  dominio desde Supabase:
+  `getCompetitions`, `getSeasons`, `getTeams`, `getPlayers`, `getRounds`,
+  `getMatches`, `getPlayerStats`, `getMarketValues`.
+
+### Fase 5.4 — Migración de la UI y las APIs (pendiente)
+
+- Migrar `/fantasy` y las rutas API
+  (`/api/competition-roster`, `/api/matches`, `/api/match-statistics`,
+  `/api/competition-statistics`, `/api/fantasy-round-scores`) de lecturas en
+  vivo desde RFEVB a Supabase.
+
+### Criterios originales de la Fase 5
+
+1. Crear tabla `team_source_aliases` y servicio de auto-resolución para
+   normalizar las discrepancias de nombres de equipos en los datos de la RFEVB.
+   ✅
+2. Crear repositorios y servicios Supabase tipados para el catálogo deportivo
+   (incluyendo partidos y estadísticas resueltas).
+3. Cambiar lecturas de producto de RFEVB en vivo a datos persistidos.
+4. Mantener los endpoints y herramientas de diagnóstico existentes cuando
+   sigan siendo útiles.
+5. Probar mappers, errores de persistencia, resolución de alias y consultas
+   aisladas por temporada.
+
+**Criterio de salida:** la UI consume el catálogo normalizado desde Supabase y
+la ingesta cruza limpiamente los equipos sin IDs de las actas de partido.
 
 ## Fase 6 — Ligas y equipos fantasy
 

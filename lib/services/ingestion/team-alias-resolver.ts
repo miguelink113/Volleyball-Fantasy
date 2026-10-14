@@ -158,6 +158,7 @@ export class TeamAliasResolver {
             .from("team_source_aliases")
             .upsert([...deduped.values()], {
                 onConflict: "season_id,normalized_alias",
+                ignoreDuplicates: true,
             });
 
         if (error) throw error;

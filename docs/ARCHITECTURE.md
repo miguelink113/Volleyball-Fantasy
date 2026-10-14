@@ -98,15 +98,29 @@ La base actual permite evolucionar hacia una ingesta persistente con un catálog
 - app Next.js con App Router;
 - autenticación con Supabase;
 - dashboard protegido;
-- rutas API de scraper para partidos, estadísticas y rosters;
+- catálogo deportivo persistido (competiciones, temporadas, equipos, jugadores)
+  para las 4 competiciones 25/26: 94 equipos y 1449 jugadores;
+- ingesta idempotente de jornadas, partidos y estadísticas de jugador
+  (`scripts/ingest-matches.ts`), con resolución de nombres de equipo y cruce de
+  jugadores de acta → roster;
+- aliases de nombres de equipo persistidos en `team_source_aliases`;
+- `ScoringSystemV1` versionado y probado, aplicable a las estadísticas
+  persistidas;
+- rutas API de scraper todavía activas para partidos, estadísticas y rosters;
 - demo fantasy con mercado y alineación en memoria.
 
 ### Provisional
 
-- no hay persistencia del mercado ni de la plantilla;
-- no hay ingesta idempotente ni catálogo persistido;
-- no hay scoring real vinculado a datos de partidos;
-- las reglas de negocio del fantasy todavía están acopladas a la demo.
+- la ingesta de partidos solo se ha ejecutado para la competición 152 (Superliga
+  Masculina 25/26). Las otras tres competiciones 25/26 tienen roster pero no
+  partidos;
+- no existe persistencia del mercado ni de la plantilla fantasy;
+- no hay repositorios de lectura tipados sobre el catálogo persistido;
+- el scoring no se persiste todavía en `player_match_scores` ni
+  `player_round_scores`;
+- las reglas de negocio del fantasy siguen acopladas a la demo;
+- `/fantasy` y las rutas API leen RFEVB en vivo en lugar del catálogo
+  persistido.
 
 ## 6. Objetivos de la primera iteración
 

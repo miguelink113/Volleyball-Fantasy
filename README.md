@@ -15,13 +15,13 @@ La aplicación tiene tres partes diferenciadas:
 - **Interfaz**: muestra el mercado de fichajes, el equipo fantasy y la
   alineación en `/fantasy`.
 
-La demo fantasy utiliza jugadores reales de la competición RFEVB `152`. El
-mercado diario, los precios y el equipo seleccionado son provisionales y viven
-en memoria; el esquema persistente inicial está definido en
-`supabase/migrations/20260925190000_create_fantasy_schema.sql`, aunque la demo
-todavía no está conectada a esos repositorios. Las fases de dominio y scoring
-están completadas; el esquema está definido y sus pruebas de estructura remota
-se ejecutan con `npm run test:supabase:schema`.
+El catálogo de las cuatro competiciones 25/26 está persistido en Supabase
+(94 equipos, 1449 jugadores), junto con las jornadas, partidos y estadísticas de
+jugador de la Superliga Masculina 152/186 (150 partidos, 3859 stats). El scoring
+está definido y probado (`ScoringSystemV1`), pero todavía no se persiste. La
+demo fantasy sigue leyendo RFEVB en vivo: mercado, plantilla y alineación viven
+en memoria. Migrar las lecturas al catálogo persistido y conectar los
+repositorios es el objetivo de la Fase 5 en curso.
 
 ## Inicio rápido
 

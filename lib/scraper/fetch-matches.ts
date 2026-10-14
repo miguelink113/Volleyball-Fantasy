@@ -6,6 +6,8 @@ const COMPETITION_MATCHES_URL =
 const MATCH_STATISTICS_URL =
     "https://rfevb-web.dataproject.com/MatchStatistics.aspx";
 
+const MADRID_TZ = "Europe/Madrid";
+
 export interface Match {
     matchId: string;
     competitionId: string;
@@ -14,6 +16,7 @@ export interface Match {
     round: number;
     homeTeam: string;
     awayTeam: string;
+    matchDate: Date | null;
     url: string;
 }
 
@@ -24,9 +27,84 @@ export class ScraperError extends Error {
     }
 }
 
+// ───────────────────────────── timezone ─────────────────────────────
+
 /**
- * Descarga el HTML de la página de partidos de una competición.
+ * Offset (en ms) del huso indicado en el instante `date`.
+ * Ej. Madrid devuelve +1h (CET) o +2h (CEST) según la fecha.
  */
+function getTimeZoneOffsetMs(date: Date, timeZone: string): number {
+    const dtf = new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+    });
+    const parts = dtf.formatToParts(date);
+    const get = (t: string) =>
+        Number(parts.find((p) => p.type === t)?.value ?? 0);
+    let hour = get("hour");
+    if (hour === 24) hour = 0;
+    const asUtc = Date.UTC(
+        get("year"),
+        get("month") - 1,
+        get("day"),
+        hour,
+        get("minute"),
+        get("second")
+    );
+    return asUtc - date.getTime();
+}
+
+/**
+ * Convierte un wall-clock (`YYYY-MM-DD HH:mm`) en el huso indicado a un
+ * instante UTC. Dos iteraciones son suficientes para resolver DST.
+ */
+function wallClockToUtc(
+    year: number,
+    month: number,
+    day: number,
+    hour: number,
+    minute: number,
+    timeZone: string
+): Date {
+    const naive = Date.UTC(year, month - 1, day, hour, minute, 0);
+    const offset1 = getTimeZoneOffsetMs(new Date(naive), timeZone);
+    const candidate = naive - offset1;
+    const offset2 = getTimeZoneOffsetMs(new Date(candidate), timeZone);
+    return new Date(naive - offset2);
+}
+
+/**
+ * Parsea el formato de RFEVB: "25/10/2025 - 17:00".
+ * Interpretado en horario peninsular (Europe/Madrid).
+ * Devuelve null si el formato no encaja.
+ */
+export function parseRfevbDatetime(
+    value: string,
+    timeZone: string = MADRID_TZ
+): Date | null {
+    const m = value
+        .trim()
+        .match(/^(\d{2})\/(\d{2})\/(\d{4})\s*-\s*(\d{2}):(\d{2})$/);
+    if (!m) return null;
+    const day = Number(m[1]);
+    const month = Number(m[2]);
+    const year = Number(m[3]);
+    const hour = Number(m[4]);
+    const minute = Number(m[5]);
+    if (month < 1 || month > 12) return null;
+    if (day < 1 || day > 31) return null;
+    if (hour > 23 || minute > 59) return null;
+    return wallClockToUtc(year, month, day, hour, minute, timeZone);
+}
+
+// ───────────────────────────── fetch ─────────────────────────────
+
 async function getCompetitionMatchesHtml(
     competitionId: number,
     seasonId: number
@@ -41,7 +119,6 @@ async function getCompetitionMatchesHtml(
     console.log(`Descargando: ${url}`);
 
     let response: Response;
-
     try {
         response = await fetch(url, {
             headers: {
@@ -54,9 +131,7 @@ async function getCompetitionMatchesHtml(
     } catch (error) {
         throw new ScraperError(
             `No se pudo conectar con la web: ${
-                error instanceof Error
-                    ? error.message
-                    : "error desconocido"
+                error instanceof Error ? error.message : "error desconocido"
             }`
         );
     }
@@ -68,40 +143,20 @@ async function getCompetitionMatchesHtml(
     }
 
     const html = await response.text();
-
     if (!html.trim()) {
-        throw new ScraperError(
-            "La web devolvió un HTML vacío."
-        );
+        throw new ScraperError("La web devolvió un HTML vacío.");
     }
-
     return html;
 }
 
-/**
- * Extrae los parámetros de MatchStatistics.aspx de un onclick.
- *
- * Busca algo como:
- *
- * MatchStatistics.aspx?mID=123&ID=152&CID=4&PID=186
- */
-function extractMatchParams(
-    onclick: string
-): URLSearchParams | null {
-    const match = onclick.match(
-        /MatchStatistics\.aspx\?([^'"\s)]+)/i
-    );
+// ───────────────────────────── parseo ─────────────────────────────
 
-    if (!match) {
-        return null;
-    }
-
+function extractMatchParams(onclick: string): URLSearchParams | null {
+    const match = onclick.match(/MatchStatistics\.aspx\?([^'"\s)]+)/i);
+    if (!match) return null;
     return new URLSearchParams(match[1]);
 }
 
-/**
- * Construye la URL de la página de estadísticas de un partido.
- */
 function getMatchUrl(
     matchId: string,
     competitionId: string,
@@ -116,97 +171,71 @@ function getMatchUrl(
         PID: seasonId,
         type: matchType,
     });
-
     return `${MATCH_STATISTICS_URL}?${params.toString()}`;
 }
 
-/**
- * Extrae los nombres de los dos equipos de un partido.
- *
- * La web utiliza actualmente:
- *
- *   _LBL_HomeTeamName  -> equipo local
- *   _LBL_GuestTeamName -> equipo visitante
- *
- * En algunas versiones de la página también aparecen:
- *
- *   _Label6 -> equipo local
- *   _Label7 -> equipo visitante
- *
- * No utilizamos la posición del texto ni nombres del pabellón.
- */
 function extractTeamNames(
     $: cheerio.CheerioAPI,
     matchId: string
-): {
-    homeTeam: string;
-    awayTeam: string;
-} | null {
+): { homeTeam: string; awayTeam: string } | null {
     let homeTeam: string | null = null;
     let awayTeam: string | null = null;
 
-    $(`[onclick*="mID=${matchId}"] span`).each(
-        (_, element) => {
-            const id = $(element).attr("id");
+    $(`[onclick*="mID=${matchId}"] span`).each((_, element) => {
+        const id = $(element).attr("id");
+        if (!id) return;
 
-            if (!id) {
-                return;
-            }
+        const text = $(element).text().replace(/\s+/g, " ").trim();
+        if (!text) return;
 
-            const text = $(element)
-                .text()
-                .replace(/\s+/g, " ")
-                .trim();
+        if (id.endsWith("_LBL_HomeTeamName") && !homeTeam) homeTeam = text;
+        if (id.endsWith("_LBL_GuestTeamName") && !awayTeam) awayTeam = text;
+        if (id.endsWith("_Label6") && !homeTeam) homeTeam = text;
+        if (id.endsWith("_Label7") && !awayTeam) awayTeam = text;
+    });
 
-            if (!text) {
-                return;
-            }
-
-            // Versión principal.
-            if (
-                id.endsWith("_LBL_HomeTeamName") &&
-                !homeTeam
-            ) {
-                homeTeam = text;
-            }
-
-            if (
-                id.endsWith("_LBL_GuestTeamName") &&
-                !awayTeam
-            ) {
-                awayTeam = text;
-            }
-
-            // Versión alternativa.
-            if (
-                id.endsWith("_Label6") &&
-                !homeTeam
-            ) {
-                homeTeam = text;
-            }
-
-            if (
-                id.endsWith("_Label7") &&
-                !awayTeam
-            ) {
-                awayTeam = text;
-            }
-        }
-    );
-
-    if (!homeTeam || !awayTeam) {
-        return null;
-    }
-
-    return {
-        homeTeam,
-        awayTeam,
-    };
+    if (!homeTeam || !awayTeam) return null;
+    return { homeTeam, awayTeam };
 }
 
 /**
- * Extrae todos los partidos del HTML de CompetitionMatches.
+ * Encuentra el valor de `..._HF_MatchDatetime` asociado al partido.
+ *
+ * Estrategia: subir desde el link del partido hasta encontrar un ancestro
+ * cuyo id contenga `RADLIST_Matches_ctrl<N>_`. Ese ctrl identifica de forma
+ * única el partido; a partir del prefijo se localiza el input oculto con la
+ * fecha. Walk-up con límite de seguridad para no colgarse en HTML raro.
  */
+function findMatchDatetimeFromLink(
+    $: cheerio.CheerioAPI,
+    linkEl: unknown
+): string | null {
+    let node: any = $(linkEl as any);
+    let prefix: string | null = null;
+
+    for (let i = 0; i < 20; i++) {
+        const parent = node.parent();
+        if (!parent || parent.length === 0) break;
+
+        const id = parent.attr("id");
+        if (id) {
+            const m = id.match(/^(.*RADLIST_Matches_ctrl\d+_)/);
+            if (m) {
+                prefix = m[1];
+                break;
+            }
+        }
+        node = parent;
+    }
+
+    if (!prefix) return null;
+    const inputId = `${prefix}HF_MatchDatetime`;
+    const input = $(`input[id="${inputId}"]`);
+    if (input.length === 0) return null;
+    const value = input.attr("value");
+    return value ? value.trim() : null;
+}
+
 function extractMatchLinks(html: string): Match[] {
     const $ = cheerio.load(html);
 
@@ -214,79 +243,52 @@ function extractMatchLinks(html: string): Match[] {
     const seenMatchIds = new Set<string>();
 
     const roundContainers = $("div.TabContent_Border");
-
     console.log(
         `Contenedores de jornadas encontrados: ${roundContainers.length}`
     );
 
     roundContainers.each((index, container) => {
-        // La posición del bloque determina la jornada.
         const roundNumber = index + 1;
 
         $(container)
             .find("[onclick]")
             .each((_, element) => {
                 const onclick = $(element).attr("onclick");
+                if (!onclick) return;
+                if (!onclick.includes("MatchStatistics.aspx")) return;
 
-                if (!onclick) {
-                    return;
-                }
-
-                if (
-                    !onclick.includes(
-                        "MatchStatistics.aspx"
-                    )
-                ) {
-                    return;
-                }
-
-                const params =
-                    extractMatchParams(onclick);
-
-                if (!params) {
-                    return;
-                }
+                const params = extractMatchParams(onclick);
+                if (!params) return;
 
                 const matchId = params.get("mID");
-                const competitionId =
-                    params.get("ID");
-                const categoryId =
-                    params.get("CID");
-                const seasonId =
-                    params.get("PID");
+                const competitionId = params.get("ID");
+                const categoryId = params.get("CID");
+                const seasonId = params.get("PID");
 
-                if (
-                    !matchId ||
-                    !competitionId ||
-                    !categoryId ||
-                    !seasonId
-                ) {
+                if (!matchId || !competitionId || !categoryId || !seasonId) {
                     return;
                 }
+                if (seenMatchIds.has(matchId)) return;
 
-                /*
-                 * Un mismo partido aparece varias veces
-                 * en el HTML porque la página contiene
-                 * diferentes representaciones visuales.
-                 */
-                if (seenMatchIds.has(matchId)) {
-                    return;
+                const rawDatetime = findMatchDatetimeFromLink($, element);
+                const matchDate = rawDatetime
+                    ? parseRfevbDatetime(rawDatetime)
+                    : null;
+
+                if (rawDatetime && !matchDate) {
+                    console.warn(
+                        `Fecha no parseable para partido ${matchId}: "${rawDatetime}"`
+                    );
                 }
 
-                const teamNames =
-                    extractTeamNames($, matchId);
+                const teamNames = extractTeamNames($, matchId);
+
+                seenMatchIds.add(matchId);
 
                 if (!teamNames) {
                     console.warn(
                         `No se pudieron obtener los equipos del partido ${matchId}`
                     );
-
-                    /*
-                     * No perdemos el partido si falta
-                     * la información de los equipos.
-                     */
-                    seenMatchIds.add(matchId);
-
                     matches.push({
                         matchId,
                         competitionId,
@@ -295,6 +297,7 @@ function extractMatchLinks(html: string): Match[] {
                         round: roundNumber,
                         homeTeam: "Desconocido",
                         awayTeam: "Desconocido",
+                        matchDate,
                         url: getMatchUrl(
                             matchId,
                             competitionId,
@@ -302,11 +305,8 @@ function extractMatchLinks(html: string): Match[] {
                             seasonId
                         ),
                     });
-
                     return;
                 }
-
-                seenMatchIds.add(matchId);
 
                 matches.push({
                     matchId,
@@ -316,6 +316,7 @@ function extractMatchLinks(html: string): Match[] {
                     round: roundNumber,
                     homeTeam: teamNames.homeTeam,
                     awayTeam: teamNames.awayTeam,
+                    matchDate,
                     url: getMatchUrl(
                         matchId,
                         competitionId,
@@ -329,15 +330,6 @@ function extractMatchLinks(html: string): Match[] {
     return matches;
 }
 
-/**
- * Función principal del scraper.
- *
- * scrapeMatches(152, 186)
- *   -> devuelve todos los partidos.
- *
- * scrapeMatches(152, 186, 10)
- *   -> devuelve únicamente los partidos de la jornada 10.
- */
 export async function scrapeMatches(
     competitionId: number,
     seasonId: number,
@@ -347,26 +339,14 @@ export async function scrapeMatches(
         `Buscando partidos. Competición: ${competitionId}, Temporada: ${seasonId}`
     );
 
-    const html =
-        await getCompetitionMatchesHtml(
-            competitionId,
-            seasonId
-        );
-
-    const matches =
-        extractMatchLinks(html);
+    const html = await getCompetitionMatchesHtml(competitionId, seasonId);
+    const matches = extractMatchLinks(html);
 
     const filteredMatches =
         roundNumber === undefined
             ? matches
-            : matches.filter(
-                (match) =>
-                    match.round === roundNumber
-            );
+            : matches.filter((match) => match.round === roundNumber);
 
-    console.log(
-        `Partidos encontrados: ${filteredMatches.length}`
-    );
-
+    console.log(`Partidos encontrados: ${filteredMatches.length}`);
     return filteredMatches;
 }

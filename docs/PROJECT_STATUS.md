@@ -83,8 +83,46 @@ npx tsx scripts/ingest-roster.ts --competition=150 --season=183 --season-name="2
 
 Cada ejecución es idempotente y verifica los conteos contra RFEVB al final.
 
-## Siguiente paso
+## Fase 5 — Catálogo persistente (en curso)
 
-1. Ingesta de `rounds`, `matches` y `match_player_stats`, reutilizando el resolver de equipos.
-2. Repositorios de lectura tipados sobre el catálogo persistido.
-3. Migrar `/fantasy` de lecturas en vivo desde RFEVB a Supabase.
+### Fase 5.1 — Ingesta de partidos ✅
+
+- Script `scripts/ingest-matches.ts` con ingesta idempotente de
+  `rounds`, `matches` y `match_player_stats`.
+- `rounds.starts_at` / `ends_at` derivados de las fechas reales de los
+  partidos de cada jornada (00:00 del primer día → 00:00 del día siguiente
+  al último). Timezone Europe/Madrid → UTC con manejo de DST.
+- Cruce de jugadores de acta → roster: **primero por nombre** (dentro del
+  equipo), **dorsal como fallback**. Si no resuelve unívocamente, se omite
+  con warning.
+- `position` se toma siempre del roster, nunca del acta.
+- Aliases de actas resueltas se registran con `source: "matches"`.
+- `TeamAliasResolver.registerAliases` con `ignoreDuplicates: true` para
+  no pisar los aliases `source: "roster"` con los de acta.
+
+**Resultado en competición 152 / temporada 186 (Superliga Masculina 25/26):**
+
+| Métrica | Valor |
+| --- | ---: |
+| Jornadas procesadas | 25 (1–22 regulares + 23–25 playoffs) |
+| Partidos en RFEVB | 150 |
+| Partidos persistidos | 150 / 150 |
+| Stats de jugador | 3.859 |
+| Equipos sin resolver | 0 |
+| Partidos sin stats | 1 (`13920`, acta sin tabla de equipos) |
+| Stats sin cruce de jugador | 73 (1.9 %) |
+
+Las 73 stats huérfanas se concentran en ~15 jugadores con nombres de acta
+ruidosos (dorsal cambiante, nombre fragmentado, typos). Deuda menor
+documentada: no bloquea la Fase 5 y se revisará si Fase 9 lo requiere.
+
+### Pendiente
+
+1. **Fase 5.2** — Ingesta de `player_market_values` (9M fijos para todos
+   los jugadores).
+2. **Fase 5.3** — Repositorios de lectura tipados `lib/repositories/`
+   sobre el catálogo persistido.
+3. **Fase 5.4** — Migrar `/fantasy` y las rutas API
+   (`/api/competition-roster`, `/api/matches`, `/api/match-statistics`,
+   `/api/competition-statistics`, `/api/fantasy-round-scores`) de
+   lecturas en vivo desde RFEVB a Supabase.

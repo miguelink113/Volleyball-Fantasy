@@ -6,8 +6,7 @@ estadísticas desde RFEVB.
 
 La extracción es un adaptador externo. Su responsabilidad termina en descargar
 HTML, extraer campos, normalizar valores básicos y conservar los identificadores
-oficiales. No renderiza la UI, no decide reglas fantasy y todavía no persiste
-los resultados en Supabase.
+oficiales. No renderiza la UI, no decide reglas fantasy y no persiste directamente en Supabase: la ingesta se hace mediante los scripts ingest-*.ts.
 
 ## Límites del scraper
 
@@ -18,8 +17,7 @@ los resultados en Supabase.
 | `domain/` | Definir interfaces de `Competition`, `Team`, `Player`, `Match` y estadísticas. |
 | `lib/services/fantasy/` | Aplicar reglas de plantilla, alineación y mercado de la demo. |
 | `components/fantasy/` | Mostrar el mercado, el equipo y la alineación. |
-| Supabase | Persistencia futura; todavía no almacena el catálogo extraído. |
-
+| Supabase | Persistencia del catálogo y de la ingesta de partidos vía `scripts/ingest-*.ts`. El scraper sigue sin escribir directamente. |
 ## Endpoints
 
 ### 1. Obtener partidos
@@ -377,7 +375,9 @@ lib/
     └── fetch-competition-roster.ts
 ```
 
-* `fetch-matches.ts`: obtiene los partidos.
+* `fetch-matches.ts`: obtiene los partidos. Extrae la fecha de cada uno desde
+  `HF_MatchDatetime` (`DD/MM/YYYY - HH:MM`, Europe/Madrid) y la expone como
+  `matchDate: Date | null`.
 * `fetch-match-statistics.ts`: obtiene las estadísticas de un partido.
 * `fetch-competition-statistics.ts`: combina partidos y estadísticas.
 * `fetch-competition-roster.ts`: obtiene equipos y jugadores de una
@@ -386,9 +386,7 @@ lib/
   estadísticas de una jornada con el roster y agrega la puntuación de
   `ScoringSystemV1`.
 
-Los datos obtenidos todavía no se almacenan en una base de datos. Consultar
-RFEVB desde una ruta HTTP sirve para la demo y para pruebas, pero no sustituye
-un proceso de ingesta programado.
+Los datos scrapeados se persisten mediante scripts/ingest-roster.ts (catálogo) y scripts/ingest-matches.ts (jornadas, partidos y estadísticas). Las rutas HTTP siguen leyendo RFEVB en vivo para la demo; migrarlas al catálogo persistido es parte de la Fase 5.4. La ingesta no está programada: se ejecuta manualmente.
 
 ## Mostrar puntuaciones de un partido
 

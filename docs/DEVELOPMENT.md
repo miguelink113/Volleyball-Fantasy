@@ -31,6 +31,8 @@ npm run test:supabase:schema
 npm run test:supabase:admin
 npm run test:ingestion-mappers
 npm run ingest:roster -- --competition=152 --season=186 --season-name="2025/26"
+npm run ingest:matches
+npm run test:match-date-parser
 npm run show:match-scores -- 1 1
 ```
 
@@ -53,6 +55,10 @@ Esta verificación observa el estado remoto actual: no demuestra por sí sola qu
 `npm run test:match-parser -- <jornada> <partido>` consulta las mismas rutas HTTP que la demo, selecciona un partido concreto y muestra los valores extraídos por el parser para cada jugador. Sirve para verificar directamente las columnas de saque, recepción, ataque y bloqueo antes de aplicar el scoring.
 
 `npm run ingest:roster -- --competition=<id> --season=<id> --season-name=<n>` es la ingesta idempotente de `competitions`, `seasons`, `teams`, `players` y los aliases `source: "roster"`. Verifica los conteos contra RFEVB al final y aborta si no coinciden.
+
+`npm run ingest:matches -- --competition=<id> --season=<id> [--round=<n>]` es la ingesta idempotente de `rounds`, `matches` y `match_player_stats`. Deriva `starts_at` / `ends_at` de las fechas reales de cada jornada (Europe/Madrid → UTC con manejo de DST). Cruza jugadores de acta → roster por nombre primero, dorsal como fallback. Omite con warning los equipos sin resolver y las stats sin cruce de jugador.
+
+`npm run test:match-date-parser` es el test unitario del parser de fechas de RFEVB (`DD/MM/YYYY - HH:MM`), incluyendo casos de cambio horario CET/CEST.
 
 ## Separación de responsabilidades
 
@@ -115,8 +121,7 @@ Los tipos de dominio describen datos y contratos. No deben depender de Cheerio, 
 
 `lib/supabase/` contiene clientes y sincronización de sesión. La persistencia de competiciones, jugadores, equipos, partidos, mercado y equipos fantasy está definida en las migraciones de `../supabase/migrations/`.
 
-El catálogo de las cuatro ligas 25/26 ya está persistido; todavía falta conectar la ingesta de partidos, los repositorios de lectura y migrar la UI para que deje de leer RFEVB en vivo.
-
+El catálogo de las cuatro ligas 25/26 está persistido (94 equipos, 1449 jugadores). La ingesta de partidos, jornadas y estadísticas también está operativa: 150 partidos y 3859 stats persistidas para la Superliga Masculina 152/186. Falta la ingesta de partidos de las otras tres competiciones, los repositorios de lectura y migrar la UI para que deje de leer RFEVB en vivo.
 ## Demo fantasy actual
 
 La ruta `/fantasy` carga jugadores reales mediante:
@@ -193,5 +198,8 @@ El test de Supabase sigue siendo una prueba de integración y requiere un proyec
 ## Limitaciones conocidas
 
 - El scraper depende de HTML externo y necesita pruebas con fixtures.
-- No existe ingesta programada ni almacenamiento de partidos y estadísticas.
+- No existe ingesta programada; los scripts se ejecutan manualmente.
+- La ingesta de partidos está hecha solo para la Superliga Masculina 152/186.
+- El ~2 % de las stats de jugador no cruzan con el roster por nombres de acta
+  ruidosos. Deuda menor documentada.
 - La demo fantasy no representa todavía el comportamiento final del producto.

@@ -1,3 +1,4 @@
+// scripts/ingest/ingest-matches.ts
 import { config } from "dotenv";
 import { resolve } from "node:path";
 config({ path: resolve(process.cwd(), ".env.local") });
@@ -372,6 +373,7 @@ async function main() {
     let totalSkippedNoTeam = 0;
     let totalSkippedNoStats = 0;
     let totalSkippedNoPlayer = 0;
+    let totalSkippedDuplicatePlayer = 0;
     let totalRoundsSkippedNoDates = 0;
 
     // IDs de partidos que esperamos encontrar en Supabase al finalizar.
@@ -535,6 +537,12 @@ async function main() {
 
             let cursor = 0;
             const statsRows: Array<Record<string, unknown>> = [];
+            // Deduplicación intra-partido por roster player.
+            // Si dos entradas del acta resuelven al mismo roster player
+            // (por ejemplo, una por nombre y otra por dorsal), el upsert
+            // fallaría con 21000 "ON CONFLICT ... cannot affect row a second
+            // time". Se queda la primera y se audita el resto.
+            const seenPlayerIds = new Set<string>();
 
             for (let teamIdx = 0; teamIdx < mapped.teams.length; teamIdx++) {
                 const team = mapped.teams[teamIdx];
@@ -571,6 +579,15 @@ async function main() {
                         totalSkippedNoPlayer++;
                         continue;
                     }
+
+                    if (seenPlayerIds.has(rosterPlayer.id)) {
+                        console.warn(
+                            `    ⚠ Jugador duplicado en acta: "${actaPlayer.displayName}" (#${dorsal}) en ${team.team.name} → roster id ${rosterPlayer.id}. Se omite la fila duplicada.`
+                        );
+                        totalSkippedDuplicatePlayer++;
+                        continue;
+                    }
+                    seenPlayerIds.add(rosterPlayer.id);
 
                     statsRows.push({
                         competition_id: competitionId,
@@ -671,6 +688,7 @@ async function main() {
     console.log(`Partidos sin equipo resuelto:     ${totalSkippedNoTeam}`);
     console.log(`Partidos sin stats:               ${totalSkippedNoStats}`);
     console.log(`Stats sin cruce de jugador:       ${totalSkippedNoPlayer}`);
+    console.log(`Stats con jugador duplicado:      ${totalSkippedDuplicatePlayer}`);
 
     if (missing.length > 0) {
         const preview = missing.slice(0, 5).join(", ");

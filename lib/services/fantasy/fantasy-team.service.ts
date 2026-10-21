@@ -96,7 +96,7 @@ export function createDailyFantasyRoster(
         .slice(0, DAILY_MARKET_SIZE)
         .map((player) => ({
             ...player,
-            price: 8 + (hashSeed(`${dateKey}:price:${player.id}`) % 8),
+            price: player.price,
             weeklyScores: {},
         }));
     const initialLineupIds = getRequiredPositionIds(marketPlayers, dateKey);
@@ -210,13 +210,10 @@ export function getLineupSummary(
 export function calculateLineupScoreForRound(
     lineupPlayerIds: string[],
     round: number,
-    players: FantasyDemoPlayer[]
+    allScores: Record<string, Record<number, number>>
 ) {
-    const playerMap = getPlayerMap(players);
-
     return lineupPlayerIds.reduce((total, playerId) => {
-        const player = playerMap.get(playerId);
-        const score = player?.weeklyScores[round as keyof typeof player.weeklyScores] ?? 0;
+        const score = allScores[playerId]?.[round] ?? 0;
         return total + score;
     }, 0);
 }

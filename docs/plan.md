@@ -2,283 +2,226 @@
 
 ## Objetivo y alcance
 
-Completar un MVP para la temporada 2026/27, pensado para el propietario y un
-grupo pequeño de amigos en ligas privadas. La solución debe mantener separadas
-la fuente RFEVB, la normalización, el dominio, la persistencia Supabase y la
-presentación, y permitir añadir temporadas y competiciones futuras.
+Completar un MVP para la temporada 2026/27, pensado para el propietario y un grupo pequeño de amigos en ligas privadas.
+
+La solución mantiene separadas la fuente RFEVB, la normalización, el dominio, la persistencia Supabase y la presentación. Debe permitir incorporar nuevas temporadas y competiciones sin acoplar la interfaz a la estructura de origen.
 
 ## Estado
 
 ### Completado
 
-1. **Dominio**: contratos saneados para competición, temporada, equipo,
-   jugador, partido, estadísticas, jornada, fantasy y scoring. TypeScript
-   estricto y contratos del dominio en CamelCase.
-2. **Scoring**: `ScoringSystemV1` definido según los datos reales del scraper,
-   integrado en los flujos existentes, probado y documentado. Los resultados
-   incluyen versión de scoring.
-3. **Diseño de persistencia**: migración
-   `../supabase/migrations/20260925190000_create_fantasy_schema.sql` con tablas,
-   relaciones, restricciones, índices, RLS y RPC para operaciones fantasy.
-   Migración adicional
-   `../supabase/migrations/20261008120000_require_rfevb_ids.sql` que refuerza
-   `rfevb_id NOT NULL` en `competitions`, `seasons`, `teams` y `players` como
-   invariante del catálogo.
-4. **Verificación remota del esquema (Fase 3A)**: `npm run test:supabase:schema`
-   ejecutado con éxito contra el proyecto Supabase remoto. Confirma las 20
-   tablas, columnas, tipos, RLS, FKs compuestas, constraints, índice de
-   propiedad activa, políticas de lectura, permisos RPC, trigger de perfil y
-   `rfevb_id NOT NULL` en las tablas clave. No se detectaron discrepancias
-   entre la migración aplicada y el modelo documentado.
-5. **Ingesta idempotente del catálogo (Fase 4)**: cliente administrativo
-   server-only, mappers puros con validación estricta de `rfevb_id`, y script
-   `../scripts/ingest/ingest-roster.ts` que puebla `competitions`, `seasons`, `teams` y
-   `players` mediante upsert con `onConflict: "season_id,rfevb_id"`. Ejecución
-   verificada dos veces consecutivas sobre la competición 152, temporada 186:
-   12 equipos y 180 jugadores sin duplicación.
+1. **Dominio:** contratos tipados para competición, temporada, equipo, jugador, partido, estadísticas, jornada, fantasy y scoring. TypeScript estricto y contratos del dominio en camelCase.
+2. **Scoring:** `ScoringSystemV1` definido según los datos disponibles, probado e integrado en el cálculo de puntuaciones.
+3. **Persistencia:** esquema Supabase con tablas, relaciones, restricciones, índices, RLS y RPC para operaciones fantasy.
+4. **Verificación remota:** `npm run test:supabase:schema` verifica el esquema remoto esperado sin modificar la base.
+5. **Ingesta del catálogo:** scripts idempotentes para competiciones, temporadas, equipos, jugadores, jornadas, partidos y estadísticas.
+6. **Resolución de alias:** normalización y resolución de nombres de equipos de roster y actas.
+7. **Mercado inicial:** `player_market_values` sembrada con 9M para todos los jugadores en todas las jornadas.
+8. **Repositorios:** capa `lib/repositories/` que consulta Supabase y devuelve entidades de dominio tipadas.
+9. **Migración de lectura:** `/api/competition-roster` y `/api/fantasy-round-scores` utilizan Supabase y los repositorios.
+10. **Frontend fantasy:** `/fantasy` utiliza UUIDs de Supabase, precios persistidos y una única petición para las puntuaciones de todas las jornadas.
 
-### Aún no conectado
+### Estado del catálogo persistido
 
-- La ingesta de `rounds`, `matches` y `match_player_stats` (misma mecánica
-  que el roster, otra entidad).
-- Los repositorios de lectura para el catálogo persistido y su exposición en
-  los endpoints HTTP de producto.
-- Las operaciones persistentes de ligas, plantilla, alineación y mercado desde
-  la UI.
-- La persistencia del scoring y el ranking privado.
+| Entidad | Registros |
+| --- | ---: |
+| Equipos | 94 |
+| Jugadores | 1.449 |
+| Partidos | 1.045 |
+| Estadísticas de jugador | 25.262 |
 
-El catálogo de equipos y jugadores ya vive en Supabase. La ruta `/fantasy`,
-sin embargo, todavía lee RFEVB en vivo: mercado, plantilla, presupuesto y
-alineación permanecen en memoria. Migrar esas lecturas a Supabase es el
-objetivo de la Fase 5. Auth y perfiles ya utilizan Supabase.
+Las cuatro competiciones de la temporada 2025/26 están incluidas: Superliga Masculina, Superliga Femenina, Superliga 2 Masculina y Superliga 2 Femenina.
 
 ## Decisiones vigentes
 
-- Autenticación mediante email y contraseña; perfil con `username`, sin
-  `full_name` ni Google OAuth.
-- El equipo se llama automáticamente `Equipo de <username>` y no puede
-  renombrarse.
+- Autenticación mediante email y contraseña; perfil con `username`, sin `full_name` ni Google OAuth.
+- El equipo se llama automáticamente `Equipo de <username>` y no puede renombrarse.
 - Cada liga privada referencia una sola competición y temporada.
-- El scraper RFEVB se conserva como fuente; sus DTO se normalizan antes de
-  persistirse.
-- Posiciones normalizadas: `setter`, `opposite`, `outside`, `middle`, `libero`
-  y `unknown`.
-- Los sets de un partido pueden ser `null`; sus estados son `SCHEDULED`,
-  `IN_PROGRESS`, `COMPLETED` y `POSTPONED`.
-- La plantilla admite como máximo 14 jugadores. Una alineación puede tener
-  hasta siete; para puntuar debe tener siete con composición `1/1/2/2/1`.
+- RFEVB se conserva como fuente de ingesta; las rutas de producto migradas leen los datos persistidos.
+- Las respuestas de los repositorios utilizan entidades de dominio con propiedades camelCase.
+- Posiciones normalizadas: `setter`, `opposite`, `outside`, `middle`, `libero` y `unknown`.
+- Los sets de un partido pueden ser `null`; los estados son `SCHEDULED`, `IN_PROGRESS`, `COMPLETED` y `POSTPONED`.
+- La plantilla admite como máximo 14 jugadores.
+- Una alineación puede tener hasta siete jugadores; para puntuar debe tener siete y cumplir la composición `1/1/2/2/1`.
 - No hay capitán ni ranking global. La clasificación se limita a cada liga.
-- La jornada usa `startsAt` y `endsAt` para bloquear alineaciones y
-  transferencias durante el intervalo.
-- La creación/entrada en liga debe ser atómica e inicializar un equipo. Si el
-  propietario abandona, la propiedad pasa al miembro restante más antiguo; si
-  es el único miembro, la liga se elimina.
-- Las mutaciones sensibles se validan server-side/BD, no solo desde la UI.
-- No se incluyen pagos, ligas públicas, mercado entre participantes, chat ni
-  automatización del scraper.
+- Las jornadas utilizan `startsAt` y `endsAt` para bloquear alineaciones y transferencias durante el intervalo.
+- La creación y entrada en liga deben ser atómicas e inicializar un equipo.
+- Si el propietario abandona, la propiedad pasa al miembro restante más antiguo; si es el único miembro, la liga se elimina.
+- Las mutaciones sensibles se validan en el servidor y la base de datos, no solo en la interfaz.
+- No se incluyen pagos, ligas públicas, mercado entre participantes, chat ni automatización del scraper.
 
 ## Fase 3A — Verificación remota de Supabase y documentación ✅
 
 Completada.
 
-1. ✅ Ejecutar `npm run test:supabase:schema` contra el proyecto remoto con
-   `SUPABASE_REMOTE_DB_URL` en `.env.local`.
-2. ✅ Confirmar estructura de tablas/columnas, tipos relevantes, relaciones
-   compuestas, índices, RLS, políticas y permisos RPC.
-3. ✅ Corregir discrepancias entre la migración y el esquema real. La única
-   discrepancia detectada fue el formato de la constraint
-   `rounds_check` (`CHECK ((starts_at <= ends_at))`); se resolvió normalizando
-   la comparación en el test, sin tocar la base.
-4. ✅ Mantener la prueba estrictamente de lectura: no ejecuta migraciones ni
-   mutaciones de negocio. La base remota no se prueba con `db reset`.
-5. ✅ Mantener documentación y estado del proyecto sincronizados con lo que
-   está realmente conectado y lo que sigue siendo diseño.
+- Ejecutar `npm run test:supabase:schema` contra el proyecto remoto.
+- Verificar tablas, columnas, tipos, relaciones, restricciones, índices, RLS, políticas y permisos RPC.
+- Corregir las discrepancias detectadas en la comparación del esquema.
+- Mantener la prueba en modo de solo lectura.
+- Sincronizar la documentación con el esquema realmente desplegado.
 
-**Criterio de salida cumplido:** el test remoto pasa y confirma que el
-proyecto desplegó el modelo esperado.
+**Criterio de salida:** la prueba remota confirma que el proyecto tiene el modelo esperado.
 
 ## Fase 4 — Ingesta idempotente RFEVB ✅
 
 Completada.
 
-1. ✅ Revisión de scripts y contratos existentes; el scraper RFEVB se ha
-   conservado como fuente y no se ha modificado.
-2. ✅ Mappers explícitos scraper → dominio → persistencia SQL en
-   `lib/services/ingestion/`:
-    - `mapTeam`: convierte `ScrapedCompetitionTeam` en una fila para `teams`.
-    - `mapPlayer`: convierte `ScrapedCompetitionPlayer` en una fila para
-      `players`, resolviendo `team_id` desde un mapa `rfevbId → UUID`.
-    - Ambos rechazan explícitamente equipos y jugadores sin `rfevbId`, sin
-      nombre y sin equipo resoluble.
-    - Tests unitarios en `npm run test:ingestion-mappers` (11 casos).
-3. ✅ Script administrativo `../scripts/ingest/ingest-roster.ts` que cubre
-   competición, temporada, equipos y jugadores. Los scripts para `rounds`,
-   `matches` y `match_player_stats` se abordan en la Fase 5, reutilizando el
-   mismo patrón.
-4. ✅ Upsert idempotente con `onConflict: "season_id,rfevb_id"` en `teams` y
-   `players`, y `onConflict: "rfevb_id"` en `competitions`. El script verifica
-   conteos contra RFEVB al final y aborta si hay discrepancia.
-5. ✅ Cliente administrativo aislado en `lib/supabase/admin.server.ts`, con
-   protección contra ejecución en navegador (`typeof window !== "undefined"`
-   lanza) y test reproducible en `npm run test:supabase:admin`. La secret key
-   no se expone al cliente.
-6. ✅ Conteos verificados contra RFEVB tras ejecución repetida: 12 equipos y
-   180 jugadores en la competición 152, temporada 186, sin duplicación.
+- Mantener el scraper RFEVB como fuente de datos.
+- Implementar mappers explícitos entre los DTO del scraper, el dominio y la persistencia.
+- Validar los identificadores `rfevb_id`.
+- Implementar `scripts/ingest/ingest-roster.ts`.
+- Aplicar upserts idempotentes para evitar duplicados.
+- Aislar el cliente administrativo en `lib/supabase/admin.server.ts`.
+- Verificar los conteos de equipos y jugadores contra RFEVB.
+- Crear y validar el servicio `TeamAliasResolver` y la tabla `team_source_aliases`.
 
-**Criterio de salida cumplido:** ejecutar la ingesta varias veces no duplica
-registros ni mezcla competición o temporada. Los UUIDs de competición y
-temporada permanecen estables entre ejecuciones.
+**Criterio de salida:** el catálogo se puede ingerir repetidamente sin duplicar registros ni mezclar temporadas.
 
-**Comandos:**
+## Fase 5 — Catálogo persistente ✅
 
-```bash
-npm run test:ingestion-mappers
-npm run test:supabase:admin
-npx tsx scripts/ingest/ingest-roster.ts \
-  --competition=152 \
-  --season=186 \
-  --season-name="2025/26"
- ```
+Completada.
 
-## Fase 5 — Catálogo persistente
+### Fase 5.1 — Ingesta de partidos y estadísticas ✅
 
-### Fase 5.1 — Ingesta de partidos ✅
+El script `scripts/ingest/ingest-matches.ts` ingiere jornadas, partidos y estadísticas de jugador.
 
-Completada para la competición 152 / temporada 186 (Superliga Masculina 25/26).
+- Upserts idempotentes para jornadas, partidos y estadísticas.
+- Fechas de jornadas derivadas de las fechas reales de los partidos.
+- Conversión de Europe/Madrid a UTC con manejo de horario de verano.
+- Cruce de jugadores de acta con el roster por nombre y dorsal como alternativa.
+- Posición obtenida del roster.
+- Registro de aliases de actas sin sobrescribir los aliases existentes del roster.
 
-- Script `../scripts/ingest/ingest-matches.ts`, idempotente, con upsert por
-  `(season_id, round_number)`, `(season_id, rfevb_match_id)` y
-  `(match_id, player_id)`.
-- `starts_at` / `ends_at` derivados de las fechas reales de cada jornada con
-  conversión Europe/Madrid → UTC y manejo de DST.
-- Cruce de jugadores de acta → roster por nombre primero, dorsal como fallback.
-- Registro de aliases `source: "matches"` con `ignoreDuplicates: true` para no
-  pisar los de `source: "roster"`.
-- Resultado: 25 jornadas, 150/150 partidos, 3859 stats, 0 equipos sin resolver,
-  1 partido sin stats, 73 stats sin cruce de jugador (1.9 %).
+### Fase 5.2 — Valores iniciales del mercado ✅
 
-### Fase 5.2 — Ingesta de valores de mercado (pendiente)
+- Sembrar `player_market_values` con 9M para todos los jugadores y todas las jornadas.
+- Consultar los valores mediante la capa de repositorios.
+- Mostrar los precios persistidos en la interfaz fantasy.
 
-- Sembrar `player_market_values` con 9M fijos para todos los jugadores de cada
-  temporada.
+### Fase 5.3 — Repositorios de lectura ✅
 
-### Fase 5.3 — Repositorios de lectura (pendiente)
+Crear `lib/repositories/` con consultas tipadas para:
 
-- Crear `lib/repositories/` con funciones tipadas que devuelvan entidades del
-  dominio desde Supabase:
-  `getCompetitions`, `getSeasons`, `getTeams`, `getPlayers`, `getRounds`,
-  `getMatches`, `getPlayerStats`, `getMarketValues`.
+- Equipos.
+- Jugadores.
+- Jornadas.
+- Partidos.
+- Estadísticas de jugador por partido.
+- Valores de mercado.
 
-### Fase 5.4 — Migración de la UI y las APIs (pendiente)
+Los repositorios aíslan Supabase y devuelven entidades de dominio con propiedades camelCase. La capa cuenta con un test de integración.
 
-- Migrar `/fantasy` y las rutas API
-  (`/api/competition-roster`, `/api/matches`, `/api/match-statistics`,
-  `/api/competition-statistics`, `/api/fantasy-round-scores`) de lecturas en
-  vivo desde RFEVB a Supabase.
+### Fase 5.4 — Migración de la UI y las APIs ✅
 
-### Criterios originales de la Fase 5
+- Migrar `/api/competition-roster` a lecturas desde Supabase.
+- Migrar `/api/fantasy-round-scores` a lecturas desde Supabase.
+- Calcular las puntuaciones de todas las jornadas en una sola petición utilizando `ScoringSystemV1`.
+- Adaptar `/fantasy` para utilizar UUIDs de Supabase.
+- Mostrar precios del mercado persistido.
+- Evitar peticiones sucesivas por jornada y parpadeos en la interfaz.
 
-1. Crear tabla `team_source_aliases` y servicio de auto-resolución para
-   normalizar las discrepancias de nombres de equipos en los datos de la RFEVB.
-   ✅
-2. Crear repositorios y servicios Supabase tipados para el catálogo deportivo
-   (incluyendo partidos y estadísticas resueltas).
-3. Cambiar lecturas de producto de RFEVB en vivo a datos persistidos.
-4. Mantener los endpoints y herramientas de diagnóstico existentes cuando
-   sigan siendo útiles.
-5. Probar mappers, errores de persistencia, resolución de alias y consultas
-   aisladas por temporada.
+Las rutas migradas ya no leen RFEVB en vivo. RFEVB se mantiene como fuente para los procesos de ingesta.
 
-**Criterio de salida:** la UI consume el catálogo normalizado desde Supabase y
-la ingesta cruza limpiamente los equipos sin IDs de las actas de partido.
+### Criterios de salida de la Fase 5
+
+- [x] Ingesta de las cuatro competiciones.
+- [x] Persistencia del catálogo, las jornadas, los partidos y las estadísticas.
+- [x] Sembrado de valores de mercado.
+- [x] Repositorios de lectura tipados.
+- [x] Test de integración de repositorios.
+- [x] Migración de las rutas de producto incluidas en el alcance.
+- [x] Adaptación de `/fantasy` a los identificadores y valores persistidos.
+- [x] Cálculo de todas las jornadas mediante `ScoringSystemV1` en una sola petición.
+
+**Criterio de salida:** la interfaz consume el catálogo normalizado desde Supabase y los datos de producto ya no dependen de lecturas en vivo desde RFEVB.
 
 ## Fase 6 — Ligas y equipos fantasy
 
-1. Integrar creación, unión por código, listado y salida de ligas mediante RPC.
-2. Crear automáticamente un equipo por usuario y liga, con nombre basado en
-   username y presupuesto inicial de 100M.
-3. Seleccionar una alineación inicial de siete jugadores que cumpla
-   `1/1/2/2/1`, con precios disponibles y coste dentro del presupuesto.
-4. Mostrar error explícito y no dejar filas parciales si no existe una
-   selección válida.
-5. Probar sucesión del propietario, eliminación de liga si sale el único
-   miembro y límites de temporada/competición.
+### Objetivos
 
-**Criterio de salida:** varios usuarios pueden crear o unirse a una liga y
-recibir un equipo fantasy persistente.
+1. Integrar la creación de ligas privadas.
+2. Permitir la unión a una liga mediante código.
+3. Implementar el listado y la salida de ligas.
+4. Inicializar un equipo fantasy persistente para cada usuario y liga.
+5. Asignar el nombre `Equipo de <username>` y un presupuesto inicial de 100M.
+6. Crear una alineación inicial de siete jugadores que cumpla `1/1/2/2/1`.
+7. Validar que los jugadores pertenecen a la competición y temporada de la liga.
+8. Validar precios, presupuesto y disponibilidad de la selección.
+9. Utilizar operaciones atómicas para impedir registros parciales.
+10. Probar sucesión del propietario, eliminación de ligas vacías y aislamiento por competición y temporada.
+
+**Criterio de salida:** varios usuarios pueden crear o unirse a una liga privada y reciben un equipo fantasy persistente, con presupuesto y selección inicial válidos.
 
 ## Fase 7 — Mercado y transferencias
 
-1. Implementar configuración de precio inicial (9M como valor configurable,
-   cuando se decida activarlo) y valores de mercado por jornada.
-2. Conectar consulta de mercado y RPC de compra/venta.
-3. Validar saldo, máximo 14, exclusividad de jugador por liga, pertenencia en
-   ventas y bloqueo temporal server-side.
-4. Guardar jornada de compra/venta y transacción.
-5. Probar operaciones correctas, concurrencia y rechazos sin efectos parciales.
+1. Consultar los valores de mercado persistidos por jugador y jornada.
+2. Implementar operaciones de compra y venta mediante RPC.
+3. Validar saldo, máximo de 14 jugadores, exclusividad del jugador por liga y pertenencia en ventas.
+4. Registrar la jornada y la transacción de cada operación.
+5. Bloquear las transferencias durante la jornada según `startsAt` y `endsAt`.
+6. Probar concurrencia, operaciones correctas y rechazos sin efectos parciales.
 
-**Criterio de salida:** las restricciones de presupuesto, límite y propiedad se
-cumplen incluso si se omite la UI.
+**Criterio de salida:** las restricciones de presupuesto, límite de plantilla y propiedad se cumplen incluso cuando se omite la UI.
 
 ## Fase 8 — Alineaciones y bloqueo
 
 1. Implementar una operación server-side para guardar titulares.
-2. Validar que pertenecen a la plantilla y a la misma competición/temporada.
-3. Permitir hasta siete seleccionados y exigir composición exacta `1/1/2/2/1`
-   para puntuar.
+2. Validar que pertenecen a la plantilla y a la competición y temporada correctas.
+3. Permitir hasta siete seleccionados y exigir la composición exacta `1/1/2/2/1` para puntuar.
 4. Aplicar `startsAt <= now <= endsAt` a alineaciones y transferencias.
-5. Probar límites inmediatamente antes, al inicio, al final y después del
-   intervalo.
+5. Probar los límites temporales antes, durante y después del intervalo.
+6. Mostrar estados de bloqueo y errores claros en la interfaz.
 
-**Criterio de salida:** no se puede editar plantilla/alineación durante la
-jornada bloqueada; la UI explica el bloqueo.
+**Criterio de salida:** no se puede editar la plantilla o alineación durante el periodo bloqueado.
 
 ## Fase 9 — Scoring persistente y ranking privado
 
-1. Importar estadísticas y calcular puntuaciones por partido y jornada con
-   `ScoringSystemV1`.
-2. Persistir desglose y `scoringVersion` para preservar resultados históricos.
+1. Calcular puntuaciones por partido y jornada con `ScoringSystemV1`.
+2. Persistir el desglose y `scoringVersion` para conservar resultados históricos.
 3. Calcular el total de equipo a partir de siete titulares válidos.
-4. Ofrecer ranking únicamente a miembros de la liga.
+4. Ofrecer clasificación únicamente a los miembros de cada liga.
 5. Probar datos incompletos, ejecución repetida y aislamiento entre ligas.
 
-**Criterio de salida:** importación → puntuación versionada → total de equipo →
-clasificación privada reproducible.
+**Criterio de salida:** importación de estadísticas, cálculo versionado, puntuación del equipo y clasificación privada reproducible.
 
 ## Fase 10 — UI persistente
 
-1. Sustituir progresivamente estado local de `/fantasy` por servicios
-   persistentes.
-2. Implementar flujo de ligas, mercado, plantilla, alineación, jornada,
-   historial y clasificación.
-3. Tratar loading, errores, permisos, bloqueos y estados vacíos.
-4. Retirar datos en memoria solo cuando el flujo persistente esté validado.
+1. Sustituir progresivamente el estado local de `/fantasy` por operaciones persistentes.
+2. Implementar los flujos de ligas, mercado, plantilla, alineación, jornada, historial y clasificación.
+3. Gestionar carga, errores, permisos, bloqueos y estados vacíos.
+4. Eliminar el estado temporal cuando cada flujo persistente esté validado.
 
-**Criterio de salida:** cambios conservados entre sesiones y ninguna acción
-puede alterar datos de otro usuario.
+**Criterio de salida:** los cambios sobreviven a nuevas sesiones y las acciones no pueden alterar datos de otros usuarios.
 
 ## Fase 11 — Integración end-to-end
 
-Probar con varios usuarios el ciclo completo: registro, creación/unión a liga,
-equipo automático, mercado, alineación, bloqueo de jornada, ingesta,
-puntuación y ranking. Incluir casos de ambas competiciones, límites,
-temporadas incompatibles, RLS y sucesión/eliminación de liga.
+Probar con varios usuarios el ciclo completo:
+
+- Registro e inicio de sesión.
+- Creación y unión a ligas.
+- Inicialización del equipo fantasy.
+- Mercado y transferencias.
+- Selección y bloqueo de alineaciones.
+- Ingesta y puntuación.
+- Clasificación privada.
+
+Incluir casos de varias competiciones, límites, temporadas incompatibles, RLS y sucesión o eliminación de ligas.
 
 ## Fase 12 — Despliegue
 
-Separar variables públicas y secretos, aplicar migraciones de forma controlada,
-configurar Supabase Auth y desplegar primero en staging. No publicar claves de
-servicio ni credenciales PostgreSQL.
+- Separar las variables públicas de los secretos.
+- Aplicar migraciones de forma controlada.
+- Configurar Supabase Auth.
+- Desplegar primero en staging.
+- No publicar claves de servicio ni credenciales PostgreSQL.
+- Verificar las operaciones y permisos antes de habilitar producción.
 
 ## Calidad y validación
 
-- Inspeccionar el código y reutilizar dominio, scraper y servicios existentes.
-- Mantener TypeScript estricto; no usar `any` o deshabilitar checks para
-  ocultar errores.
-- Cada fase debe actualizar documentación, ejecutar tests relevantes y
-  `npm run build`; ejecutar lint si está disponible.
-- `npm run test:supabase:schema` requiere conexión PostgreSQL remota y es de
-  solo lectura. No verifica comportamiento de escritura ni reemplaza las
-  pruebas funcionales en una base aislada.
+- Inspeccionar el código existente y reutilizar dominio, scraper y servicios.
+- Mantener TypeScript estricto; no utilizar `any` ni deshabilitar comprobaciones para ocultar errores.
+- Actualizar la documentación al cerrar cada fase.
+- Ejecutar los tests relevantes y `npm run build`; ejecutar lint si está disponible.
+- Usar `npm run test:supabase:schema` como verificación de solo lectura del esquema remoto.
 - No ejecutar pruebas destructivas ni `db reset` en producción.
-- No declarar funcional una garantía que aún no se haya probado en backend/BD.
+- No declarar funcional una garantía que no haya sido probada en backend o base de datos.

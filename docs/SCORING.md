@@ -31,13 +31,10 @@ setterAttackBonus =
   si position == setter
 
 serve = 0 si setsPlayed <= 0
-serve = round(
-  (
-    max(0, serve.total)
-    - max(0, serve.errors)
-    + max(0, serve.directPoints) * 2
-  ) / setsPlayed
-)
+netServes = max(0, serve.total)
+          - max(0, serve.errors)
+          + max(0, serve.directPoints) * 2
+serve = round(max(0, netServes) / setsPlayed)
 
 attack = max(
   -3,
@@ -49,27 +46,24 @@ attack = max(
 blocksBase = max(0, block.points) * 2
 blocks =
   round(blocksBase * 1.5) si position == middle
-  blocksBase                en otro caso
+  blocksBase               en otro caso
 
-receptionBase =
-  0 si reception.total <= 0
-  round(clamp(positive%, 0, 100) / 10)
-  + round(clamp(excellent%, 0, 100) / 10) en otro caso
-
-reception = max(
-  -3,
-  receptionBase - max(0, reception.errors)
-)
-
+reception = 0 si reception.total <= 0
+receptionRaw =
+    reception.total * 0.25
+  + (reception.total * clamp(reception.positivePercentage, 0, 100) / 100) * 0.25
+  + (reception.total * clamp(reception.excellentPercentage, 0, 100) / 100) * 0.50
+  - max(0, reception.errors)
+receptionClamped = max(0, receptionRaw)
 reception =
-  round(reception * 2) si position == libero
-  reception               en otro caso
+  round(receptionClamped * 1.25) si position == libero
+  round(receptionClamped)        en otro caso
 
 matchResult =
   homeSets - awaySets si el jugador pertenece al equipo local
   awaySets - homeSets si el jugador pertenece al equipo visitante
-  0                    si el partido no está completado
-                         o el equipo no coincide
+  0                   si el partido no está completado
+                      o el equipo no coincide
 
 totalScore =
   participation

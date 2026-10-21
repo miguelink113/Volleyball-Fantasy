@@ -17,7 +17,9 @@
     "test:match-date-parser": "tsx scripts/tests/test-match-date-parser.ts",
     "show:match-scores": "tsx scripts/tools/show-match-scores.ts",
     "ingest:roster": "tsx scripts/ingest/ingest-roster.ts",
-    "ingest:matches": "tsx scripts/ingest/ingest-matches.ts"
+    "ingest:market-values": "tsx scripts/ingest/ingest-market-values.ts",
+    "ingest:matches": "tsx scripts/ingest/ingest-matches.ts",
+    "test:repositories": "tsx scripts/tests/test-repositories.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

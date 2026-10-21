@@ -27,7 +27,7 @@ function displayPosition(position: PlayerPosition): string {
 }
 
 interface RosterResponse {
-    teams: Array<{ rfevbId?: string; name: string }>;
+    teams: Array<{ id: string; rfevbId: string; name: string }>;
     players: Array<{
         id: string;
         displayName: string;
@@ -37,6 +37,7 @@ interface RosterResponse {
         currentTeamId?: string;
         dorsal?: number;
         photoUrl?: string;
+        price: number;
     }>;
 }
 
@@ -48,6 +49,7 @@ interface RoundScore {
     playerId: string;
     score: number;
     scoringVersion: string;
+    roundNumber: number; // <-- AÑADE ESTO
 }
 
 interface RoundScoresResponse {
@@ -135,6 +137,7 @@ export function FantasyTeamBuilder() {
     const [dateKey, setDateKey] = useState(() => getDateKey());
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [allScores, setAllScores] = useState<Record<string, Record<number, number>>>({});
     const [scoresLoading, setScoresLoading] = useState(false);
 
     useEffect(() => {
@@ -149,23 +152,18 @@ export function FantasyTeamBuilder() {
 
                 const teamsById = new Map(
                     payload.teams.map((team) => [
-                        team.rfevbId,
+                        team.id,
                         team.name,
                     ])
                 );
+
                 const realPlayers: FantasyDemoPlayer[] = payload.players.map(
                     (player) => ({
                         id: player.id,
                         name: player.displayName,
-                        club:
-                            teamsById.get(
-                                player.currentTeamId?.replace(
-                                    "rfevb:team:",
-                                    ""
-                                )
-                            ) ?? "Equipo desconocido",
+                        club: teamsById.get(player.currentTeamId ?? "") ?? "Equipo desconocido",
                         position: player.position,
-                        price: 0,
+                        price: player.price, // <-- Usar el de la API
                         season: "25-26",
                         weeklyScores: {},
                     })
@@ -214,44 +212,31 @@ export function FantasyTeamBuilder() {
         }
 
         let cancelled = false;
-        // Loading state tracks the asynchronous score request.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setScoresLoading(true);
 
-        fetchRoundScores(selectedRound)
-            .then((response) => {
-                if (cancelled) {
-                    return;
+        // Pedimos los puntos de TODAS las jornadas de golpe
+        fetch(`/api/fantasy-round-scores?competition=${COMPETITION_ID}&season=${SEASON_ID}`)
+            .then(async (res) => {
+                const payload = await res.json();
+                if (!res.ok || !payload.success) {
+                    throw new Error(payload.error ?? "No se pudieron calcular los puntos.");
                 }
+                return payload;
+            })
+            .then((payload) => {
+                if (cancelled) return;
 
-                const scoresByPlayerId = new Map<string, number>(
-                    response.scores.map((score) => [
-                        score.playerId,
-                        score.score,
-                    ])
-                );
-                const dailyRoster = createDailyFantasyRoster(
-                    catalogPlayers,
-                    dateKey
-                );
-
-                setPlayers(
-                    dailyRoster.players.map((player) => ({
-                        ...player,
-                        weeklyScores: {
-                            [selectedRound]:
-                                scoresByPlayerId.get(player.id) ?? 0,
-                        },
-                    }))
-                );
+                // Transformamos el array a un mapa: allScores[playerId][roundNumber] = score
+                const map: Record<string, Record<number, number>> = {};
+                payload.scores.forEach((s: any) => {
+                    if (!map[s.playerId]) map[s.playerId] = {};
+                    map[s.playerId][s.roundNumber] = s.score;
+                });
+                setAllScores(map);
             })
             .catch((scoreError) => {
                 if (!cancelled) {
-                    setError(
-                        scoreError instanceof Error
-                            ? scoreError.message
-                            : "No se pudieron calcular los puntos de la jornada."
-                    );
+                    setError(scoreError instanceof Error ? scoreError.message : "Error cargando puntos.");
                 }
             })
             .finally(() => {
@@ -263,7 +248,7 @@ export function FantasyTeamBuilder() {
         return () => {
             cancelled = true;
         };
-    }, [catalogPlayers, dateKey, selectedRound]);
+    }, [catalogPlayers]); // Ojo: ya NO depende de selectedRound
 
     useEffect(() => {
         const interval = window.setInterval(() => {
@@ -333,7 +318,7 @@ export function FantasyTeamBuilder() {
         setLineupIds((current) => [...current, playerId]);
     };
 
-    const lineupScore = calculateLineupScoreForRound(lineupIds, selectedRound, players);
+    const lineupScore = calculateLineupScoreForRound(lineupIds, selectedRound, allScores);
 
     if (loading) {
         return <p className="rounded-lg bg-white p-6 text-slate-600">Cargando jugadores reales de RFEVB...</p>;
@@ -516,7 +501,7 @@ export function FantasyTeamBuilder() {
                                 const score = calculateLineupScoreForRound(
                                     lineupIds,
                                     round.number,
-                                    players
+                                    allScores // <-- Cambiado de players a allScores
                                 );
 
                                 return (
@@ -525,7 +510,7 @@ export function FantasyTeamBuilder() {
                                         <td className={`px-3 py-2 font-semibold ${
                                             round.number === selectedRound ? "text-violet-700" : "text-slate-700"
                                         }`}>
-                                            {round.number === selectedRound && scoresLoading ? "..." : score}
+                                            {scoresLoading ? "..." : score}
                                         </td>
                                     </tr>
                                 );

@@ -1,140 +1,254 @@
-# Arquitectura del proyecto
+# Arquitectura de Volleyball Fantasy
 
-## 1. Scope del producto
+## Objetivo
 
-Volleyball Fantasy es una aplicación web para gestionar un fantasy de voleibol con datos reales de la RFEVB. La base actual combina:
+La arquitectura separa la fuente de datos deportivos, la normalización, el dominio, la persistencia y la presentación. Esta separación permite mantener la lógica fantasy independiente del formato de origen de RFEVB y de la estructura SQL de Supabase.
 
-- un frontend de usuario con Next.js;
-- autenticación con Supabase;
-- un scraper funcional para consultar equipos, jugadores, partidos y estadísticas;
-- una demo fantasy con mercado y alineación en memoria.
+## Visión general
 
-La intención no es que la demo constituyera el producto final, sino dejar una base técnica que pueda evolucionar hacia un sistema persistente con catálogo deportivo, mercado y ligas.
+```text
+                    RFEVB
+                      |
+                      v
+             Scraper y normalización
+                      |
+                      v
+              Mappers de ingesta
+                      |
+                      v
+                  Supabase
+                      |
+                      v
+             Repositorios de lectura
+                      |
+                      v
+              Entidades de dominio
+                      |
+             +--------+--------+
+             |                 |
+             v                 v
+          API Next.js     Servicios de scoring
+             |                 |
+             +--------+--------+
+                      |
+                      v
+                Frontend /fantasy
+```
 
-## 2. Separación por capas
+El scraper se utiliza para obtener datos de origen durante los procesos de ingesta. Las rutas de producto migradas leen los datos persistidos a través de los repositorios.
 
-### Frontend / cliente
+## Capas
 
-Responsable de la experiencia visual y la interacción.
+### 1. Fuente e ingesta
 
-- `app/`: páginas y rutas de la aplicación.
-- `components/`: UI reutilizable.
-- `hooks/`: lógica interactiva del cliente.
+Ubicación principal:
 
-Lo que debe hacer:
+```text
+lib/scraper/
+scripts/ingest/
+lib/services/ingestion/
+```
 
-- mostrar datos;
-- emitir acciones del usuario;
-- consultar endpoints del backend;
-- no decidir reglas persistentes ni consultar directamente RFEVB.
+El scraper extrae equipos, jugadores, partidos y estadísticas de RFEVB. Los scripts administrativos coordinan la ingesta y persisten los resultados en Supabase.
 
-### Backend / servidor
+La capa de ingesta:
 
-Responsable de validar la entrada y orquestar casos de uso.
+- Normaliza los datos externos.
+- Valida identificadores y relaciones.
+- Resuelve las discrepancias de nombres de equipos.
+- Cruza los jugadores de las actas con los jugadores del roster.
+- Realiza upserts idempotentes.
+- Registra warnings cuando no es posible resolver un registro de forma unívoca.
 
-- `app/api/`: endpoints HTTP del proyecto.
-- `lib/services/`: lógica de negocio y reglas reutilizables.
-- `lib/supabase/`: clientes y helpers de Supabase.
-- `proxy.ts`: protección de rutas y refresh de sesión.
+El cliente administrativo se encuentra en `lib/supabase/admin.server.ts` y debe ejecutarse exclusivamente en el servidor.
 
-Lo que debe hacer:
+### 2. Persistencia
 
-- validar parámetros;
-- coordinar llamadas a scraper o servicios;
-- encapsular acceso a Supabase;
-- preparar la base para persistencia y transacciones.
+Supabase almacena el catálogo deportivo y los datos necesarios para la lógica fantasy.
 
-### Scraper / adaptador externo
+Las entidades persistidas incluyen:
 
-Responsable de extraer datos desde la web de RFEVB y convertirlos a modelos del dominio.
+- Competiciones y temporadas.
+- Equipos y jugadores.
+- Jornadas y partidos.
+- Estadísticas de jugador por partido.
+- Valores de mercado por jugador y jornada.
+- Ligas, membresías y equipos fantasy.
+- Plantillas, alineaciones, puntuaciones y transacciones.
 
-- `lib/scraper/`: descarga, parseo y normalización.
-- `scripts/`: ingesta (`ingest/`), herramientas de inspección (`tools/`), tests (`tests/`) y fixtures (`fixtures/`).
+El esquema utiliza claves foráneas, restricciones, índices y políticas RLS para mantener la integridad y el aislamiento de los datos.
 
-Lo que debe hacer:
+Las mutaciones sensibles deben validarse en backend y base de datos. La interfaz no constituye una frontera de seguridad.
 
-- consultar la fuente externa;
-- transformar HTML a estructuras estandarizadas;
-- conservar `rfevbId` y otros identificadores oficiales;
-- no decidir reglas de mercado ni persistencia.
+### 3. Repositorios de lectura
 
-### App / dominio
+Ubicación:
 
-Centraliza la semántica del producto.
+```text
+lib/repositories/
+```
 
-- `domain/`: contratos y entidades del juego y del deporte.
-- `lib/domain/`: adaptadores y transformaciones entre datos del scraper y el dominio.
-- `lib/services/fantasy/`: reglas de equipo, alineación y lógica de la demo.
+Los repositorios aíslan las consultas a Supabase y devuelven entidades tipadas del dominio.
 
-Lo que debe hacer:
+La capa incluye repositorios para:
 
-- modelar competiciones, equipos, jugadores, partidos y scoring;
-- definir reglas de validación de plantilla y alineación;
-- servir de base para servicios posteriores con persistencia.
+- Equipos.
+- Jugadores.
+- Jornadas.
+- Partidos.
+- Estadísticas de jugador por partido.
+- Valores de mercado.
 
-## 3. Cliente vs servidor
+Los repositorios convierten los registros de persistencia a entidades de dominio con propiedades camelCase. Las capas superiores no necesitan depender directamente de los nombres de columnas SQL ni de los DTO del scraper.
 
-El proyecto ya separa dos responsabilidades operativas:
+Las consultas deben respetar el ámbito de competición y temporada y manejar los errores de persistencia de forma explícita.
 
-- cliente: UI, formularios, navegación y experiencia del usuario;
-- servidor: validación, lógica y acceso a servicios.
+### 4. Dominio y servicios
 
-Esta separación es necesaria porque la demo fantasy actual todavía se ejecuta en memoria del cliente, pero la intención futura es mover esa lógica al servidor para asegurar consistencia, presupuesto, concurrente y seguridad.
+Ubicación principal:
 
-## 4. Scraper vs app
+```text
+domain/
+lib/services/
+```
 
-La relación actual es:
+El dominio define los contratos y las reglas de negocio independientes de la presentación y de la fuente de datos.
 
-- el scraper alimenta la app con datos reales de RFEVB;
-- la app los transforma y los consume para la demo fantasy;
-- la app no debe reemplazar la fuente de verdad con HTML directo ni guardar resultados sin revisar su propósito.
+Incluye:
 
-La base actual permite evolucionar hacia una ingesta persistente con un catálogo centralizado y versionado.
+- Competición y temporada.
+- Equipo y jugador.
+- Jornada y partido.
+- Estadísticas de jugador.
+- Mercado fantasy.
+- Plantilla y alineación.
+- Sistema de puntuación.
 
-## 5. Estado actual del sistema
+`ScoringSystemV1` calcula los puntos a partir de las estadísticas disponibles. La versión del sistema de puntuación forma parte del diseño para permitir reproducir y conservar los resultados históricos cuando se incorpore la persistencia de puntuaciones.
 
-### Funcional
+### 5. API de Next.js
 
-- app Next.js con App Router;
-- autenticación con Supabase;
-- dashboard protegido;
-- catálogo deportivo persistido (competiciones, temporadas, equipos, jugadores)
-  para las 4 competiciones 25/26: 94 equipos y 1449 jugadores;
-- ingesta idempotente de jornadas, partidos y estadísticas de jugador
-  (`../scripts/ingest/ingest-matches.ts`), con resolución de nombres de equipo y cruce de
-  jugadores de acta → roster;
-- aliases de nombres de equipo persistidos en `team_source_aliases`;
-- `ScoringSystemV1` versionado y probado, aplicable a las estadísticas
-  persistidas;
-- rutas API de scraper todavía activas para partidos, estadísticas y rosters;
-- demo fantasy con mercado y alineación en memoria.
+Las rutas HTTP coordinan el acceso a datos y los servicios de aplicación.
 
-### Provisional
+#### Roster de competición
 
-- la ingesta de partidos solo se ha ejecutado para la competición 152 (Superliga
-  Masculina 25/26). Las otras tres competiciones 25/26 tienen roster pero no
-  partidos;
-- no existe persistencia del mercado ni de la plantilla fantasy;
-- no hay repositorios de lectura tipados sobre el catálogo persistido;
-- el scoring no se persiste todavía en `player_match_scores` ni
-  `player_round_scores`;
-- las reglas de negocio del fantasy siguen acopladas a la demo;
-- `/fantasy` y las rutas API leen RFEVB en vivo en lugar del catálogo
-  persistido.
+```text
+GET /api/competition-roster?competition=152
+```
 
-## 6. Objetivos de la primera iteración
+Consulta el catálogo persistido a través de los repositorios y devuelve los equipos y jugadores de la competición solicitada.
 
-1. estabilizar el dominio y los contratos de partidos y scoring;
-2. cubrir el scraper con fixtures y pruebas;
-3. crear una persistencia mínima para catálogo deportivo;
-4. implementar ingesta idempotente con sincronización y trazabilidad;
-5. mover la lógica del mercado y la plantilla del cliente al servidor;
-6. preparar la base para presupuesto, mercado persistente y ligas.
+#### Puntuaciones de jornadas
 
-## 7. Principios de diseño
+```text
+GET /api/fantasy-round-scores
+```
 
-- El cliente no debe ser fuente de verdad.
-- El scraper no debe decidir producto.
-- El servidor debe validar y coordinar.
-- El dominio debe mantenerse independiente de Next.js, Supabase y HTML.
-- El producto debe crecer desde un prototipo funcional hacia un sistema persistente y verificable.
+Consulta las estadísticas persistidas y calcula las puntuaciones de todas las jornadas utilizando `ScoringSystemV1`. El frontend recibe los resultados en una sola petición.
+
+Las rutas migradas no dependen de lecturas en vivo de RFEVB. Los datos externos se incorporan a través de los procesos de ingesta.
+
+### 6. Frontend
+
+La página principal del flujo fantasy es:
+
+```text
+/fantasy
+```
+
+La interfaz utiliza los UUIDs de Supabase para identificar equipos y jugadores. Los valores de mercado mostrados proceden de `player_market_values`.
+
+Las puntuaciones de todas las jornadas se cargan en una sola petición para reducir las solicitudes sucesivas y evitar parpadeos durante la actualización de la interfaz.
+
+La persistencia de las operaciones de ligas, equipos, plantillas y alineaciones se completará progresivamente en las siguientes fases.
+
+## Flujo de datos de producto
+
+### Lectura del roster
+
+```text
+Supabase
+   |
+   v
+Repositorio de equipos y jugadores
+   |
+   v
+Entidades de dominio
+   |
+   v
+/api/competition-roster
+   |
+   v
+Frontend
+```
+
+### Cálculo de puntuaciones
+
+```text
+Supabase
+   |
+   v
+Repositorio de partidos y estadísticas
+   |
+   v
+Estadísticas normalizadas
+   |
+   v
+ScoringSystemV1
+   |
+   v
+/api/fantasy-round-scores
+   |
+   v
+Frontend: puntuaciones de todas las jornadas
+```
+
+### Lectura del mercado
+
+```text
+Supabase: player_market_values
+   |
+   v
+Repositorio de valores de mercado
+   |
+   v
+Entidad de dominio
+   |
+   v
+Frontend: precio del jugador
+```
+
+Los valores iniciales del mercado son de 9M para todos los jugadores en todas las jornadas.
+
+## Identificadores y normalización
+
+Los UUIDs de Supabase son los identificadores internos que relacionan las entidades del sistema. Los identificadores de RFEVB se conservan como referencias externas para la ingesta y la trazabilidad.
+
+Los nombres de los equipos pueden variar entre los rosters y las actas de partido. `TeamAliasResolver` normaliza y resuelve estas diferencias antes de persistir las relaciones.
+
+Para cruzar jugadores de actas con el roster, el proceso utiliza primero el nombre dentro del equipo y el dorsal como alternativa. Los registros ambiguos o no resueltos deben generar warnings en lugar de producir asignaciones incorrectas.
+
+## Fechas y jornadas
+
+Las fechas de las jornadas se derivan de las fechas reales de los partidos.
+
+Los límites temporales se calculan en la zona Europe/Madrid y se convierten a UTC, teniendo en cuenta los cambios de horario de verano.
+
+Las entidades de jornada exponen `startsAt` y `endsAt`. Estos límites se utilizarán para validar el bloqueo de alineaciones y transferencias durante una jornada.
+
+## Seguridad
+
+- Las claves secretas de Supabase permanecen en el servidor.
+- El cliente administrativo no debe importarse desde código ejecutado en el navegador.
+- RLS y las políticas de base de datos controlan el acceso a los datos.
+- Las mutaciones sensibles deben validarse en servidor y base de datos.
+- Las ligas y sus datos deben permanecer aislados por membresía, competición y temporada.
+- Las pruebas del esquema remoto son de solo lectura y no sustituyen las pruebas funcionales de las mutaciones.
+
+## Estado actual y evolución
+
+La Fase 5 está completada: el catálogo deportivo está persistido, el mercado inicial está sembrado, los repositorios de lectura están implementados y las rutas de producto incluidas en el alcance utilizan Supabase.
+
+La siguiente fase es la **Fase 6 — Ligas y equipos fantasy**, centrada en conectar las operaciones de ligas y en crear equipos fantasy persistentes con presupuesto y alineación inicial.
+
+Las fases posteriores completarán el mercado y las transferencias, el bloqueo de alineaciones, la persistencia del scoring, la clasificación privada y la integración end-to-end.

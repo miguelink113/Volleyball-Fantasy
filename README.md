@@ -1,125 +1,117 @@
 # Volleyball Fantasy
 
-Aplicación web de fantasy de voleibol construida con Next.js, TypeScript y Supabase. Integra la extracción de datos deportivos de RFEVB, un dominio tipado para la lógica fantasy y una capa de persistencia que sirve el catálogo deportivo y las estadísticas desde Supabase.
+Aplicación web de fantasy de voleibol construida con Next.js, TypeScript y Supabase. El repositorio combina la extracción de datos de RFEVB, un dominio tipado, persistencia del catálogo y una interfaz con autenticación, ligas privadas y gestión parcial del equipo fantasy.
+
+> **Estado de esta revisión: 2026-10-22.** El objetivo del plan es un MVP para 2026/27, pero la instantánea documentada del catálogo y varios identificadores de la interfaz siguen correspondiendo a 2025/26. No debe darse por lista la temporada 2026/27 sin actualizar y comprobar esos datos.
 
 ## Estado actual
 
-La Fase 5 — Catálogo persistente — está completada. La aplicación dispone de datos persistidos para las cuatro competiciones de la temporada 2025/26 y utiliza repositorios de lectura para acceder a ellos.
+### Catálogo documentado
 
-### Datos persistidos
+El último estado escrito en la documentación registra estos conteos para la temporada 2025/26. No se han vuelto a consultar las tablas remotas durante esta revisión, por lo que deben tratarse como cifras registradas previamente, no como una comprobación en tiempo real.
 
-| Entidad | Registros |
+| Entidad | Último conteo documentado |
 | --- | ---: |
 | Equipos | 94 |
 | Jugadores | 1.449 |
 | Partidos | 1.045 |
 | Estadísticas de jugador | 25.262 |
 
-Las cuatro competiciones incluidas son:
+Las competiciones son Superliga Masculina, Superliga Femenina, Superliga 2 Masculina y Superliga 2 Femenina. El script de mercado permite sembrar un precio fijo (9M por defecto) para cada jugador y jornada.
 
-- Superliga Masculina.
-- Superliga Femenina.
-- Superliga 2 Masculina.
-- Superliga 2 Femenina.
+### Funcionalidad implementada en el código
 
-La tabla `player_market_values` está sembrada con un valor inicial de 9M para todos los jugadores en todas las jornadas.
+- Autenticación y perfil con Supabase Auth.
+- Ingesta administrativa del roster, jornadas, partidos y estadísticas desde RFEVB.
+- Resolución de alias de equipos entre el roster y las actas.
+- Repositorios de lectura para equipos, jugadores, jornadas, partidos, estadísticas y valores de mercado.
+- `GET /api/competition-roster` lee el catálogo y los precios persistidos en Supabase.
+- `GET /api/fantasy-round-scores` calcula bajo demanda puntuaciones por jornada a partir de partidos y estadísticas persistidos.
+- Dashboard para listar ligas propias y llamar a las operaciones RPC de creación, unión y salida.
+- Pantalla fantasy que lee el equipo y el mercado persistidos y llama a la RPC `transfer_player` para comprar o vender jugadores.
 
-### Arquitectura actual
+### Incompleto o pendiente de confirmar
 
-- **Ingesta:** scripts administrativos que extraen y normalizan los datos de RFEVB y los persisten en Supabase.
-- **Dominio:** contratos tipados para competiciones, temporadas, equipos, jugadores, jornadas, partidos, estadísticas, mercado y puntuación.
-- **Repositorios:** capa `lib/repositories/` que encapsula las consultas a Supabase y devuelve entidades de dominio en camelCase.
-- **Servicios:** lógica de aplicación, mapeo de datos y cálculo de puntuaciones.
-- **API:** rutas HTTP de Next.js que consumen los repositorios y exponen datos normalizados.
-- **Frontend:** `/fantasy` utiliza los UUIDs de Supabase, los valores reales del mercado y las puntuaciones calculadas para todas las jornadas en una sola petición.
-- **Autenticación:** Supabase Auth con email y contraseña.
+- La edición/guardado de alineaciones **no está implementada**: `toggleLineup` muestra un aviso y no guarda cambios.
+- El cálculo de puntuaciones se devuelve desde la API; no hay en el flujo mostrado persistencia del resultado en `player_match_scores`, `player_round_scores` o `fantasy_scores`, ni clasificación por liga.
+- El repositorio de esta instantánea no incluye el contenido de las migraciones SQL. Por ello, la inicialización atómica del equipo al crear/unirse a una liga y las reglas internas de las RPC no se pueden certificar solo a partir de este paquete.
+- El comportamiento de las RPC de liga/transferencia necesita pruebas funcionales; la prueba de esquema solo inspecciona estructura, RLS, políticas, restricciones y permisos.
+- Parte de la UI está fijada a `competition=152` y `season=186` (2025/26). `GET /api/competition-roster` selecciona, en cambio, la temporada marcada `is_current`. Si esa marca cambia a 2026/27, el mercado mostrado y las puntuaciones solicitadas pueden pertenecer a temporadas distintas.
 
-La extracción desde RFEVB se mantiene como mecanismo de ingesta. Las rutas de producto migradas consumen los datos persistidos, evitando depender de consultas en vivo a la fuente externa.
+## Arquitectura
+
+- **Ingesta:** `lib/scraper/` extrae datos de RFEVB; `scripts/ingest/` los guarda en Supabase.
+- **Dominio:** `domain/` contiene tipos y `ScoringSystemV1`.
+- **Persistencia:** Supabase almacena el catálogo y las tablas de fantasy.
+- **Repositorios:** `lib/repositories/` encapsula lecturas tipadas.
+- **API de datos persistidos:** `app/api/competition-roster/`, `app/api/fantasy-round-scores/` y `app/api/fantasy-team/`.
+- **Endpoints de extracción:** `/api/matches`, `/api/match-statistics` y `/api/competition-statistics` siguen consultando RFEVB en directo.
+- **Frontend:** `/dashboard` gestiona las ligas; `/fantasy` presenta plantilla, mercado, puntos y acciones de transferencia.
 
 ## Inicio rápido
 
-### Requisitos
-
-- Node.js compatible con Next.js 16.
-- npm.
-- Variables de entorno de Supabase para autenticación y acceso a datos.
-- `SUPABASE_REMOTE_DB_URL` para ejecutar la verificación del esquema remoto.
-
-Instala las dependencias e inicia el servidor:
+Requisitos: Node.js compatible con Next.js 16, npm, variables de entorno de Supabase y, para la verificación de esquema remoto, `SUPABASE_REMOTE_DB_URL`.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Abre `http://localhost:3000`.
+Abre `http://localhost:3000`. No incluyas claves secretas ni URIs PostgreSQL en Git.
 
 ## APIs principales
 
-### Roster de una competición
+### Roster de competición
 
 ```text
 GET /api/competition-roster?competition=152
 ```
 
-Devuelve equipos y jugadores de la competición a partir de los datos persistidos en Supabase. Las entidades utilizan los identificadores internos de la base de datos y conservan `rfevbId` como identificador de origen cuando corresponde.
+Consulta en Supabase la competición indicada y su temporada `is_current=true`. Devuelve equipos y jugadores con precio obtenido de los valores de mercado de la primera jornada disponible; si falta precio para un jugador, aplica un fallback de 9M.
 
-### Puntuaciones fantasy por jornada
-
-```text
-GET /api/fantasy-round-scores
-```
-
-La ruta calcula las puntuaciones de todas las jornadas utilizando las estadísticas persistidas y `ScoringSystemV1`. Consulta los datos mediante los repositorios y evita que el frontend tenga que solicitar las puntuaciones jornada por jornada.
-
-Consulta `docs/SCRAPER.md` para conocer las rutas adicionales y las herramientas de extracción.
-
-## Estructura del proyecto
+### Puntuaciones fantasy
 
 ```text
-app/                    Páginas y rutas HTTP de Next.js
-components/             Componentes de presentación
-domain/                 Contratos y tipos del dominio
-hooks/                  Estado interactivo del cliente
-lib/
-  repositories/         Lecturas tipadas desde Supabase
-  scraper/              Extracción y normalización de RFEVB
-  services/              Lógica de aplicación e ingesta
-  supabase/              Clientes, sesión y acceso a Supabase
-scripts/
-  ingest/                Scripts administrativos de ingesta
-docs/                   Documentación del proyecto
-supabase/
-  migrations/            Migraciones SQL
+GET /api/fantasy-round-scores?competition=152&season=186
+GET /api/fantasy-round-scores?competition=152&season=186&round=1
 ```
 
-## Documentación
+Calcula bajo demanda las puntuaciones usando datos persistidos. `round` es opcional. La respuesta incluye `playerId`, `roundNumber`, `score`, `matchesPlayed` y `scoringVersion`; la ruta actual no devuelve el desglose ni persiste el resultado. **Limitación del código:** no comprueba que `season` pertenezca a `competition`; la temporada se resuelve solo por su ID RFEVB.
 
-- [Estado del proyecto](docs/PROJECT_STATUS.md)
-- [Desarrollo local](docs/DEVELOPMENT.md)
-- [Arquitectura](docs/ARCHITECTURE.md)
-- [Scraper y endpoints](docs/SCRAPER.md)
-- [Sistema de puntuación](docs/SCORING.md)
-- [Autenticación](docs/AUTHENTICATION.md)
-- [Plan de evolución](docs/plan.md)
+### Equipo fantasy
+
+```text
+GET /api/fantasy-team?league_id=<uuid-de-liga>
+```
+
+Devuelve el equipo visible para el usuario, los jugadores activos y los identificadores de la primera alineación encontrada. No implementa guardado de alineaciones.
+
+Para más detalles, consulta `docs/PROJECT_STATUS.md`, `docs/ARCHITECTURE.md`, `docs/SCRAPER.md`, `docs/SCORING.md` y `docs/DEVELOPMENT.md`.
 
 ## Comandos de desarrollo y validación
 
+Los scripts declarados en `package.json` incluyen:
+
 ```bash
-npm run dev
 npm run build
-npm run start
 npm run test:domain
-npm run test:match-parser -- 1 1
 npm run test:supabase
 npm run test:supabase:schema
+npm run test:supabase:admin
+npm run test:ingestion-mappers
+npm run test:repositories
+npm run test:team-alias-resolver
+npm run test:match-date-parser
+npm run test:market-rules
+npm run test:match-parser -- 1 1
 npm run show:match-scores -- 1 1
 ```
 
-Otros tests disponibles incluyen los de mappers de ingesta, cliente administrativo y repositorios. Consulta los scripts de `package.json` para verificar los nombres y argumentos disponibles en la versión local.
+`npm run test:supabase:schema` requiere `SUPABASE_REMOTE_DB_URL` y es de solo lectura. Que la prueba de esquema pase no sustituye pruebas funcionales de creación de ligas, transferencias, seguridad o persistencia.
 
-`npm run test:supabase:schema` compara el esquema remoto con el modelo esperado. Comprueba tablas, columnas, restricciones, índices, RLS, políticas y permisos RPC mediante consultas de solo lectura. Requiere `SUPABASE_REMOTE_DB_URL` y no aplica migraciones.
+## Próximas prioridades
 
-## Próximo hito
-
-La Fase 6 se centra en **ligas y equipos fantasy**: conectar la creación y unión a ligas con las operaciones persistentes, inicializar los equipos de los participantes y validar sus presupuestos y alineaciones iniciales.
+1. Verificar con las migraciones reales la inicialización de equipos y alineaciones al crear o unirse a una liga.
+2. Implementar guardado de alineaciones y su bloqueo temporal.
+3. Añadir pruebas funcionales para las RPC y para la persistencia de scoring/clasificación.
+4. Eliminar los identificadores de temporada hardcodeados y alinear roster, puntos y ligas con la temporada seleccionada.

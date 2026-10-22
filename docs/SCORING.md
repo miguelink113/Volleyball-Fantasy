@@ -1,5 +1,7 @@
 # ScoringSystemV1
 
+**Revisión de documentación:** 2026-10-22
+
 ## Datos disponibles
 
 El scraper obtiene estadísticas agregadas por partido y jugador:
@@ -87,25 +89,27 @@ totalScore =
   - errores de saque dentro de `serve`;
   - errores y ataques bloqueados dentro de `attack`;
   - errores de recepción dentro de `reception`.
-- Ataque y recepción tienen un límite inferior de `-3`, evitando que una
-  acumulación de errores produzca puntuaciones extremas negativas. El saque
-  no puede ser negativo porque se calcula sobre acciones de saque netas.
+- El ataque tiene un límite inferior de `-3`. La recepción, en cambio, se
+  limita a `0` antes de aplicar el multiplicador de posición. El saque tampoco
+  puede ser negativo porque el resultado neto se limita a `0`.
 - La recepción tiene peso real: cada 10 puntos porcentuales positivos y
   excelentes aporta aproximadamente un punto antes de errores.
-- El bonus de posición se redondea al entero más cercano:
-  - recepción de líberos: multiplicador `2`;
+- Los multiplicadores de posición se redondean al entero más cercano:
+  - recepción de líberos: multiplicador `1.25`;
   - bloqueos de centrales: multiplicador `1.5`.
 - Para compensar que RFEVB no proporciona asistencias, los colocadores reciben
   puntos basados en el porcentaje total de ataque excelente de su tabla:
   aproximadamente `1` punto por cada `10` puntos porcentuales.
-- Los líberos mantienen el peso especial de recepción, que se multiplica por
-  `2`, porque es la principal métrica disponible para su posición.
+- Los líberos reciben un aumento del 25 % en la puntuación de recepción (`1.25x`),
+  porque es la principal métrica disponible para su posición.
 - El resultado usa la diferencia real de sets: una victoria `3-0` aporta `+3`,
   mientras que una derrota `1-3` aporta `-2`.
 - No se añaden puntos por asistencias: el scraper no aporta esa métrica.
 
-Cuando se persista un resultado, debe guardarse `scoringVersion: "v1"` junto
-con los puntos y el desglose. Así una futura versión no altera el histórico.
+La API actual devuelve `scoringVersion: "v1"` junto con los puntos. Sin embargo,
+`/api/fantasy-round-scores` calcula los resultados bajo demanda y no los persiste
+en `player_match_scores`, `player_round_scores` ni `fantasy_scores`; guardar y
+reproducir el histórico sigue siendo trabajo pendiente.
 
 ## Tests
 
@@ -115,3 +119,7 @@ npm run test:domain
 
 La suite cubre ponderaciones, errores integrados, valores enteros, bonus de
 líbero y central, diferencia de sets y exclusión de campos ambiguos.
+
+## Uso actual y límites
+
+`/api/fantasy-round-scores` calcula el scoring sobre las estadísticas persistidas. En su respuesta actual incluye `playerId`, `roundNumber`, `score`, `matchesPlayed` y `scoringVersion`, pero no expone el desglose aunque el cálculo interno lo construye. La documentación de esta fórmula se corresponde con `domain/scoring/scoring-v1.system.ts`; el scoring histórico `basic-v1` no es el utilizado por esa ruta.

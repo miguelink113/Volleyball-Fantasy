@@ -12,7 +12,7 @@ La solución mantiene separadas la fuente RFEVB, la normalización, el dominio, 
 
 1. **Dominio:** contratos tipados para competición, temporada, equipo, jugador, partido, estadísticas, jornada, fantasy y scoring. TypeScript estricto y contratos del dominio en camelCase.
 2. **Scoring:** `ScoringSystemV1` definido según los datos disponibles, probado e integrado en el cálculo de puntuaciones.
-3. **Persistencia:** esquema Supabase con tablas, relaciones, restricciones, índices, RLS y RPC para operaciones fantasy.
+3. **Persistencia:** esquema Supabase con tablas, relaciones, restricciones, índices, RLS y firmas/permisos de RPC para operaciones fantasy; la lógica funcional de las RPC requiere pruebas aparte.
 4. **Verificación remota:** `npm run test:supabase:schema` verifica el esquema remoto esperado sin modificar la base.
 5. **Ingesta del catálogo:** scripts idempotentes para competiciones, temporadas, equipos, jugadores, jornadas, partidos y estadísticas.
 6. **Resolución de alias:** normalización y resolución de nombres de equipos de roster y actas.
@@ -35,7 +35,7 @@ Las cuatro competiciones de la temporada 2025/26 están incluidas: Superliga Mas
 ## Decisiones vigentes
 
 - Autenticación mediante email y contraseña; perfil con `username`, sin `full_name` ni Google OAuth.
-- El equipo se llama automáticamente `Equipo de <username>` y no puede renombrarse.
+- Regla de producto prevista: el equipo se llama `Equipo de <username>` y no puede renombrarse; la implementación efectiva debe confirmarse en las migraciones SQL, no incluidas en la instantánea revisada.
 - Cada liga privada referencia una sola competición y temporada.
 - RFEVB se conserva como fuente de ingesta; las rutas de producto migradas leen los datos persistidos.
 - Las respuestas de los repositorios utilizan entidades de dominio con propiedades camelCase.
@@ -50,9 +50,9 @@ Las cuatro competiciones de la temporada 2025/26 están incluidas: Superliga Mas
 - Las mutaciones sensibles se validan en el servidor y la base de datos, no solo en la interfaz.
 - No se incluyen pagos, ligas públicas, mercado entre participantes, chat ni automatización del scraper.
 
-## Fase 3A — Verificación remota de Supabase y documentación ✅
+## Fase 3A — Verificación remota de Supabase y documentación ✅ (estado registrado)
 
-Completada.
+La documentación anterior registra esta fase como completada. La prueba no se ha repetido en esta revisión; el código incluido permite ejecutarla, pero el estado remoto actual no se puede afirmar sin volver a correrla.
 
 - Ejecutar `npm run test:supabase:schema` contra el proyecto remoto.
 - Verificar tablas, columnas, tipos, relaciones, restricciones, índices, RLS, políticas y permisos RPC.
@@ -126,35 +126,37 @@ Las rutas migradas ya no leen RFEVB en vivo. RFEVB se mantiene como fuente para 
 
 **Criterio de salida:** la interfaz consume el catálogo normalizado desde Supabase, los precios están persistidos, y los datos de producto ya no dependen de lecturas en vivo desde RFEVB.
 
-## Fase 6 — Ligas y equipos fantasy
+## Fase 6 — Ligas y equipos fantasy — PARCIAL
 
-### Objetivos
+La interfaz ya lee las ligas del usuario y llama a `create_private_league`, `join_private_league` y `leave_private_league`. La pantalla fantasy lee el equipo existente mediante `GET /api/fantasy-team`. No obstante, el contenido SQL de las RPC está excluido del paquete revisado y no se puede confirmar solo con este código que crear/unirse inicialice un equipo, presupuesto y alineación de forma atómica. El endpoint devuelve 404 si no encuentra equipo.
 
-1. Integrar la creación de ligas privadas.
-2. Permitir la unión a una liga mediante código.
-3. Implementar el listado y la salida de ligas.
-4. Inicializar un equipo fantasy persistente para cada usuario y liga.
-5. Asignar el nombre `Equipo de <username>` y un presupuesto inicial de 100M.
-6. Crear una alineación inicial de siete jugadores que cumpla `1/1/2/2/1`.
-7. Validar que los jugadores pertenecen a la competición y temporada de la liga.
-8. Validar precios, presupuesto y disponibilidad de la selección.
-9. Utilizar operaciones atómicas para impedir registros parciales.
-10. Probar sucesión del propietario, eliminación de ligas vacías y aislamiento por competición y temporada.
+### Pendiente para cerrar la fase
+
+1. Inspeccionar las migraciones SQL reales para confirmar qué filas crean `create_private_league` y `join_private_league`.
+2. Verificar que cada miembro recibe un `fantasy_team` asociado a la competición/temporada correcta, con presupuesto y alineación inicial válidos.
+3. Probar atomicidad: si falla la inicialización, no debe quedar una liga o membresía parcial.
+4. Probar el presupuesto inicial y la composición de alineación contra las restricciones reales.
+5. Probar con varios usuarios la sucesión del propietario, la eliminación de ligas vacías y el aislamiento por competición y temporada.
+6. Quitar de la UI los IDs fijos de competición/temporada y derivarlos de la liga seleccionada.
 
 **Criterio de salida:** varios usuarios pueden crear o unirse a una liga privada y reciben un equipo fantasy persistente, con presupuesto y selección inicial válidos.
 
-## Fase 7 — Mercado y transferencias
+## Fase 7 — Mercado y transferencias — PARCIAL
 
-1. Consultar los valores de mercado persistidos por jugador y jornada.
-2. Implementar operaciones de compra y venta mediante RPC.
-3. Validar saldo, máximo de 14 jugadores, exclusividad del jugador por liga y pertenencia en ventas.
-4. Registrar la jornada y la transacción de cada operación.
-5. Bloquear las transferencias durante la jornada según `startsAt` y `endsAt`.
-6. Probar concurrencia, operaciones correctas y rechazos sin efectos parciales.
+`FantasyTeamBuilder` ya invoca la RPC `transfer_player` para las acciones Comprar/Vender y recarga los datos al finalizar. Esto confirma la conexión de UI, no la corrección funcional de todas las reglas: las pruebas disponibles en el paquete solo verifican esquema/permisos, no la lógica transaccional de transferencias.
+
+### Trabajo pendiente
+
+1. Verificar en las migraciones que `transfer_player` aplica saldo, precio, límite de 14 jugadores, exclusividad del jugador por liga y pertenencia al equipo.
+2. Confirmar que registra correctamente la jornada y la transacción de cada operación.
+3. Probar bloqueo durante el intervalo `startsAt`–`endsAt`.
+4. Probar compras/ventas válidas e inválidas, concurrencia y rechazos sin efectos parciales en una base de pruebas.
 
 **Criterio de salida:** las restricciones de presupuesto, límite de plantilla y propiedad se cumplen incluso cuando se omite la UI.
 
-## Fase 8 — Alineaciones y bloqueo
+## Fase 8 — Alineaciones y bloqueo — PENDIENTE
+
+La UI tiene validación local, pero `toggleLineup` sigue mostrando un aviso y no persiste cambios.
 
 1. Implementar una operación server-side para guardar titulares.
 2. Validar que pertenecen a la plantilla y a la competición y temporada correctas.
@@ -165,7 +167,9 @@ Las rutas migradas ya no leen RFEVB en vivo. RFEVB se mantiene como fuente para 
 
 **Criterio de salida:** no se puede editar la plantilla o alineación durante el periodo bloqueado.
 
-## Fase 9 — Scoring persistente y ranking privado
+## Fase 9 — Scoring persistente y ranking privado — PENDIENTE
+
+La API calcula `ScoringSystemV1` bajo demanda; no escribe los resultados calculados en las tablas históricas en el flujo actual incluido.
 
 1. Calcular puntuaciones por partido y jornada con `ScoringSystemV1`.
 2. Persistir el desglose y `scoringVersion` para conservar resultados históricos.
@@ -175,7 +179,9 @@ Las rutas migradas ya no leen RFEVB en vivo. RFEVB se mantiene como fuente para 
 
 **Criterio de salida:** importación de estadísticas, cálculo versionado, puntuación del equipo y clasificación privada reproducible.
 
-## Fase 10 — UI persistente
+## Fase 10 — UI persistente — PARCIAL
+
+La UI ya consume algunas lecturas persistidas y las RPC de liga/transferencia, pero la alineación no guarda y faltan flujos de scoring histórico y clasificación.
 
 1. Sustituir progresivamente el estado local de `/fantasy` por operaciones persistentes.
 2. Implementar los flujos de ligas, mercado, plantilla, alineación, jornada, historial y clasificación.
@@ -184,7 +190,7 @@ Las rutas migradas ya no leen RFEVB en vivo. RFEVB se mantiene como fuente para 
 
 **Criterio de salida:** los cambios sobreviven a nuevas sesiones y las acciones no pueden alterar datos de otros usuarios.
 
-## Fase 11 — Integración end-to-end
+## Fase 11 — Integración end-to-end — PENDIENTE
 
 Probar con varios usuarios el ciclo completo:
 
@@ -198,7 +204,7 @@ Probar con varios usuarios el ciclo completo:
 
 Incluir casos de varias competiciones, límites, temporadas incompatibles, RLS y sucesión o eliminación de ligas.
 
-## Fase 12 — Despliegue
+## Fase 12 — Despliegue — PENDIENTE DE EVIDENCIA
 
 - Separar las variables públicas de los secretos.
 - Aplicar migraciones de forma controlada.
@@ -208,6 +214,10 @@ Incluir casos de varias competiciones, límites, temporadas incompatibles, RLS y
 - Verificar las operaciones y permisos antes de habilitar producción.
 
 ## Calidad y validación
+
+Prioridad transversal: `/api/fantasy-round-scores` debe comprobar que la temporada indicada pertenece a la competición indicada; ahora resuelve la temporada solo por `rfevb_id`.
+
+No marques una fase como cerrada basándote únicamente en que exista una tabla o una RPC. Para las fases 6–10, añade pruebas de comportamiento sobre un proyecto de prueba (con más de un usuario) y prueba expresamente errores, atomicidad, aislamiento y límites de jornada. La prueba de esquema remota es de solo lectura y no valida esas reglas.
 
 - Inspeccionar el código existente y reutilizar dominio, scraper y servicios.
 - Mantener TypeScript estricto; no utilizar `any` ni deshabilitar comprobaciones para ocultar errores.

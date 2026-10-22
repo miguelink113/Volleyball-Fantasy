@@ -2,6 +2,8 @@
 
 ## Visión del producto
 
+> Este documento define el **alcance objetivo**, no un inventario de funcionalidades ya terminadas. Para el estado real del código, limitaciones y fases parciales, consulta [`PROJECT_STATUS.md`](PROJECT_STATUS.md).
+
 Volleyball Fantasy es una aplicación de fantasy de voleibol que permite a los
 usuarios gestionar un equipo virtual con jugadores reales de competiciones
 españolas, competir con otros usuarios y seguir el rendimiento de la plantilla a

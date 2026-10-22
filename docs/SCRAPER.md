@@ -1,23 +1,28 @@
 # Scraper RFEVB
 
+**Revisión de documentación:** 2026-10-22
+
 Scraper desarrollado con **Next.js + TypeScript + Cheerio** para obtener el
 catálogo de competiciones de voleibol, sus equipos, jugadores, partidos y
 estadísticas desde RFEVB.
 
 La extracción es un adaptador externo. Su responsabilidad termina en descargar
 HTML, extraer campos, normalizar valores básicos y conservar los identificadores
-oficiales. No renderiza la UI, no decide reglas fantasy y no persiste directamente en Supabase: la ingesta se hace mediante los scripts ingest-*.ts.
+oficiales. No renderiza la UI ni persiste directamente en Supabase: la ingesta se
+hace mediante scripts `scripts/ingest/*.ts`. Los endpoints de extracción consultan
+RFEVB en directo; los endpoints de producto de roster y puntuaciones leen Supabase.
 
 ## Límites del scraper
 
 | Capa | Responsabilidad |
 | --- | --- |
 | `lib/scraper/` | Descargar e interpretar la web de RFEVB. |
-| `app/api/` | Validar parámetros HTTP e invocar el scraper. |
+| `app/api/matches`, `match-statistics`, `competition-statistics` | Validar parámetros HTTP e invocar el scraper en directo. |
+| `app/api/competition-roster`, `fantasy-round-scores`, `fantasy-team` | APIs de producto que leen datos persistidos de Supabase (las dos primeras usan cliente administrativo server-only). |
 | `domain/` | Definir interfaces de `Competition`, `Team`, `Player`, `Match` y estadísticas. |
-| `lib/services/fantasy/` | Aplicar reglas de plantilla, alineación y mercado de la demo. |
+| `lib/services/fantasy/` | Reglas de validación y helpers fantasy; el helper de mercado diario es legado y no alimenta el roster actual de `FantasyTeamBuilder`. |
 | `components/fantasy/` | Mostrar el mercado, el equipo y la alineación. |
-| Supabase | Persistencia del catálogo y de la ingesta de partidos vía `scripts/ingest-*.ts`. El scraper sigue sin escribir directamente. |
+| Supabase | Persistencia del catálogo, jornadas, partidos, estadísticas, precios y datos fantasy mediante ingesta/repositorios/RPC. El scraper no escribe directamente. |
 ## Endpoints
 
 ### 1. Obtener partidos
@@ -154,8 +159,6 @@ Para probarlo con una jornada concreta:
 
 ```text
 http://localhost:3000/api/competition-statistics?competition=152&season=186&round=24
-
-http://localhost:3000/api/fantasy-round-scores?competition=152&season=186&round=1
 ```
 
 La respuesta contiene cada partido junto con sus estadísticas:
@@ -300,10 +303,13 @@ dominio:
 - `Team`, `Player` y `MatchPlayerStats`.
 - `MatchSet` para los marcadores de cada set.
 
-El roster actual usa directamente los identificadores oficiales:
+El scraper puro de origen usa identificadores estables basados en el ID oficial:
 
 - `rfevb:team:<id>` para equipos.
 - `rfevb:player:<id>` para jugadores.
+
+Esto no debe confundirse con `GET /api/competition-roster`: la ruta de producto
+lee Supabase y devuelve los UUIDs internos de la base de datos.
 
 El mapeador histórico de partidos genera identidades estables a partir de
 nombres y dorsales porque las estadísticas de partido no incluyen siempre el
@@ -312,8 +318,8 @@ identificador RFEVB del jugador. Debe alinearse con el roster oficial por
 Los valores estadísticos ausentes se normalizan a `0` en el modelo de dominio.
 
 El sistema de puntuación se define mediante `ScoringSystem`, por lo que puede
-sustituirse sin modificar el adaptador. La demo y los scripts utilizan
-`ScoringSystemV1` (versión `v1`).
+sustituirse sin modificar el adaptador. El endpoint de producto y la herramienta
+`npm run show:match-scores` utilizan `ScoringSystemV1` (versión `v1`).
 
 El scraper actual devuelve estadísticas agregadas del partido y una formación
 con cinco posiciones por jugador. El adaptador cuenta las posiciones no nulas
@@ -386,7 +392,9 @@ lib/
   estadísticas de una jornada con el roster y agrega la puntuación de
   `ScoringSystemV1`.
 
-Los datos scrapeados se persisten mediante `scripts/ingest/ingest-roster.ts` (catálogo) y `scripts/ingest/ingest-matches.ts` (jornadas, partidos y estadísticas). Las rutas HTTP siguen leyendo RFEVB en vivo para la demo; migrarlas al catálogo persistido es parte de la Fase 5.4. La ingesta no está programada: se ejecuta manualmente.
+Los datos scrapeados se persisten mediante `scripts/ingest/ingest-roster.ts` (catálogo), `scripts/ingest/ingest-matches.ts` (jornadas, partidos y estadísticas) y `scripts/ingest/ingest-market-values.ts` (precios). La ingesta se ejecuta manualmente.
+
+No todas las rutas HTTP pasan por el scraper: `/api/matches`, `/api/match-statistics` y `/api/competition-statistics` siguen leyendo RFEVB en directo; `/api/competition-roster` y `/api/fantasy-round-scores` consultan el catálogo persistido en Supabase. La sección siguiente detalla estas APIs de producto.
 ## Mostrar puntuaciones de un partido
 
 Con Next.js ejecutándose en `http://localhost:3000`, el siguiente comando
@@ -475,48 +483,30 @@ La web externa de RFEVB debe estar disponible. Los identificadores internos
 estables se construyen con el identificador oficial (`rfevb:team:<id>` y
 `rfevb:player:<id>`), por lo que no dependen del nombre mostrado.
 
-## Uso del catálogo real en la demo fantasy
+## Uso del catálogo persistido en el fantasy actual
 
-La demo de `/fantasy` consume `/api/competition-roster?competition=152` al
-cargarse. El componente relaciona cada jugador con el nombre de su equipo
-mediante `currentTeamId` y conserva el `id` estable del scraper.
+La pantalla `/fantasy` solicita `GET /api/competition-roster?competition=152` y convierte los jugadores y equipos devueltos en los modelos que muestra `FantasyTeamBuilder`. La ruta obtiene la competición por su ID RFEVB, busca la temporada marcada `is_current=true` y añade el precio leído de `player_market_values` para la primera jornada disponible. Si el precio de un jugador no existe, aplica un fallback de 9M.
 
-Para que la demo sea manejable mientras se define el mercado persistente, crea
-un mercado diario de 30 jugadores. La selección utiliza una semilla
-determinista con formato `YYYY-MM-DD`:
+Este comportamiento sustituye al mercado de demostración descrito en versiones anteriores de esta guía. `createDailyFantasyRoster` y la generación determinista de una selección diaria de 30 jugadores siguen en `lib/services/fantasy/fantasy-team.service.ts`, pero el `FantasyTeamBuilder` actual no llama a ese helper. No describas la selección diaria como comportamiento actual de la pantalla.
 
-- todos los usuarios ven la misma selección durante el mismo día;
-- la selección cambia al cambiar la fecha;
-- la página detecta el cambio de día mientras está abierta;
-- los precios mostrados son valores de demo deterministas derivados del día y
-  del `rfevbId`;
-- la jornada seleccionada carga las puntuaciones reales calculadas bajo demanda;
-  una jornada sin participación registrada muestra `0` para los jugadores del
-  mercado diario.
+La UI también carga el equipo de la liga mediante `/api/fantasy-team?league_id=...`; las compras y ventas llaman a la RPC `transfer_player`. El guardado de alineación sigue pendiente: el handler `toggleLineup` muestra un aviso y no modifica la base de datos.
 
-La lógica de selección y semilla está en
-`lib/services/fantasy/fantasy-team.service.ts`, mediante
-`createDailyFantasyRoster`. La plantilla inicial se construye con una
-composición válida de posiciones a partir del mercado diario. Esta lógica
-pertenece a la demo fantasy y no al scraper.
+**Limitación de temporada:** el roster usa `is_current=true`, pero `FantasyTeamBuilder` solicita los puntos con constantes `COMPETITION_ID = 152` y `SEASON_ID = 186` y muestra la etiqueta `25-26`. Antes de usar la aplicación para 2026/27, estos flujos deben obtener la misma temporada de una fuente común.
 
 ## Puntuaciones fantasy por jornada
 
-El endpoint:
+La API de producto es:
 
 ```text
-/api/fantasy-round-scores?competition=152&season=186&round=1
+GET /api/fantasy-round-scores?competition=152&season=186
+GET /api/fantasy-round-scores?competition=152&season=186&round=1
 ```
 
-descarga el roster, los partidos de la jornada y las estadísticas agregadas de
-cada partido. Devuelve una entrada por jugador con `score`, `matchesPlayed`, `scoringVersion`
-y el desglose de `ScoringSystemV1`. La respuesta utiliza la versión `v1`; no
-se aplica el scoring histórico `basic-v1`.
+`competition` y `season` son los identificadores RFEVB; `round` es opcional. La ruta lee `rounds`, `matches` y `match_player_stats` de Supabase a través de los repositorios y calcula la puntuación con `ScoringSystemV1`. No obtiene las estadísticas de RFEVB en directo. **Limitación conocida del código:** la ruta resuelve la temporada solo por `rfevb_id` y no valida que esa temporada pertenezca a la competición recibida.
 
-La asociación prioriza el equipo del partido y después el dorsal o el nombre.
-Esto evita asignar estadísticas de otro club cuando varios equipos reutilizan
-el mismo dorsal. La consulta se cachea en memoria del cliente por jornada
-durante la sesión para evitar peticiones duplicadas en desarrollo.
+La respuesta actual contiene `playerId`, `roundNumber`, `score`, `matchesPlayed` y `scoringVersion`. El cálculo interno agrega el desglose, pero la ruta actual no lo incluye en la respuesta y no guarda los resultados en `player_match_scores`, `player_round_scores` ni `fantasy_scores`.
+
+La ruta filtra las jornadas por el `rfevb_id` de la temporada consultada y calcula todas las jornadas si no se proporciona `round`. El cliente `FantasyTeamBuilder` carga las puntuaciones de la temporada fija 186 y las guarda en estado React durante la sesión; no existe la caché de cliente por jornada descrita en versiones previas de este documento.
 
 ## Tests del contrato de dominio
 

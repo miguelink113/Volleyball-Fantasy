@@ -1,59 +1,63 @@
 # Modelo persistente de Supabase
 
-Las migraciones en `../supabase/migrations/` crean el modelo base de la fase 3 y el resolver de nombres de equipo.
+Las migraciones del proyecto definen el esquema del catálogo y de fantasy. El archivo `repomix-output.xml` usado en la revisión excluye `supabase/migrations/`, por lo que esta documentación describe el modelo esperado apoyándose en `scripts/tests/test-supabase-schema.ts`, no en una lectura directa de las definiciones SQL.
 
-## Capas
+## Capas de datos
 
 - **Identidad:** `profiles` contiene un `username` único asociado a `auth.users`.
-- **Datos deportivos:** `competitions`, `seasons`, `teams`, `players`, `rounds`, `matches`, `match_player_stats`.
-- **Resolución de nombres:** `team_source_aliases` guarda la correspondencia entre el nombre crudo de cada fuente (`roster` o `matches`) y el `team_id` de la temporada. Es única por `(season_id, normalized_alias)` y de solo lectura para usuarios autenticados.
-- **Fantasy privado:** `private_leagues`, `private_league_members`, `fantasy_teams`, `fantasy_team_players`, `lineups`, `lineup_players`, `transactions`.
-- **Resultados:** `player_match_scores` conserva el resultado de un jugador por partido y `player_round_scores` agrega por jornada; ambos versionan el scoring. `fantasy_scores` conserva el total de un equipo fantasy por jornada y versión.
+- **Datos deportivos:** `competitions`, `seasons`, `teams`, `players`, `rounds`, `matches` y `match_player_stats`.
+- **Resolución de nombres:** `team_source_aliases` relaciona alias de fuentes (`roster` o `matches`) con el equipo oficial de la temporada. La clave natural documentada es `(season_id, normalized_alias)`.
+- **Mercado:** `player_market_values` guarda valores de jugador por jornada, con precio y periodo de validez.
+- **Fantasy privado:** `private_leagues`, `private_league_members`, `fantasy_teams`, `fantasy_team_players`, `lineups`, `lineup_players` y `transactions`.
+- **Resultados:** `player_match_scores` y `player_round_scores` representan puntuaciones de jugador versionadas; `fantasy_scores` representa el resultado de un equipo por jornada y versión.
 
-Las competiciones y temporadas se almacenan como entidades persistentes. Los equipos y jugadores se versionan por temporada para evitar mezclar plantillas entre temporadas futuras.
+El modelo relaciona el catálogo por competición y temporada para evitar cruces accidentales entre temporadas.
 
-## Restricciones importantes
+## Restricciones documentadas y comprobadas estructuralmente
 
-- Una liga privada referencia una competición y una temporada.
-- Un usuario solo puede tener un `fantasy_team` por liga.
-- Una alineación solo puede existir una vez por equipo y jornada.
-- Una plantilla puede tener hasta 14 jugadores.
-- Una alineación puede tener hasta siete jugadores; no existe capitán. Para puntuar debe cumplir la composición `1/1/2/2/1`, validada server-side.
-- Un jugador solo puede pertenecer activamente a un equipo dentro de una liga.
-- Una liga siempre conserva al menos un miembro. Si abandona el propietario, la propiedad pasa al miembro restante más antiguo (`joined_at`, con el identificador como desempate); si era el único miembro, la liga se elimina completamente.
-- Los resultados guardan siempre `scoring_version`.
-- `unknown` es una posición válida para datos incompletos del scraper.
-- Los nombres inestables de los equipos extraídos por el scraper se normalizan a través de la tabla `team_source_aliases` para mantener la integridad referencial hacia el `team_id` oficial sin contaminar la entidad del equipo.
+El test de esquema comprueba tablas, columnas, algunos tipos y nullabilidad, relaciones compuestas, restricciones e índices esperados, habilitación de RLS, políticas y privilegios de RPC. Entre otras expectativas del test se encuentran:
 
-## Seguridad
+- `rfevb_id` no nulo para competiciones, equipos y jugadores;
+- integridad de las referencias entre equipo/jugador y competición/temporada;
+- integridad entre equipos fantasy, ligas, alineaciones, jornadas y jugadores;
+- índice/restricción para evitar la propiedad activa duplicada de un jugador dentro de una liga;
+- RLS activado en las 20 tablas de aplicación;
+- funciones `create_private_league`, `join_private_league`, `leave_private_league` y `transfer_player` con privilegios de ejecución esperados.
 
-Las tablas deportivas son legibles por usuarios autenticados. Las tablas de estado fantasy solo tienen lectura mediante RLS: no hay mutaciones directas para equipos, jugadores, alineaciones, transacciones o membresías. La creación de ligas y la entrada mediante código se realizan mediante funciones server-side atómicas.
+El test es una comprobación estructural. No demuestra por sí solo que las funciones creen las filas correctas, apliquen el presupuesto, gestionen saldos, sean atómicas o manejen adecuadamente condiciones de carrera.
 
-Las alineaciones se bloquean usando `rounds.starts_at` y `rounds.ends_at`; no existe una columna independiente `locks_at`.
+## Operaciones de escritura
 
-La migración no crea políticas de escritura para las tablas deportivas ni para los resultados calculados. La ingesta y el cálculo deben ejecutarse en servidor con una clave privilegiada, nunca desde el navegador.
+El código de frontend invoca RPC para:
+
+- crear una liga privada;
+- unirse a una liga mediante código;
+- abandonar una liga;
+- comprar o vender un jugador mediante `transfer_player`.
+
+Aunque la llamada parte del cliente de Supabase, las validaciones de seguridad y negocio deben ocurrir dentro de la función SQL y las restricciones de la base, no solo en React. La instantánea revisada no incluye las migraciones SQL, así que la lógica interna y la atomicidad de estas funciones deben contrastarse en el repositorio original.
+
+Las alineaciones son un caso pendiente: la UI no guarda los cambios y el endpoint `/api/fantasy-team` solo ofrece lectura. No debe asumirse que la mera existencia de `lineups` y `lineup_players` implica que el flujo de edición esté implementado.
+
+## Seguridad y roles
+
+- Las tablas de estado fantasy se consultan con el cliente autenticado y están sujetas a RLS.
+- Los endpoints de catálogo y puntuaciones usan el cliente administrativo en servidor; la clave privilegiada no debe exponerse en el bundle del navegador.
+- La ingesta usa `createAdminClient()` y debe ejecutarse exclusivamente en servidor.
+- La prueba de esquema remota utiliza `BEGIN READ ONLY`, consulta catálogos de PostgreSQL y no aplica migraciones.
 
 ## Aplicación local
 
-Con Supabase CLI instalado:
+Con Supabase CLI, aplica las migraciones según el flujo habitual de desarrollo. `supabase db reset` reconstruye la base local y puede destruir los datos locales; no lo ejecutes sobre una base remota o datos que quieras conservar.
 
-```bash
-supabase db reset
-supabase db push
-```
+## Verificación del esquema remoto
 
-Las migraciones requieren el esquema estándar `auth.users` proporcionado por Supabase y crean el trigger que inicializa `profiles.username`.
+`npm run test:supabase:schema` necesita `SUPABASE_REMOTE_DB_URL` en `.env.local`. Comprueba el esquema esperado mediante una conexión PostgreSQL de solo lectura. La documentación anterior informa de una ejecución exitosa contra el proyecto remoto, pero esta revisión no la ha repetido ni ha accedido a la base.
 
-## Comprobar el esquema remoto
+La comprobación no acredita:
 
-`npm run test:supabase:schema` inspecciona el esquema actualmente desplegado mediante una conexión PostgreSQL de solo lectura configurada en `SUPABASE_REMOTE_DB_URL` dentro de `.env.local`.
-
-Obtén la URI desde el botón **Connect** del Dashboard de Supabase (URI de conexión PostgreSQL). Si la conexión directa no está disponible en tu red, usa la opción **Session pooler**.
-
-La prueba comprueba las 20 tablas y sus columnas esperadas, tipos y nullabilidad relevantes, relaciones compuestas, índice de propiedad activa, habilitación de RLS, políticas de lectura y permisos de las RPC.
-
-La prueba inicia una transacción `READ ONLY` y ejecuta únicamente consultas a catálogos (`information_schema` y `pg_catalog`); no crea ni modifica objetos y no aplica migraciones.
-
-Protege la URI como una credencial: no la incluyas en Git, mensajes ni registros. Se recomienda proporcionar un usuario PostgreSQL de solo lectura.
-
-La comprobación valida la estructura que existe en remoto, no que la migración se pueda aplicar desde cero ni que las escrituras de negocio funcionen. La migración debe aplicarse mediante el flujo de migraciones de Supabase, no pegando el SQL en producción para esta prueba.
+- que las ingestas tengan actualmente los conteos documentados;
+- que las mutaciones RPC funcionen de extremo a extremo;
+- que las transacciones de negocio sean atómicas;
+- que las tablas de resultados se estén rellenando;
+- que los datos de la temporada 2026/27 estén ingeridos y seleccionados coherentemente.

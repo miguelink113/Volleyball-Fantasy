@@ -1,175 +1,154 @@
 # Desarrollo local
 
+**Revisión de documentación:** 2026-10-22
+
 ## Requisitos
 
-- Node.js compatible con Next.js 16.
-- npm.
-- Proyecto Supabase configurado.
-- Variables de entorno para los clientes de Supabase.
-- `SUPABASE_REMOTE_DB_URL` para las pruebas de verificación del esquema remoto.
+- Node.js compatible con Next.js 16 y npm.
+- Proyecto Supabase configurado y variables de entorno locales.
+- `SUPABASE_REMOTE_DB_URL` solo si se ejecuta la prueba de esquema remoto.
 
-## Instalación
-
-Instala las dependencias:
+## Instalación y ejecución
 
 ```bash
 npm install
-```
-
-Configura las variables de entorno locales según la configuración de Supabase del proyecto. No incluyas claves secretas en el código del cliente ni en archivos versionados.
-
-Inicia el servidor de desarrollo:
-
-```bash
 npm run dev
 ```
 
-Abre `http://localhost:3000`.
+Abre `http://localhost:3000`. No versionar secretos ni la URI PostgreSQL. `lib/supabase/admin.server.ts` requiere `SUPABASE_SECRET_KEY` y solo debe ejecutarse en servidor; el cliente de navegador usa la publishable key.
 
-## Arquitectura de desarrollo
+## Flujo de desarrollo
 
-El flujo de datos deportivos está dividido en cuatro capas principales:
+1. **Extracción:** `lib/scraper/` consulta RFEVB.
+2. **Ingesta:** scripts de `scripts/ingest/` persisten el roster, partidos, estadísticas y valores de mercado.
+3. **Lectura de producto:** los repositorios encapsulan consultas de Supabase.
+4. **Aplicación:** las APIs de datos persistidos exponen roster y scoring; el dashboard y `/fantasy` consumen algunos datos y operaciones mediante RPC.
 
-1. **Ingesta:** extracción y normalización desde RFEVB mediante scripts administrativos.
-2. **Persistencia:** almacenamiento del catálogo deportivo, jornadas, partidos, estadísticas y valores de mercado en Supabase.
-3. **Repositorios y servicios:** consultas tipadas, conversión a entidades del dominio y cálculo de puntuaciones.
-4. **API y frontend:** rutas HTTP de Next.js y páginas que consumen datos normalizados.
-
-La ingesta desde RFEVB y la lectura de producto son operaciones separadas. Las rutas migradas consultan Supabase a través de `lib/repositories/`.
+La ingesta desde RFEVB y la lectura del catálogo persistido son flujos separados. `/api/matches`, `/api/match-statistics` y `/api/competition-statistics` aún son endpoints de extracción en directo; `/api/competition-roster` y `/api/fantasy-round-scores` leen Supabase.
 
 ## Estructura relevante
 
 ```text
 app/
-  api/                    Rutas HTTP
-  fantasy/                Interfaz fantasy
-components/               Componentes de presentación
-domain/                   Tipos y contratos del dominio
-hooks/                    Estado interactivo del cliente
+  api/                     Rutas de extracción y de producto
+  dashboard/               Dashboard y gestión de ligas
+  fantasy/                 Equipo, mercado y puntuación
+components/
+  dashboard/                Operaciones de ligas
+  fantasy/                  Gestor fantasy
+  auth/                     Componentes de autenticación
+domain/                    Contratos de dominio y scoring
 lib/
-  repositories/           Lecturas tipadas de Supabase
-  scraper/                Scraper y normalización de RFEVB
-  services/               Servicios y lógica de aplicación
-    ingestion/             Mappers y procesos de ingesta
-  supabase/                Clientes y sesión de Supabase
+  repositories/             Lecturas tipadas de Supabase
+  scraper/                  Extracción RFEVB
+  services/                 Servicios de fantasy, perfil e ingesta
+  supabase/                 Clientes de Supabase
 scripts/
-  ingest/                  Scripts administrativos
-docs/                      Documentación
-supabase/
-  migrations/               Migraciones SQL
+  ingest/                   Ingestas administrativas
+  tests/                    Scripts de pruebas y verificaciones
+  tools/                    Herramientas de diagnóstico
+docs/                       Documentación
+supabase/migrations/         Migraciones SQL (no incluidas en la instantánea auditada)
 ```
 
-## Ingesta de datos
+## Ingesta
 
-Los scripts de ingesta se ejecutan administrativamente y utilizan el cliente server-only de Supabase cuando necesitan permisos elevados.
+Los comandos siguientes son ejemplos para los IDs documentados de la temporada 2025/26. No implican que esos IDs sean válidos para 2026/27; obtén los identificadores actuales desde RFEVB antes de ingerir la nueva temporada.
 
-### Ingesta del roster
-
-Ejecuta los scripts con los identificadores de competición y temporada correspondientes:
+### Roster
 
 ```bash
-npx tsx scripts/ingest/ingest-roster.ts \
-  --competition=152 \
-  --season=186 \
-  --season-name="2025/26"
-
-npx tsx scripts/ingest/ingest-roster.ts \
-  --competition=151 \
-  --season=185 \
-  --season-name="2025/26"
-
-npx tsx scripts/ingest/ingest-roster.ts \
-  --competition=153 \
-  --season=187 \
-  --season-name="2025/26"
-
-npx tsx scripts/ingest/ingest-roster.ts \
-  --competition=150 \
-  --season=183 \
-  --season-name="2025/26"
+npm run ingest:roster -- --competition=152 --season=186 --season-name="2025/26"
+npm run ingest:roster -- --competition=151 --season=185 --season-name="2025/26"
+npm run ingest:roster -- --competition=153 --season=187 --season-name="2025/26"
+npm run ingest:roster -- --competition=150 --season=183 --season-name="2025/26"
 ```
 
-### Ingesta de partidos y estadísticas
+### Partidos y estadísticas
 
-El proceso de partidos utiliza:
-
-```text
-scripts/ingest/ingest-matches.ts
+```bash
+npm run ingest:matches -- --competition=152 --season=186
 ```
 
-El proceso ingiere jornadas, partidos y estadísticas de jugador de forma idempotente. Las fechas de jornada se calculan a partir de las fechas reales de los partidos y se convierten de Europe/Madrid a UTC.
-
-Los jugadores de las actas se cruzan con el roster por nombre dentro del equipo y, cuando hace falta, por dorsal. Las coincidencias ambiguas o no resueltas deben revisarse mediante los diagnósticos y warnings del proceso.
+Consulta `scripts/ingest/ingest-matches.ts` antes de ejecutar el comando: requiere un roster previo y puede excluir partidos o jugadores cuyos equipos/jugadores no se resuelvan de forma inequívoca. Revisa los avisos y los conteos al final de la ejecución.
 
 ### Valores iniciales del mercado
 
-La tabla `player_market_values` está sembrada con valores de 9M para todos los jugadores en todas las jornadas. La interfaz obtiene los precios a través de los repositorios de lectura.
+```bash
+npm run ingest:market-values -- --competition=152 --season=186 --price=9
+```
 
-Antes de repetir cualquier operación de sembrado, comprueba la implementación del script correspondiente y sus claves de conflicto para preservar la idempotencia.
+El precio predeterminado es 9M. El script hace upsert por jugador y jornada y verifica el conteo final; repetirlo vuelve a establecer el precio indicado para esa temporada, así que no lo ejecutes sobre un mercado que ya deba tener precios diferenciados sin revisar primero el script.
 
-## APIs de producto
+## Endpoints
 
-### Roster de competición
+### Roster persistido
 
 ```text
 GET /api/competition-roster?competition=152
 ```
 
-La ruta devuelve el roster desde Supabase mediante los repositorios. Los UUIDs de la base de datos son los identificadores internos utilizados por la aplicación; `rfevbId` se conserva como identificador de origen cuando corresponde.
+Busca la competición en Supabase y usa la temporada con `is_current=true`. Los precios se leen de la primera jornada. Si el frontend solicita puntuaciones de una temporada fija distinta de `is_current`, el catálogo y los puntos pueden quedar desalineados.
 
-### Puntuaciones por jornada
+### Puntuación calculada
 
 ```text
-GET /api/fantasy-round-scores
+GET /api/fantasy-round-scores?competition=152&season=186
+GET /api/fantasy-round-scores?competition=152&season=186&round=1
 ```
 
-La ruta utiliza estadísticas persistidas y `ScoringSystemV1` para calcular las puntuaciones de todas las jornadas en una sola petición.
+Lee partidos y estadísticas persistidos y calcula `ScoringSystemV1` bajo demanda. La ruta devuelve `playerId`, `roundNumber`, `score`, `matchesPlayed` y `scoringVersion`; en el código actual no persiste resultados ni devuelve `breakdown`. La implementación busca la temporada solo por su `rfevb_id`, sin verificar que corresponda a la competición enviada; no uses esa combinación como validación de integridad hasta corregirlo.
 
-La interfaz `/fantasy` consume esta respuesta sin tener que cargar las puntuaciones jornada por jornada.
+### Equipo de una liga
 
-Consulta `docs/SCRAPER.md` para la documentación completa de los endpoints y las herramientas de diagnóstico.
+```text
+GET /api/fantasy-team?league_id=<uuid-de-liga>
+```
 
-## Tests y validación
+Consulta equipo, jugadores activos y la primera alineación encontrada. Es un endpoint de lectura; no permite guardar alineaciones.
 
-Ejecuta los tests relevantes antes de realizar un commit:
+### Extracción en directo
+
+```text
+GET /api/matches?competition=152&season=186
+GET /api/match-statistics?matchId=13881&competition=152&category=362&season=186
+GET /api/competition-statistics?competition=152&season=186&round=1
+```
+
+Estas rutas consultan la web de RFEVB. Limita las pruebas a una jornada para evitar un volumen innecesario de peticiones.
+
+## Tests declarados en `package.json`
 
 ```bash
 npm run test:domain
 npm run test:supabase
 npm run test:supabase:schema
+npm run test:supabase:admin
+npm run test:ingestion-mappers
+npm run test:repositories
+npm run test:team-alias-resolver
+npm run test:match-date-parser
+npm run test:market-rules
+npm run test:match-parser -- 1 1
+npm run show:match-scores -- 1 1
 npm run build
 ```
 
-Los tests específicos de mappers, repositorios y scripts de ingesta deben ejecutarse según los cambios realizados. Comprueba los scripts disponibles en `package.json` antes de utilizar comandos adicionales.
+No todos estos scripts son un runner integrado: algunos ejecutan comprobaciones manuales o herramientas de diagnóstico con argumentos. Comprueba `package.json` si cambian los nombres.
 
-### Verificación del esquema remoto
+### Verificación de esquema remoto
 
-`npm run test:supabase:schema` requiere `SUPABASE_REMOTE_DB_URL`.
+`npm run test:supabase:schema` necesita `SUPABASE_REMOTE_DB_URL`. La prueba abre una transacción `READ ONLY` y compara las 20 tablas esperadas, columnas, tipos relevantes, restricciones, relaciones, índices, RLS, políticas y permisos de RPC. No aplica migraciones ni comprueba la lógica interna o atomicidad de las RPC.
 
-El test comprueba el esquema remoto esperado, incluidas tablas, columnas, tipos, restricciones, índices, RLS, políticas y permisos RPC. Es de solo lectura y no aplica migraciones.
+No utilices `supabase db reset` contra una base remota o datos que quieras conservar. Las pruebas de comportamiento de ligas/transferencias deben ejecutarse en un proyecto o fixture no productivo con usuarios de prueba.
 
-No utilices `db reset` ni pruebas destructivas contra la base de datos de producción.
+## Limitaciones conocidas que afectan al desarrollo
 
-### Verificación de repositorios
+- La UI está parcialmente fijada a `competition=152` y `season=186`; el objetivo 2026/27 requiere hacer coherentes los selectores de roster, liga y scoring. La ruta de scoring además debe comprobar la relación competición-temporada.
+- `FantasyTeamBuilder.toggleLineup` es un placeholder y no persiste alineaciones.
+- Las compras/ventas llaman a `transfer_player`, pero hacen falta pruebas funcionales que ejerciten presupuesto, límites, pertenencia y bloqueo temporal.
+- El scoring se calcula bajo demanda y todavía no se ve una escritura en las tablas históricas de resultados.
 
-Los repositorios deben:
+## Próximas prioridades
 
-- Mantener las consultas a Supabase encapsuladas en `lib/repositories/`.
-- Devolver entidades del dominio con propiedades camelCase.
-- Mantener el aislamiento por competición y temporada cuando corresponda.
-- Manejar errores de lectura sin ocultarlos.
-- Contar con tests de integración para verificar el acceso a los datos persistidos.
-
-## Buenas prácticas
-
-- Mantén los DTO de RFEVB separados de las entidades de dominio.
-- No utilices los identificadores externos de RFEVB como sustitutos de los UUIDs internos.
-- Mantén el cliente administrativo fuera del bundle del navegador.
-- No expongas claves secretas ni credenciales PostgreSQL.
-- Valida en backend y base de datos las operaciones que modifican el estado fantasy.
-- Actualiza la documentación al cerrar una fase.
-- Ejecuta los tests pertinentes y el build antes de hacer commit.
-
-## Próximo hito
-
-La Fase 6 se centra en ligas y equipos fantasy persistentes. El objetivo es conectar la creación y unión a ligas con la inicialización del equipo, su presupuesto y una alineación inicial válida.
+Verifica las RPC con sus migraciones, prueba el ciclo de creación/unión/salida de una liga y la inicialización del equipo; implementa guardado/bloqueo de alineación; alinea las temporadas; y añade pruebas de persistencia y ranking antes de marcar como completadas las fases 6–10.

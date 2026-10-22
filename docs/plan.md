@@ -12,7 +12,7 @@ La solución mantiene separadas la fuente RFEVB, la normalización, el dominio, 
 
 1. **Dominio:** contratos tipados para competición, temporada, equipo, jugador, partido, estadísticas, jornada, fantasy y scoring. TypeScript estricto y contratos del dominio en camelCase.
 2. **Scoring:** `ScoringSystemV1` definido según los datos disponibles, probado e integrado en el cálculo de puntuaciones.
-3. **Persistencia:** esquema Supabase con tablas, relaciones, restricciones, índices, RLS y firmas/permisos de RPC para operaciones fantasy; la lógica funcional de las RPC requiere pruebas aparte.
+3. **Persistencia:** esquema Supabase con tablas, relaciones, restricciones, índices, RLS y RPC para operaciones fantasy.
 4. **Verificación remota:** `npm run test:supabase:schema` verifica el esquema remoto esperado sin modificar la base.
 5. **Ingesta del catálogo:** scripts idempotentes para competiciones, temporadas, equipos, jugadores, jornadas, partidos y estadísticas.
 6. **Resolución de alias:** normalización y resolución de nombres de equipos de roster y actas.
@@ -35,7 +35,7 @@ Las cuatro competiciones de la temporada 2025/26 están incluidas: Superliga Mas
 ## Decisiones vigentes
 
 - Autenticación mediante email y contraseña; perfil con `username`, sin `full_name` ni Google OAuth.
-- Regla de producto prevista: el equipo se llama `Equipo de <username>` y no puede renombrarse; la implementación efectiva debe confirmarse en las migraciones SQL, no incluidas en la instantánea revisada.
+- El equipo se llama automáticamente `Equipo de <username>` y no puede renombrarse.
 - Cada liga privada referencia una sola competición y temporada.
 - RFEVB se conserva como fuente de ingesta; las rutas de producto migradas leen los datos persistidos.
 - Las respuestas de los repositorios utilizan entidades de dominio con propiedades camelCase.
@@ -50,9 +50,45 @@ Las cuatro competiciones de la temporada 2025/26 están incluidas: Superliga Mas
 - Las mutaciones sensibles se validan en el servidor y la base de datos, no solo en la interfaz.
 - No se incluyen pagos, ligas públicas, mercado entre participantes, chat ni automatización del scraper.
 
-## Fase 3A — Verificación remota de Supabase y documentación ✅ (estado registrado)
+## Fase 1 — Dominio tipado
 
-La documentación anterior registra esta fase como completada. La prueba no se ha repetido en esta revisión; el código incluido permite ejecutarla, pero el estado remoto actual no se puede afirmar sin volver a correrla.
+**Estado documental: implementada; cierre sujeto a verificación reproducible.**
+
+- Definir contratos tipados para competición, temporada, equipo, jugador, partido, estadísticas, jornada y entidades fantasy.
+- Normalizar propiedades del dominio a camelCase y posiciones a los valores admitidos por el dominio.
+- Representar explícitamente los estados de partido y los marcadores de set opcionales.
+- Validar con `npm run test:domain` y `npm run build`.
+
+**Criterio de salida:** los contratos representan los datos usados por la aplicación, y las pruebas de dominio y la compilación pasan.
+
+> Nota de trazabilidad: el paquete auditado no contiene una definición histórica independiente de la Fase 1. Esta sección reconstruye el alcance a partir del dominio presente en el código; no afirma que sea la redacción original.
+
+## Fase 2 — Sistema de puntuación V1
+
+**Estado documental: implementado; cierre sujeto a verificación reproducible.**
+
+- Implementar `ScoringSystemV1` (`v1`) a partir de las estadísticas disponibles en RFEVB y del resultado calculado a partir de los sets.
+- Documentar la fórmula y sus exclusiones en `docs/SCORING.md`.
+- Mantener `BasicScoringSystem` (`basic-v1`) únicamente por compatibilidad histórica; no usarlo para resultados actuales.
+- Validar con `npm run test:domain` y comprobar que la API de puntuaciones utiliza `ScoringSystemV1`.
+
+**Criterio de salida:** fórmula documentada, pruebas aprobadas y uso del sistema versionado confirmado en el flujo de producto.
+
+> Nota de trazabilidad: `docs/SCRAPER.md` sí hace referencia explícita a la fórmula de la Fase 2. El detalle histórico completo de sus criterios de aceptación no puede recuperarse del paquete auditado.
+
+## Fase 3 — Modelo persistente de Supabase
+
+**Estado documental: esquema presente; verificación funcional de mutaciones pendiente.**
+
+- Mantener el esquema de catálogo y entidades fantasy, restricciones, claves foráneas, RLS, políticas y RPC.
+- Verificar que las migraciones desplegadas corresponden al modelo documentado.
+- Distinguir las pruebas de esquema (solo lectura) de las pruebas funcionales de escritura y autorización.
+
+**Criterio de salida:** migraciones revisadas, `npm run test:supabase:schema` aprobado y operaciones sensibles probadas en un entorno aislado.
+
+## Fase 3A — Verificación remota de Supabase y documentación
+
+Completada.
 
 - Ejecutar `npm run test:supabase:schema` contra el proyecto remoto.
 - Verificar tablas, columnas, tipos, relaciones, restricciones, índices, RLS, políticas y permisos RPC.
@@ -126,37 +162,41 @@ Las rutas migradas ya no leen RFEVB en vivo. RFEVB se mantiene como fuente para 
 
 **Criterio de salida:** la interfaz consume el catálogo normalizado desde Supabase, los precios están persistidos, y los datos de producto ya no dependen de lecturas en vivo desde RFEVB.
 
-## Fase 6 — Ligas y equipos fantasy — PARCIAL
+## Fase 6 — Ligas y equipos fantasy
 
-La interfaz ya lee las ligas del usuario y llama a `create_private_league`, `join_private_league` y `leave_private_league`. La pantalla fantasy lee el equipo existente mediante `GET /api/fantasy-team`. No obstante, el contenido SQL de las RPC está excluido del paquete revisado y no se puede confirmar solo con este código que crear/unirse inicialice un equipo, presupuesto y alineación de forma atómica. El endpoint devuelve 404 si no encuentra equipo.
+**Estado auditado: parcial; no cerrar hasta superar las pruebas funcionales enumeradas abajo.**
 
-### Pendiente para cerrar la fase
+### Objetivos
 
-1. Inspeccionar las migraciones SQL reales para confirmar qué filas crean `create_private_league` y `join_private_league`.
-2. Verificar que cada miembro recibe un `fantasy_team` asociado a la competición/temporada correcta, con presupuesto y alineación inicial válidos.
-3. Probar atomicidad: si falla la inicialización, no debe quedar una liga o membresía parcial.
-4. Probar el presupuesto inicial y la composición de alineación contra las restricciones reales.
-5. Probar con varios usuarios la sucesión del propietario, la eliminación de ligas vacías y el aislamiento por competición y temporada.
-6. Quitar de la UI los IDs fijos de competición/temporada y derivarlos de la liga seleccionada.
+1. Integrar la creación de ligas privadas.
+2. Permitir la unión a una liga mediante código.
+3. Implementar el listado y la salida de ligas.
+4. Inicializar un equipo fantasy persistente para cada usuario y liga.
+5. Asignar el nombre `Equipo de <username>` y un presupuesto inicial de 100M.
+6. Crear una alineación inicial de siete jugadores que cumpla `1/1/2/2/1`.
+7. Validar que los jugadores pertenecen a la competición y temporada de la liga.
+8. Validar precios, presupuesto y disponibilidad de la selección.
+9. Utilizar operaciones atómicas para impedir registros parciales.
+10. Probar sucesión del propietario, eliminación de ligas vacías y aislamiento por competición y temporada.
 
 **Criterio de salida:** varios usuarios pueden crear o unirse a una liga privada y reciben un equipo fantasy persistente, con presupuesto y selección inicial válidos.
 
-## Fase 7 — Mercado y transferencias — PARCIAL
+## Fase 7 — Mercado y transferencias
 
-`FantasyTeamBuilder` ya invoca la RPC `transfer_player` para las acciones Comprar/Vender y recarga los datos al finalizar. Esto confirma la conexión de UI, no la corrección funcional de todas las reglas: las pruebas disponibles en el paquete solo verifican esquema/permisos, no la lógica transaccional de transferencias.
+**Estado auditado: parcial; existe la RPC `transfer_player` y UI conectada, pero la evidencia del paquete no demuestra todos los criterios de salida.**
 
-### Trabajo pendiente
-
-1. Verificar en las migraciones que `transfer_player` aplica saldo, precio, límite de 14 jugadores, exclusividad del jugador por liga y pertenencia al equipo.
-2. Confirmar que registra correctamente la jornada y la transacción de cada operación.
-3. Probar bloqueo durante el intervalo `startsAt`–`endsAt`.
-4. Probar compras/ventas válidas e inválidas, concurrencia y rechazos sin efectos parciales en una base de pruebas.
+1. Consultar los valores de mercado persistidos por jugador y jornada.
+2. Implementar operaciones de compra y venta mediante RPC.
+3. Validar saldo, máximo de 14 jugadores, exclusividad del jugador por liga y pertenencia en ventas.
+4. Registrar la jornada y la transacción de cada operación.
+5. Bloquear las transferencias durante la jornada según `startsAt` y `endsAt`.
+6. Probar concurrencia, operaciones correctas y rechazos sin efectos parciales.
 
 **Criterio de salida:** las restricciones de presupuesto, límite de plantilla y propiedad se cumplen incluso cuando se omite la UI.
 
-## Fase 8 — Alineaciones y bloqueo — PENDIENTE
+## Fase 8 — Alineaciones y bloqueo
 
-La UI tiene validación local, pero `toggleLineup` sigue mostrando un aviso y no persiste cambios.
+**Estado auditado: pendiente.** `FantasyTeamBuilder.tsx` aún muestra un placeholder para guardar la alineación.
 
 1. Implementar una operación server-side para guardar titulares.
 2. Validar que pertenecen a la plantilla y a la competición y temporada correctas.
@@ -167,9 +207,7 @@ La UI tiene validación local, pero `toggleLineup` sigue mostrando un aviso y no
 
 **Criterio de salida:** no se puede editar la plantilla o alineación durante el periodo bloqueado.
 
-## Fase 9 — Scoring persistente y ranking privado — PENDIENTE
-
-La API calcula `ScoringSystemV1` bajo demanda; no escribe los resultados calculados en las tablas históricas en el flujo actual incluido.
+## Fase 9 — Scoring persistente y ranking privado
 
 1. Calcular puntuaciones por partido y jornada con `ScoringSystemV1`.
 2. Persistir el desglose y `scoringVersion` para conservar resultados históricos.
@@ -179,9 +217,7 @@ La API calcula `ScoringSystemV1` bajo demanda; no escribe los resultados calcula
 
 **Criterio de salida:** importación de estadísticas, cálculo versionado, puntuación del equipo y clasificación privada reproducible.
 
-## Fase 10 — UI persistente — PARCIAL
-
-La UI ya consume algunas lecturas persistidas y las RPC de liga/transferencia, pero la alineación no guarda y faltan flujos de scoring histórico y clasificación.
+## Fase 10 — UI persistente
 
 1. Sustituir progresivamente el estado local de `/fantasy` por operaciones persistentes.
 2. Implementar los flujos de ligas, mercado, plantilla, alineación, jornada, historial y clasificación.
@@ -190,7 +226,7 @@ La UI ya consume algunas lecturas persistidas y las RPC de liga/transferencia, p
 
 **Criterio de salida:** los cambios sobreviven a nuevas sesiones y las acciones no pueden alterar datos de otros usuarios.
 
-## Fase 11 — Integración end-to-end — PENDIENTE
+## Fase 11 — Integración end-to-end
 
 Probar con varios usuarios el ciclo completo:
 
@@ -204,7 +240,7 @@ Probar con varios usuarios el ciclo completo:
 
 Incluir casos de varias competiciones, límites, temporadas incompatibles, RLS y sucesión o eliminación de ligas.
 
-## Fase 12 — Despliegue — PENDIENTE DE EVIDENCIA
+## Fase 12 — Despliegue
 
 - Separar las variables públicas de los secretos.
 - Aplicar migraciones de forma controlada.
@@ -213,11 +249,22 @@ Incluir casos de varias competiciones, límites, temporadas incompatibles, RLS y
 - No publicar claves de servicio ni credenciales PostgreSQL.
 - Verificar las operaciones y permisos antes de habilitar producción.
 
+## Lista de cierre previa a la Fase 8
+
+No marcar las fases 1–7 como cerradas solo porque existan archivos o RPC. Registrar la fecha, el comando ejecutado, el resultado y el entorno de cada verificación.
+
+- [ ] Fase 1: `npm run test:domain` y `npm run build` pasan.
+- [ ] Fase 2: fórmula revisada contra `docs/SCORING.md`; confirmada la utilización de `ScoringSystemV1`.
+- [ ] Fase 3/3A: migraciones SQL revisadas; `npm run test:supabase:schema` pasa; las mutaciones tienen pruebas separadas.
+- [ ] Fase 4: `npm run test:ingestion-mappers` y `npm run test:team-alias-resolver` pasan; una segunda ingesta no duplica registros.
+- [ ] Fase 5: `npm run test:repositories` pasa; endpoints de roster y puntuaciones y datos de temporada se verifican.
+- [ ] Fase 6: pruebas con dos usuarios de crear/unirse/salir, inicialización del equipo, presupuesto, selección inicial, sucesión de propietario, eliminación de liga vacía y aislamiento.
+- [ ] Fase 7: compra y venta, saldo, límite de 14, exclusividad, temporada/competición, jornada bloqueada, concurrencia y rollback probados.
+- [ ] Todos los tests pertinentes y `npm run build` pasan en el mismo commit que se declara listo.
+
+**Seguridad de pruebas:** `npm run test:market-rules` modifica datos persistidos según el código incluido. Ejecutarlo únicamente contra un proyecto de pruebas aislado y revisar la limpieza/restauración antes de usarlo; no ejecutarlo contra producción.
+
 ## Calidad y validación
-
-Prioridad transversal: `/api/fantasy-round-scores` debe comprobar que la temporada indicada pertenece a la competición indicada; ahora resuelve la temporada solo por `rfevb_id`.
-
-No marques una fase como cerrada basándote únicamente en que exista una tabla o una RPC. Para las fases 6–10, añade pruebas de comportamiento sobre un proyecto de prueba (con más de un usuario) y prueba expresamente errores, atomicidad, aislamiento y límites de jornada. La prueba de esquema remota es de solo lectura y no valida esas reglas.
 
 - Inspeccionar el código existente y reutilizar dominio, scraper y servicios.
 - Mantener TypeScript estricto; no utilizar `any` ni deshabilitar comprobaciones para ocultar errores.
@@ -225,4 +272,4 @@ No marques una fase como cerrada basándote únicamente en que exista una tabla 
 - Ejecutar los tests relevantes y `npm run build`; ejecutar lint si está disponible.
 - Usar `npm run test:supabase:schema` como verificación de solo lectura del esquema remoto.
 - No ejecutar pruebas destructivas ni `db reset` en producción.
-- No declarar funcional una garantía que no haya sido probada en backend o base de datos.
+- No declarar funcional una garantía que no haya sido probada en backend o base de datos.\n

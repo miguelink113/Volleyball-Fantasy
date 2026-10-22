@@ -1,104 +1,182 @@
 # Estado del proyecto
 
-**Revisión de documentación:** 2026-10-22
+## Resumen
 
-## Resumen ejecutivo
+Las fases 1–5 están descritas como implementadas en la documentación, pero su cierre debe respaldarse con ejecuciones reproducibles. La auditoría del código incluido identifica las fases 6 y 7 como parciales; la fase 8 sigue pendiente. El proyecto dispone de un dominio tipado, un sistema de puntuación versionado, persistencia en Supabase, ingesta idempotente del catálogo deportivo y repositorios de lectura utilizados por la API y la interfaz fantasy.
 
-El repositorio tiene implementados el dominio tipado, el scraper y la ingesta administrativa, la lectura del catálogo persistido desde Supabase, el scoring calculado bajo demanda, autenticación, gestión básica de ligas privadas y una parte del flujo de plantilla/mercado.
+La ingesta está completada para las cuatro competiciones de la temporada 2025/26.
 
-No debe describirse el juego fantasy como completo: el guardado de alineaciones es un placeholder, el scoring no se persiste en las tablas de resultados en el flujo de aplicación visible y no existe clasificación fantasy funcional en la UI incluida.
-
-### Temporada y datos
-
-El objetivo del plan es un MVP para 2026/27, mientras que el catálogo documentado y el frontend siguen usando en varios puntos la temporada 2025/26 (`competition=152`, `season=186`). Además, `/api/competition-roster` selecciona la temporada marcada `is_current=true`, mientras `/fantasy` solicita las puntuaciones para `season=186` de forma fija. Hay que alinear estos selectores antes de afirmar que la aplicación está preparada para 2026/27.
-
-Los conteos siguientes son los últimos registrados en la documentación anterior; esta revisión no ha consultado la base de datos remota para verificarlos.
-
-| Entidad | Último conteo documentado |
+| Entidad | Registros persistidos |
 | --- | ---: |
 | Equipos | 94 |
 | Jugadores | 1.449 |
 | Partidos | 1.045 |
 | Estadísticas de jugador | 25.262 |
 
-| Competición 2025/26 | ID RFEVB / temporada | Equipos | Jugadores |
-| --- | --- | ---: | ---: |
-| Superliga Masculina | 152 / 186 | 12 | 180 |
-| Superliga Femenina | 151 / 185 | 12 | 167 |
-| Superliga 2 Masculina | 153 / 187 | 34 | 550 |
-| Superliga 2 Femenina | 150 / 183 | 36 | 552 |
-| **Total** | | **94** | **1.449** |
+La tabla `player_market_values` contiene valores de 9M para todos los jugadores en todas las jornadas.
 
-## Implementado en el código incluido
+La Fase 6 (ligas y equipos fantasy) contiene implementación, pero no debe considerarse cerrada hasta validar sus flujos completos con pruebas funcionales.
 
-### Dominio y puntuación
+## Estado de cierre tras la auditoría
 
-- Contratos tipados para competiciones, temporadas, equipos, jugadores, partidos, jornadas y estadísticas.
-- `ScoringSystemV1` (`v1`) y un scoring histórico `basic-v1`; el código de producto usa `ScoringSystemV1`.
-- Tests ejecutables de dominio con `npm run test:domain`.
-- El scoring se calcula bajo demanda en `/api/fantasy-round-scores`. La ruta devuelve `score`, `matchesPlayed` y `scoringVersion`, pero no persiste el resultado ni incluye `breakdown` en su respuesta actual.
+| Fase | Estado documental | Qué falta para cerrarla |
+| --- | --- | --- |
+| 1. Dominio tipado | Implementada; verificación por repetir | `npm run test:domain`, `npm run build` y criterios formalizados en el plan. |
+| 2. Scoring V1 | Implementado; verificación por repetir | Revisar fórmula documentada y confirmar el uso de `ScoringSystemV1`. |
+| 3. Modelo Supabase | Esquema presente; cierre funcional no demostrado | Revisar migraciones y probar mutaciones/autorización por separado del test de esquema. |
+| 3A. Verificación remota | Marcada anteriormente como completada | Repetir si cambió el esquema; guardar evidencia del resultado. |
+| 4. Ingesta | Implementada; verificación por repetir | Tests de mappers/alias e idempotencia real de segunda ejecución. |
+| 5. Catálogo persistente | Marcada como completada para 2025/26 | Revalidar recuentos, repositorios, endpoints y alcance de temporada 2026/27. |
+| 6. Ligas y equipos | Parcial | Pruebas multiusuario, inicialización, atomicidad, sucesión y aislamiento. |
+| 7. Mercado | Parcial | Cubrir compra/venta, saldo, límites, bloqueo, concurrencia y rollback. |
+| 8. Alineaciones | Pendiente | Sustituir el placeholder por persistencia server-side y probar bloqueo temporal. |
+
+Los estados anteriores describen lo que puede inferirse del código y de la documentación empaquetados; no equivalen a haber ejecutado ahora los comandos. Esta auditoría no pudo ejecutar las pruebas ni acceder a la base de datos real.
+
+## Implementado
+
+### Dominio y scoring
+
+- Contratos tipados para competiciones, temporadas, equipos, jugadores, partidos, estadísticas, jornadas, fantasy y puntuación.
+- Posiciones internas normalizadas.
+- Estados explícitos de partido y sets opcionales (`number | null` en TypeScript).
+- `ScoringSystemV1` basado en los datos disponibles de RFEVB, versionado y documentado en `docs/SCORING.md`.
+- Tests de dominio mediante `npm run test:domain`.
 
 ### Autenticación y perfiles
 
-- Integración con Supabase Auth por email y contraseña.
-- `profiles.username` se usa como identificador de perfil en la interfaz; el código documenta que no hay campo `full_name`.
-- `lib/supabase/client.ts`, `server.ts`, `auth.ts`, `middleware.ts` y `hooks/useAuth.ts` implementan la integración de sesión.
+- Supabase Auth con email y contraseña.
+- Perfil con `username` único; no existe `full_name`.
+- Trigger de creación de perfil y política de lectura propia definidos en las migraciones.
 
-### Catálogo, ingesta y repositorios
+### Esquema Supabase
 
-- Scripts de ingesta: `scripts/ingest/ingest-roster.ts`, `ingest-matches.ts` e `ingest-market-values.ts`.
-- Mappers explícitos para equipos y jugadores, validación estricta de `rfevb_id` y `TeamAliasResolver` para alias de equipos.
-- Repositorios para equipos, jugadores, jornadas, partidos, estadísticas y valores de mercado.
-- Los procesos de ingesta son manuales; no hay un planificador automático incluido en el código empaquetado.
-- El script de mercado crea valores por jugador y jornada con precio fijo (9M por defecto), y hace upsert por `player_id,round_id`.
+- Migración `supabase/migrations/20260925190000_create_fantasy_schema.sql`.
+- Migración `supabase/migrations/20261008120000_require_rfevb_ids.sql`.
+- Migración de alias de equipos `supabase/migrations/20261013230000_create_team_source_aliases.sql`.
+- Tablas para catálogo deportivo, jornadas, valores de mercado, ligas, membresías, equipos fantasy, plantillas, alineaciones, puntuaciones y transacciones.
+- Claves foráneas y restricciones para aislar competición y temporada y evitar la propiedad activa duplicada de un jugador dentro de una liga.
+- RLS, políticas de lectura y RPC para operaciones fantasy.
+- Reglas de transferencia de propiedad de liga al miembro restante más antiguo y eliminación de la liga cuando sale su único miembro.
 
-### APIs
+### Verificación remota del esquema
 
-- `/api/competition-roster`: lee competición, temporada actual, equipos, jugadores y valores de mercado desde Supabase.
-- `/api/fantasy-round-scores`: lee jornadas, partidos y estadísticas persistidas y calcula `ScoringSystemV1` bajo demanda. La implementación resuelve la temporada solo por `season.rfevb_id` y no valida que pertenezca a la competición indicada en el parámetro `competition`.
-- `/api/fantasy-team`: GET para leer equipo fantasy, jugadores activos y jugadores de la primera alineación encontrada.
-- `/api/matches`, `/api/match-statistics` y `/api/competition-statistics`: continúan haciendo extracción en directo de RFEVB; no todas las rutas HTTP son ya APIs de datos persistidos.
+- `npm run test:supabase:schema` ejecutado con éxito contra el proyecto Supabase remoto.
+- Verificación de tablas, columnas, tipos, RLS, claves foráneas compuestas, constraints, índices, políticas de lectura, permisos RPC y trigger de perfil.
+- Verificación de `rfevb_id NOT NULL` en las tablas de catálogo correspondientes.
+- Verificación de la relación y política de lectura de `team_source_aliases`.
+- Sin discrepancias conocidas entre la migración aplicada y el modelo documentado.
 
-### Ligas y equipo fantasy — parcialmente implementado
+La prueba es de solo lectura y no sustituye las pruebas funcionales de escritura.
 
-- `components/dashboard/LeagueManager.tsx` carga las ligas del usuario desde `private_league_members` y llama a las RPC `create_private_league`, `join_private_league` y `leave_private_league`.
-- Crear/unirse redirige a `/fantasy?league_id=...`.
-- `FantasyTeamBuilder` obtiene el equipo mediante `/api/fantasy-team` y usa Supabase para consultar la jornada seleccionada y llamar a `transfer_player`.
-- Las acciones de compra/venta recargan el equipo tras la RPC.
-- La lectura depende de que ya exista un `fantasy_teams` para la liga; el endpoint devuelve 404 si no lo encuentra.
-- No se puede certificar desde este paquete que las RPC creen el equipo, el presupuesto y la alineación inicial de forma atómica: el contenido SQL de `supabase/migrations/` fue excluido del archivo empaquetado y la prueba de esquema no verifica la lógica de negocio.
+### Ingesta idempotente del catálogo
 
-### Alineaciones — incompleto
+- Cliente administrativo server-only en `lib/supabase/admin.server.ts`.
+- Mappers puros `mapTeam` y `mapPlayer` en `lib/services/ingestion/`.
+- Validación estricta de `rfevb_id`.
+- Script `scripts/ingest/ingest-roster.ts`.
+- Upsert de competiciones, temporadas, equipos y jugadores.
+- Registro de aliases de equipos procedentes del roster.
+- Verificación de conteos contra RFEVB.
+- Tests de mappers y del cliente administrativo.
 
-- Existen tablas y tipos de dominio para `lineups` y `lineup_players` y funciones de validación de plantilla/alineación en `fantasy-team.service.ts`.
-- En `FantasyTeamBuilder.tsx`, `toggleLineup` solo muestra `alert("Guardar alineación se conectará en la Fase 8")`. No guarda ni elimina jugadores de la alineación.
-- La API `/api/fantasy-team` lee la primera alineación encontrada, no ofrece un endpoint de guardado y no distingue la alineación de la jornada seleccionada.
+### Resolución de alias de equipos
 
-## Esquema y pruebas
+- Tabla `team_source_aliases` con RLS de solo lectura para usuarios autenticados.
+- `TeamAliasResolver` en `lib/services/ingestion/team-alias-resolver.ts`.
+- Normalización de nombres sin diacríticos ni apóstrofos y con tratamiento de stopwords societarias.
+- Resolución por coincidencia exacta o por subconjunto de tokens, con controles para evitar asignaciones ambiguas.
+- Integración con el mapeo de partidos.
+- Diagnóstico de las cuatro competiciones sin colisiones conocidas; los partidos de playoff cuyos equipos no están en el roster regular se excluyen de la ingesta.
 
-- `scripts/tests/test-supabase-schema.ts` espera 20 tablas y comprueba columnas, algunos tipos/nullabilidad, restricciones, relaciones, índices, RLS, políticas y privilegios de RPC en una transacción `READ ONLY`.
-- La documentación previa informa de una ejecución exitosa de esa prueba contra Supabase remoto. No se ha repetido en esta revisión, porque la instantánea no aporta credenciales ni un resultado de ejecución.
-- Una prueba de esquema no comprueba que creación/unión/salida/transferencias funcionen en escenarios reales ni que la lógica RPC sea atómica.
-- Los archivos SQL de migraciones están explícitamente excluidos de `repomix-output.xml`; por tanto, no es posible comparar aquí el SQL de definición de RPC con el test de esquema.
-- Los conteos de filas de catálogo son valores informados por documentación, no comprobados por `test:supabase:schema`.
+### Catálogo deportivo persistido
 
-## Estado del plan por fase
+| Competición | ID RFEVB | Equipos | Jugadores |
+| --- | --- | ---: | ---: |
+| Superliga Masculina 25/26 | 152 / 186 | 12 | 180 |
+| Superliga Femenina 25/26 | 151 / 185 | 12 | 167 |
+| Superliga 2 Masculina 25/26 | 153 / 187 | 34 | 550 |
+| Superliga 2 Femenina 25/26 | 150 / 183 | 36 | 552 |
+| **Total** | | **94** | **1.449** |
 
-| Fase | Estado basado en el código incluido | Observaciones |
-| --- | --- | --- |
-| 1–5: dominio, scoring, persistencia de catálogo, ingesta y lectura | Implementado en gran parte | La documentación previa registra la ingesta y la prueba remota; los conteos deben revalidarse. |
-| 6: ligas y equipo inicial | Parcial | UI llama a RPC de crear/unirse/salir y existe lectura del equipo; inicialización transaccional no verificable sin las migraciones. |
-| 7: mercado y transferencias | Parcial | La UI llama a `transfer_player`; falta evidencia de tests funcionales de negocio en la instantánea. |
-| 8: edición/bloqueo de alineaciones | Pendiente | El handler actual es un placeholder. |
-| 9: puntuación persistida y clasificación privada | Pendiente | El scoring de jugador se calcula al consultar la API; no se persiste resultado fantasy ni se muestra clasificación funcional. |
-| 10: UI persistente completa | Parcial | Algunas lecturas y operaciones pasan por Supabase/RPC, pero la alineación no guarda cambios y faltan flujos. |
-| 11: end-to-end | Pendiente de evidencia | No se incluyó una suite E2E en el árbol empaquetado. |
-| 12: despliegue | Pendiente de evidencia | El paquete no documenta un despliegue verificado. |
+### Fase 5.1 — Ingesta de partidos y estadísticas ✅
 
-## Prioridades inmediatas
+El script `scripts/ingest/ingest-matches.ts` ingiere de forma idempotente las jornadas, los partidos y las estadísticas de jugador.
 
-1. Actualizar el flujo de temporada: validar que `season` pertenece a `competition` en `/api/fantasy-round-scores`, quitar o centralizar los IDs fijos `152` y `186` y asegurar que roster, ligas y puntuaciones usan la misma competición/temporada.
-2. Revisar las migraciones reales y probar creación/unión/salida de liga, inicialización del equipo y `transfer_player` con dos usuarios de prueba.
-3. Implementar el guardado de alineaciones, la validación server-side y el bloqueo por intervalo de la jornada.
-4. Persistir el scoring y construir la puntuación/clasificación privada si sigue dentro del MVP.
-5. Revalidar los conteos de Supabase y ejecutar los tests declarados en `package.json` antes de dar por cerrada cada fase.
+- Las jornadas se calculan a partir de las fechas reales de los partidos.
+- Los intervalos se convierten de Europe/Madrid a UTC, teniendo en cuenta el horario de verano.
+- Los jugadores de las actas se cruzan con el roster primero por nombre dentro del equipo y, como alternativa, por dorsal.
+- La posición del jugador procede del roster.
+- Los aliases de equipos encontrados en las actas se registran sin sobrescribir los aliases existentes del roster.
+
+### Fase 5.2 — Sembrado de valores de mercado ✅
+
+- Tabla `player_market_values` poblada con un valor de 9M para todos los jugadores y todas las jornadas.
+- Los valores iniciales se consultan desde Supabase.
+- La interfaz muestra los precios obtenidos del mercado persistido.
+
+### Fase 5.3 — Repositorios de lectura ✅
+
+Se ha creado `lib/repositories/` con acceso tipado al catálogo persistido.
+
+La capa incluye repositorios para:
+
+- Equipos.
+- Jugadores.
+- Jornadas.
+- Partidos.
+- Estadísticas de jugador por partido.
+- Valores de mercado.
+
+Los repositorios encapsulan las consultas a Supabase y convierten los registros persistidos en entidades del dominio con propiedades camelCase. La interfaz de producto no necesita conocer la estructura SQL ni construir entidades a partir de DTO del scraper.
+
+Existe un test de integración para validar la lectura a través de esta capa.
+
+### Fase 5.4 — Migración de API y frontend ✅
+
+Las rutas migradas consumen los repositorios y leen los datos deportivos desde Supabase.
+
+- `/api/competition-roster` obtiene equipos y jugadores del catálogo persistido.
+- `/api/fantasy-round-scores` obtiene las estadísticas necesarias y calcula las puntuaciones de todas las jornadas mediante `ScoringSystemV1`.
+- La página `/fantasy` utiliza UUIDs de Supabase para identificar equipos y jugadores.
+- La interfaz muestra los precios reales del mercado persistido.
+- Las puntuaciones de todas las jornadas se obtienen en una sola petición, evitando peticiones sucesivas y parpadeos de la interfaz.
+
+RFEVB sigue siendo la fuente de ingesta, pero no es la fuente de lectura en vivo de estas rutas de producto.
+
+## Verificación de la Fase 5
+
+Antes de cerrar la fase, comprobar:
+
+- [ ] Las cuatro competiciones mantienen sus conteos esperados.
+- [ ] Las tablas de partidos y estadísticas contienen los datos ingeridos.
+- [ ] Todos los jugadores tienen valores de mercado para las jornadas correspondientes.
+- [ ] Los repositorios devuelven entidades de dominio con propiedades camelCase.
+- [ ] El test de integración de repositorios pasa.
+- [ ] `/api/competition-roster` devuelve datos persistidos.
+- [ ] `/api/fantasy-round-scores` calcula las puntuaciones de todas las jornadas.
+- [ ] `/fantasy` utiliza UUIDs de Supabase y muestra los valores de mercado correctos.
+- [ ] Los tests pertinentes y `npm run build` pasan.
+
+Los conteos descritos corresponden al estado de la base de datos comunicado para esta fase. Las comprobaciones deben repetirse si se modifica la ingesta o el esquema antes del commit.
+
+## Pendiente de cierre: Fase 6 — Ligas y equipos fantasy
+
+Objetivos:
+
+1. Integrar creación, unión por código, listado y salida de ligas mediante RPC.
+2. Inicializar un equipo fantasy persistente por usuario y liga.
+3. Asignar el nombre inicial a partir del `username` y un presupuesto de 100M.
+4. Permitir una alineación inicial de siete jugadores con composición `1/1/2/2/1`.
+5. Validar precios, presupuesto y disponibilidad de jugadores.
+6. Garantizar operaciones atómicas y ausencia de filas parciales cuando no exista una selección válida.
+7. Probar la sucesión del propietario, la eliminación de ligas vacías y el aislamiento por competición y temporada.
+
+## Deuda técnica conocida
+
+- Persistencia de puntuaciones fantasy y clasificación privada.
+- Operaciones de mercado y transferencias persistentes.
+- Guardado y bloqueo de alineaciones.
+- Revisión futura de estadísticas de acta que no pudieron cruzarse unívocamente con jugadores del roster.
+
+Estas tareas no impiden considerar completada la Fase 5, cuyo alcance es el catálogo persistido y su consumo por las rutas migradas.\n

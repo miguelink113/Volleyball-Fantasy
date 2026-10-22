@@ -15,6 +15,7 @@
     "test:supabase:admin": "tsx scripts/tests/test-supabase-admin.ts",
     "test:ingestion-mappers": "tsx scripts/tests/test-ingestion-mappers.ts",
     "test:match-date-parser": "tsx scripts/tests/test-match-date-parser.ts",
+    "test:market-rules": "tsx scripts/tests/test-market-rules.ts",
     "show:match-scores": "tsx scripts/tools/show-match-scores.ts",
     "ingest:roster": "tsx scripts/ingest/ingest-roster.ts",
     "ingest:market-values": "tsx scripts/ingest/ingest-market-values.ts",

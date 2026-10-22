@@ -12,9 +12,10 @@ export async function GET(request: NextRequest) {
         const supabase = await createClient();
 
         // 1. Obtener el equipo fantasy del usuario para esta liga
+        // AÑADIDO: season_id y competition_id en el select
         const { data: team, error: teamError } = await supabase
             .from("fantasy_teams")
-            .select("id, name, budget")
+            .select("id, name, budget, season_id")
             .eq("league_id", leagueId)
             .single();
 
@@ -55,6 +56,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
             success: true,
             team,
+            season_id: team.season_id, // Ahora TypeScript ya no se quejará
             activePlayerIds,
             lineupPlayerIds,
         });

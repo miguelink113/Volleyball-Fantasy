@@ -1,6 +1,13 @@
 import { FantasyTeamBuilder } from "@/components/fantasy/FantasyTeamBuilder";
 
-export default function FantasyPage() {
+export default async function FantasyPage({
+                                              searchParams,
+                                          }: {
+    searchParams: Promise<{ league_id?: string }>;
+}) {
+    const params = await searchParams;
+    const leagueId = params.league_id;
+
     return (
         <main className="min-h-screen bg-slate-100 px-4 py-10 text-slate-900">
             <div className="mx-auto max-w-7xl">
@@ -12,7 +19,13 @@ export default function FantasyPage() {
                     </p>
                 </header>
 
-                <FantasyTeamBuilder />
+                {leagueId ? (
+                    <FantasyTeamBuilder leagueId={leagueId} />
+                ) : (
+                    <div className="bg-white p-6 rounded-lg text-center text-red-600 shadow-sm">
+                        No se ha seleccionado ninguna liga. Ve al Dashboard y crea o únete a una.
+                    </div>
+                )}
             </div>
         </main>
     );

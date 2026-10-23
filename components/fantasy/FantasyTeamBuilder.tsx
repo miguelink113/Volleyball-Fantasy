@@ -16,8 +16,6 @@ const rounds = [
     { number: 24, label: "Semifinales" },
     { number: 25, label: "Final" },
 ];
-const COMPETITION_ID = 152;
-const SEASON_ID = 186;
 
 function displayPosition(position: PlayerPosition): string {
     return position === "unknown" ? "DESCONOCIDO" : position;
@@ -34,12 +32,14 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [lineupIds, setLineupIds] = useState<string[]>([]);
 
-    // Estados de equipo y mercado
+    // Contexto dinámico de la liga
     const [teamId, setTeamId] = useState<string>("");
     const [seasonUuid, setSeasonUuid] = useState<string>("");
+    const [competitionRfevbId, setCompetitionRfevbId] = useState<number | null>(null);
+    const [seasonRfevbId, setSeasonRfevbId] = useState<number | null>(null);
+
     const [budget, setBudget] = useState<number>(0);
     const [teamName, setTeamName] = useState<string>("");
-
     const [selectedRound, setSelectedRound] = useState<number>(1);
     const [loading, setLoading] = useState(true);
     const [transferLoading, setTransferLoading] = useState(false);
@@ -50,16 +50,27 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
     const loadData = async () => {
         setLoading(true);
         try {
-            const [rosterRes, teamRes] = await Promise.all([
-                fetch(`/api/competition-roster?competition=${COMPETITION_ID}`),
-                fetch(`/api/fantasy-team?league_id=${leagueId}`)
-            ]);
-
-            const rosterPayload = await rosterRes.json();
+            // 1. Primero obtenemos el equipo para saber a qué competición y temporada pertenece
+            const teamRes = await fetch(`/api/fantasy-team?league_id=${leagueId}`);
             const teamPayload = await teamRes.json();
 
-            if (!rosterRes.ok || !rosterPayload.success) throw new Error("Error cargando el mercado");
             if (!teamRes.ok || !teamPayload.success) throw new Error(teamPayload.error || "Error cargando tu equipo");
+
+            // 2. Guardamos el contexto dinámico
+            setTeamId(teamPayload.team.id);
+            setSeasonUuid(teamPayload.season_id);
+            setCompetitionRfevbId(teamPayload.competition_rfevb_id);
+            setSeasonRfevbId(teamPayload.season_rfevb_id);
+            setSelectedIds(teamPayload.activePlayerIds);
+            setLineupIds(teamPayload.lineupPlayerIds);
+            setBudget(teamPayload.team.budget);
+            setTeamName(teamPayload.team.name);
+
+            // 3. Ahora que sabemos la competición, cargamos el catálogo (mercado) de ESA competición
+            const rosterRes = await fetch(`/api/competition-roster?competition=${teamPayload.competition_rfevb_id}`);
+            const rosterPayload = await rosterRes.json();
+
+            if (!rosterRes.ok || !rosterPayload.success) throw new Error("Error cargando el mercado");
 
             const teamsById = new Map(rosterPayload.teams.map((t: any) => [t.id, t.name]));
             const realPlayers: FantasyDemoPlayer[] = rosterPayload.players.map((p: any) => ({
@@ -73,12 +84,6 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
             }));
 
             setCatalogPlayers(realPlayers);
-            setSelectedIds(teamPayload.activePlayerIds);
-            setLineupIds(teamPayload.lineupPlayerIds);
-            setBudget(teamPayload.team.budget);
-            setTeamName(teamPayload.team.name);
-            setTeamId(teamPayload.team.id);
-            setSeasonUuid(teamPayload.season_id); // Necesitamos el season_id para la RPC
         } catch (err) {
             setError(err instanceof Error ? err.message : "Error desconocido");
         } finally {
@@ -91,11 +96,12 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [leagueId]);
 
+    // Cargar puntuaciones en cuanto tengamos el ID dinámico de la competición y temporada
     useEffect(() => {
-        if (catalogPlayers.length === 0) return;
+        if (!competitionRfevbId || !seasonRfevbId) return;
 
         setScoresLoading(true);
-        fetch(`/api/fantasy-round-scores?competition=${COMPETITION_ID}&season=${SEASON_ID}`)
+        fetch(`/api/fantasy-round-scores?competition=${competitionRfevbId}&season=${seasonRfevbId}`)
             .then(async (res) => {
                 const payload = await res.json();
                 if (!res.ok || !payload.success) throw new Error(payload.error);
@@ -111,7 +117,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
             })
             .catch((err) => setError(err.message))
             .finally(() => setScoresLoading(false));
-    }, [catalogPlayers]);
+    }, [competitionRfevbId, seasonRfevbId]);
 
     // ─── TRANSFERENCIAS (Fase 7) ───
     const handleTransfer = async (playerId: string, type: "BUY" | "SELL") => {
@@ -119,7 +125,6 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
         setTransferLoading(true);
         setError(null);
 
-        // Buscamos el UUID de la jornada seleccionada para registrar la transacción
         const { data: roundData } = await supabase
             .from("rounds")
             .select("id")
@@ -146,7 +151,6 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
             return;
         }
 
-        // Si la compra/venta es exitosa, recargamos los datos reales de la BD
         await loadData();
         setTransferLoading(false);
     };

@@ -11,19 +11,35 @@ export async function GET(request: NextRequest) {
     try {
         const supabase = await createClient();
 
-        // 1. Obtener el equipo fantasy del usuario para esta liga
-        // AÑADIDO: season_id y competition_id en el select
+        // 1. Obtener el usuario autenticado
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError || !user) {
+            return NextResponse.json({ success: false, error: "No autenticado" }, { status: 401 });
+        }
+
+        // 2. Obtener el equipo del usuario para esta liga (filtrando por user_id)
         const { data: team, error: teamError } = await supabase
             .from("fantasy_teams")
-            .select("id, name, budget, season_id")
+            .select(`
+                id, name, budget, season_id,
+                seasons!inner (
+                    rfevb_id,
+                    competitions!inner ( rfevb_id )
+                )
+            `)
             .eq("league_id", leagueId)
+            .eq("user_id", user.id) // <--- CRÍTICO: Solo el equipo de ESTE usuario
             .single();
 
         if (teamError || !team) {
             return NextResponse.json({ success: false, error: "Equipo no encontrado en esta liga" }, { status: 404 });
         }
 
-        // 2. Obtener los jugadores activos de la plantilla
+        // Extraemos los IDs de RFEVB de la consulta anidada
+        const seasonRfevbId = (team.seasons as any).rfevb_id;
+        const competitionRfevbId = (team.seasons as any).competitions.rfevb_id;
+
+        // 3. Obtener los jugadores activos de la plantilla
         const { data: teamPlayers, error: playersError } = await supabase
             .from("fantasy_team_players")
             .select("player_id")
@@ -33,7 +49,7 @@ export async function GET(request: NextRequest) {
         if (playersError) throw playersError;
         const activePlayerIds = teamPlayers.map((p) => p.player_id);
 
-        // 3. Obtener la alineación actual (la primera que se creó)
+        // 4. Obtener la alineación actual
         const { data: lineup, error: lineupError } = await supabase
             .from("lineups")
             .select("id")
@@ -55,8 +71,14 @@ export async function GET(request: NextRequest) {
 
         return NextResponse.json({
             success: true,
-            team,
-            season_id: team.season_id, // Ahora TypeScript ya no se quejará
+            team: {
+                id: team.id,
+                name: team.name,
+                budget: team.budget,
+            },
+            season_id: team.season_id,
+            competition_rfevb_id: competitionRfevbId,
+            season_rfevb_id: seasonRfevbId,
             activePlayerIds,
             lineupPlayerIds,
         });

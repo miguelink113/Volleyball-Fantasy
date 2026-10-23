@@ -26,16 +26,19 @@ export async function GET(request: NextRequest) {
     try {
         const supabase = createAdminClient();
 
+        // ARREGLO: Buscamos la competición y validamos que la temporada le pertenece
+        const { data: comp } = await supabase.from("competitions").select("id").eq("rfevb_id", String(competitionId)).single();
+        if (!comp) throw new Error("Competición no encontrada");
+
         const { data: seasonData, error: seasonError } = await supabase
             .from("seasons")
             .select("id")
+            .eq("competition_id", comp.id)
             .eq("rfevb_id", String(seasonId))
-            .maybeSingle();
+            .single();
 
-        if (seasonError) throw seasonError;
-        if (!seasonData) throw new Error("Temporada no encontrada");
+        if (seasonError || !seasonData) throw new Error("La temporada no pertenece a esta competición o no existe");
 
-        // Si nos pasan 'round', calculamos solo esa. Si no, calculamos todas.
         let rounds = [];
         if (roundNumber) {
             const r = await getRoundBySeasonAndNumber(supabase, seasonData.id, roundNumber);
@@ -47,7 +50,6 @@ export async function GET(request: NextRequest) {
         const scoringSystem = new ScoringSystemV1();
         const scoresResult = [];
 
-        // Iteramos por cada jornada
         for (const round of rounds) {
             const matches = await getMatchesByRoundId(supabase, round.id);
             const matchIds = matches.map((m) => m.id);
@@ -76,12 +78,12 @@ export async function GET(request: NextRequest) {
                 scoresMap.set(stats.playerId, current);
             }
 
-            // Guardamos el resultado de esta jornada
             for (const [playerId, scoreData] of scoresMap.entries()) {
                 scoresResult.push({
                     playerId,
                     roundNumber: round.round_number,
                     score: scoreData.score,
+                    breakdown: scoreData.breakdown, // AÑADIDO: La auditoría pedía el desglose
                     matchesPlayed: scoreData.matchesPlayed,
                     scoringVersion: scoringSystem.version,
                 });

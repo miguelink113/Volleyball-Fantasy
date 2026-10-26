@@ -18,6 +18,7 @@
     "test:market-rules": "tsx scripts/tests/test-market-rules.ts",
     "test:league-seeding": "tsx scripts/tests/test-league-seeding.ts",
     "test:repositories": "tsx scripts/tests/test-repositories.ts",
+    "test:lineup-rules": "tsx scripts/tests/test-lineup-rules.ts",
     "show:match-scores": "tsx scripts/tools/show-match-scores.ts",
     "ingest:roster": "tsx scripts/ingest/ingest-roster.ts",
     "ingest:market-values": "tsx scripts/ingest/ingest-market-values.ts",

@@ -162,7 +162,61 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
     };
 
     // Placeholder para la Fase 8 (Alineación)
-    const toggleLineup = (playerId: string) => alert("Guardar alineación se conectará en la Fase 8");
+    const toggleLineup = (playerId: string) => {
+        if (lineupIds.includes(playerId)) {
+            setLineupIds(lineupIds.filter(id => id !== playerId));
+        } else {
+            if (lineupIds.length >= 7) {
+                alert("Solo puedes seleccionar 7 titulares. Quita a alguien primero.");
+                return;
+            }
+            setLineupIds([...lineupIds, playerId]);
+        }
+    };
+
+    const handleSaveLineup = async () => {
+        if (!teamId || !seasonUuid) return;
+
+        // Validación rápida en cliente antes de llamar al servidor
+        const validation = validateLineup(lineupIds, rosterPlayers);
+        if (!validation.valid) {
+            setError("La alineación no es válida. Revisa los errores antes de guardar.");
+            return;
+        }
+
+        setTransferLoading(true);
+        setError(null);
+
+        // Buscamos el UUID de la jornada seleccionada
+        const { data: roundData, error: roundError } = await supabase
+            .from("rounds")
+            .select("id")
+            .eq("season_id", seasonUuid)
+            .eq("round_number", selectedRound)
+            .single();
+
+        if (roundError || !roundData) {
+            setError("No se encontró la jornada seleccionada.");
+            setTransferLoading(false);
+            return;
+        }
+
+        // Llamada a la RPC
+        const { error: rpcError } = await supabase.rpc("save_lineup", {
+            p_fantasy_team_id: teamId,
+            p_round_id: roundData.id,
+            p_player_ids: lineupIds
+        });
+
+        if (rpcError) {
+            setError(rpcError.message);
+            setTransferLoading(false);
+            return;
+        }
+
+        alert("✅ Alineación guardada correctamente");
+        setTransferLoading(false);
+    };
 
     const playerMap = useMemo(() => new Map(catalogPlayers.map((p) => [p.id, p])), [catalogPlayers]);
     const rosterPlayers = useMemo(() => selectedIds.flatMap((id) => playerMap.get(id) ? [playerMap.get(id)!] : []), [playerMap, selectedIds]);
@@ -239,6 +293,16 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                                 </div>
                             ))}
                         </div>
+
+                        {/* NUEVO BOTÓN DE GUARDAR */}
+                        <button
+                            onClick={handleSaveLineup}
+                            disabled={transferLoading || lineupIds.length !== 7}
+                            className="mt-4 w-full rounded bg-slate-900 px-4 py-2 font-bold text-white transition hover:bg-slate-800 disabled:opacity-50"
+                        >
+                            {transferLoading ? "Guardando..." : "Guardar Alineación"}
+                        </button>
+
                         {lineupValidation.errors.length > 0 && (
                             <div className="mt-4 rounded bg-red-50 p-3 text-sm text-red-700">
                                 {lineupValidation.errors.map((error) => <p key={error}>{error}</p>)}

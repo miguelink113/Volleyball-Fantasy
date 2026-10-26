@@ -17,27 +17,31 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ success: false, error: "No autenticado" }, { status: 401 });
         }
 
-        // 2. Obtener el equipo del usuario para esta liga (filtrando por user_id)
+        // 2. Obtener el equipo del usuario para esta liga
+        // ¡OJO! He quitado el comentario de dentro de la consulta SQL
         const { data: team, error: teamError } = await supabase
             .from("fantasy_teams")
             .select(`
                 id, name, budget, season_id,
                 seasons!inner (
                     rfevb_id,
+                    name,
                     competitions!inner ( rfevb_id )
                 )
             `)
             .eq("league_id", leagueId)
-            .eq("user_id", user.id) // <--- CRÍTICO: Solo el equipo de ESTE usuario
+            .eq("user_id", user.id)
             .single();
 
         if (teamError || !team) {
             return NextResponse.json({ success: false, error: "Equipo no encontrado en esta liga" }, { status: 404 });
         }
 
-        // Extraemos los IDs de RFEVB de la consulta anidada
-        const seasonRfevbId = (team.seasons as any).rfevb_id;
-        const competitionRfevbId = (team.seasons as any).competitions.rfevb_id;
+        // Extraemos los IDs de RFEVB y el nombre de la temporada de la consulta anidada
+        const seasonData = team.seasons as any;
+        const seasonRfevbId = seasonData.rfevb_id;
+        const competitionRfevbId = seasonData.competitions.rfevb_id;
+        const seasonName = seasonData.name; // <-- AQUÍ SE DECLARA LA VARIABLE
 
         // 3. Obtener los jugadores activos de la plantilla
         const { data: teamPlayers, error: playersError } = await supabase
@@ -77,6 +81,7 @@ export async function GET(request: NextRequest) {
                 budget: team.budget,
             },
             season_id: team.season_id,
+            season_name: seasonName,
             competition_rfevb_id: competitionRfevbId,
             season_rfevb_id: seasonRfevbId,
             activePlayerIds,

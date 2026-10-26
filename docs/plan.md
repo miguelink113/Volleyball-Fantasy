@@ -8,7 +8,7 @@ La solución mantiene separadas la fuente RFEVB, la normalización, el dominio, 
 
 ## Estado
 
-### Completado (Fases 1 a 7)
+### Completado (Fases 1 a 8)
 
 1. **Dominio:** contratos tipados para competición, temporada, equipo, jugador, partido, estadísticas, jornada, fantasy y scoring. TypeScript estricto y contratos del dominio en camelCase.
 2. **Scoring:** `ScoringSystemV1` definido según los datos disponibles, probado e integrado en el cálculo de puntuaciones.
@@ -22,6 +22,7 @@ La solución mantiene separadas la fuente RFEVB, la normalización, el dominio, 
 10. **Frontend fantasy:** `/fantasy` utiliza UUIDs de Supabase, precios persistidos y una única petición para las puntuaciones.
 11. **Ligas y equipos (Fase 6):** RPCs de creación, unión y salida; inicialización de equipo y presupuesto.
 12. **Mercado y transferencias (Fase 7):** compra/venta con validación de límites y bloqueo por jornada.
+13. **Alineaciones (Fase 8):** RPC `save_lineup` con validación de composición y bloqueo temporal.
 
 ### Estado del catálogo persistido
 
@@ -52,7 +53,7 @@ Las cuatro competiciones de la temporada 2025/26 están incluidas.
 - Las mutaciones sensibles se validan en el servidor y la base de datos, no solo en la interfaz.
 - No se incluyen pagos, ligas públicas, mercado entre participantes, chat ni automatización del scraper.
 
-## Fases 1 a 7 — Completadas ✅
+## Fases 1 a 8 — Completadas ✅
 
 *(Los detalles de implementación se pueden consultar en `PROJECT_STATUS.md` y en las migraciones de `supabase/migrations/`)*
 
@@ -63,21 +64,11 @@ Las cuatro competiciones de la temporada 2025/26 están incluidas.
 - **Fase 5 — Catálogo persistente:** repositorios y migración de APIs y UI.
 - **Fase 6 — Ligas y equipos fantasy:** RPCs probadas y flujos funcionales.
 - **Fase 7 — Mercado y transferencias:** reglas de negocio validadas en base de datos.
-
-## Fase 8 — Alineaciones y bloqueo
-
-**Estado: Pendiente.** `FantasyTeamBuilder.tsx` aún muestra un placeholder para guardar la alineación.
-
-1. Implementar una operación server-side (RPC `save_lineup`) para guardar titulares.
-2. Validar que pertenecen a la plantilla y a la competición y temporada correctas.
-3. Permitir hasta siete seleccionados y exigir la composición exacta `1/1/2/2/1` para puntuar.
-4. Aplicar `startsAt <= now <= endsAt` a alineaciones.
-5. Probar los límites temporales antes, durante y después del intervalo.
-6. Mostrar estados de bloqueo y errores claros en la interfaz.
-
-**Criterio de salida:** no se puede editar la plantilla o alineación durante el periodo bloqueado.
+- **Fase 8 — Alineaciones y bloqueo:** RPC `save_lineup`, validación de composición y bloqueo temporal probados.
 
 ## Fase 9 — Scoring persistente y ranking privado
+
+**Estado: Pendiente.**
 
 1. Calcular puntuaciones por partido y jornada con `ScoringSystemV1`.
 2. Persistir el desglose y `scoringVersion` para conservar resultados históricos.
@@ -112,7 +103,7 @@ Probar con varios usuarios el ciclo completo:
 - No publicar claves de servicio ni credenciales PostgreSQL.
 - Verificar las operaciones y permisos antes de habilitar producción.
 
-## Lista de cierre previa a la Fase 8 (Verificada)
+## Lista de cierre previa a la Fase 9 (Verificada)
 
 - [x] Fase 1: `npm run test:domain` y `npm run build` pasan.
 - [x] Fase 2: fórmula revisada contra `docs/SCORING.md`; confirmada la utilización de `ScoringSystemV1`.
@@ -121,6 +112,7 @@ Probar con varios usuarios el ciclo completo:
 - [x] Fase 5: `npm run test:repositories` pasa; endpoints de roster y puntuaciones verificados.
 - [x] Fase 6: pruebas con dos usuarios de crear/unirse/salir, inicialización del equipo, presupuesto, selección inicial, sucesión de propietario y aislamiento.
 - [x] Fase 7: compra y venta, saldo, límite de 14, exclusividad, temporada/competición, jornada bloqueada, concurrencia y rollback probados.
+- [x] Fase 8: RPC `save_lineup` validando plantilla, composición 1/1/2/2/1 y bloqueo temporal probados (`npm run test:lineup-rules`).
 - [x] Todos los tests pertinentes y `npm run build` pasan en el mismo commit.
 
 ## Calidad y validación

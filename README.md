@@ -1,8 +1,8 @@
 # Volleyball Fantasy
 
-Aplicación web de fantasy de voleibol construida con Next.js, TypeScript y Supabase. El repositorio combina la extracción de datos de RFEVB, un dominio tipado, persistencia del catálogo y una interfaz con autenticación, ligas privadas y gestión parcial del equipo fantasy.
+Aplicación web de fantasy de voleibol construida con Next.js, TypeScript y Supabase. El repositorio combina la extracción de datos de RFEVB, un dominio tipado, persistencia del catálogo y una interfaz con autenticación, ligas privadas y gestión del equipo fantasy.
 
-> **Estado de esta revisión:** Las fases 1 a 7 están **completadas y verificadas**. El objetivo del plan es un MVP para 2026/27, y la interfaz ya está preparada para usar temporadas dinámicas.
+> **Estado de esta revisión:** Las fases 1 a 8 están **completadas y verificadas**. El objetivo del plan es un MVP para 2026/27, y la interfaz ya está preparada para usar temporadas dinámicas.
 
 ## Estado actual
 
@@ -28,10 +28,10 @@ Las competiciones son Superliga Masculina, Superliga Femenina, Superliga 2 Mascu
 - Dashboard para listar ligas propias y llamar a las operaciones RPC de creación, unión y salida.
 - Pantalla fantasy que lee el equipo y el mercado persistidos y llama a la RPC `transfer_player` para comprar o vender jugadores.
 - Validación de límite de plantilla (14), presupuesto y bloqueo de jornada en la base de datos.
+- Guardado de alineaciones validado en base de datos (RPC `save_lineup`) con bloqueo por jornada.
 
 ### Incompleto o pendiente de confirmar
 
-- La edición/guardado de alineaciones **no está implementada**: `toggleLineup` muestra un aviso y no guarda cambios. (Fase 8).
 - El cálculo de puntuaciones se devuelve desde la API; no hay persistencia del resultado en `player_match_scores`, `player_round_scores` o `fantasy_scores`, ni clasificación por liga. (Fase 9).
 
 ## Arquitectura
@@ -51,3 +51,61 @@ Requisitos: Node.js compatible con Next.js 16, npm, variables de entorno de Supa
 ```bash
 npm install
 npm run dev
+```
+
+Abre `http://localhost:3000`. No incluyas claves secretas ni URIs PostgreSQL en Git.
+
+## APIs principales
+
+### Roster de competición
+
+```text
+GET /api/competition-roster?competition=152
+```
+
+Consulta en Supabase la competición indicada y su temporada `is_current=true`. Devuelve equipos y jugadores con precio obtenido de los valores de mercado de la primera jornada disponible; si falta precio para un jugador, aplica un fallback de 9M.
+
+### Puntuaciones fantasy
+
+```text
+GET /api/fantasy-round-scores?competition=152&season=186
+GET /api/fantasy-round-scores?competition=152&season=186&round=1
+```
+
+Calcula bajo demanda las puntuaciones usando datos persistidos. `round` es opcional. La respuesta incluye `playerId`, `roundNumber`, `score`, `breakdown`, `matchesPlayed` y `scoringVersion`.
+
+### Equipo fantasy
+
+```text
+GET /api/fantasy-team?league_id=<uuid-de-liga>
+```
+
+Devuelve el equipo visible para el usuario, los jugadores activos, el nombre de la temporada y los identificadores de la primera alineación encontrada.
+
+Para más detalles, consulta `docs/PROJECT_STATUS.md`, `docs/ARCHITECTURE.md`, `docs/SCRAPER.md`, `docs/SCORING.md` y `docs/DEVELOPMENT.md`.
+
+## Comandos de desarrollo y validación
+
+Los scripts declarados en `package.json` incluyen:
+
+```bash
+npm run build
+npm run test:domain
+npm run test:supabase
+npm run test:supabase:schema
+npm run test:supabase:admin
+npm run test:ingestion-mappers
+npm run test:repositories
+npm run test:team-alias-resolver
+npm run test:match-date-parser
+npm run test:market-rules
+npm run test:league-seeding
+npm run test:lineup-rules
+npm run test:match-parser -- 1 1
+npm run show:match-scores -- 1 1
+```
+
+## Próximas prioridades
+
+1. Añadir persistencia de scoring y clasificación privada (Fase 9).
+2. Integración end-to-end y despliegue en staging (Fases 10-12).

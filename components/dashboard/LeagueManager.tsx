@@ -4,6 +4,12 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 
+interface CompetitionOption {
+    id: string;
+    name: string;
+    rfevb_id: string;
+}
+
 export function LeagueManager() {
     const router = useRouter();
     const supabase = createClient();
@@ -12,8 +18,10 @@ export function LeagueManager() {
     const [error, setError] = useState<string | null>(null);
     const [joinCode, setJoinCode] = useState("");
 
-    const [compId, setCompId] = useState<string | null>(null);
-    const [seasonId, setSeasonId] = useState<string | null>(null);
+    // Estados para el selector dinámico
+    const [competitions, setCompetitions] = useState<CompetitionOption[]>([]);
+    const [selectedCompId, setSelectedCompId] = useState<string>("");
+    const [selectedSeasonId, setSelectedSeasonId] = useState<string>("");
     const [round1Id, setRound1Id] = useState<string | null>(null);
 
     // Estado para las ligas del usuario
@@ -23,7 +31,6 @@ export function LeagueManager() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        // Buscamos las ligas donde el usuario es miembro
         const { data } = await supabase
             .from("private_league_members")
             .select(`
@@ -36,32 +43,72 @@ export function LeagueManager() {
         if (data) setMyLeagues(data);
     };
 
+    // Cargar competiciones con temporada activa al montar el componente
     useEffect(() => {
-        async function fetchIds() {
-            const { data: comp } = await supabase.from("competitions").select("id").eq("rfevb_id", "152").single();
-            if (comp) {
-                setCompId(comp.id);
-                const { data: season } = await supabase.from("seasons").select("id").eq("competition_id", comp.id).eq("rfevb_id", "186").single();
-                if (season) {
-                    setSeasonId(season.id);
-                    const { data: round } = await supabase.from("rounds").select("id").eq("season_id", season.id).eq("round_number", 1).single();
-                    if (round) setRound1Id(round.id);
-                }
+        async function fetchCompetitions() {
+            // Buscamos todas las temporadas activas (is_current = true)
+            const { data: seasons } = await supabase
+                .from("seasons")
+                .select(`
+                    id,
+                    name,
+                    competitions ( id, name, rfevb_id )
+                `)
+                .eq("is_current", true);
+
+            if (seasons && seasons.length > 0) {
+                const comps = seasons.map((s: any) => ({
+                    id: s.competitions.id,
+                    name: s.competitions.name,
+                    rfevb_id: s.competitions.rfevb_id,
+                    seasonId: s.id,
+                    seasonName: s.name
+                }));
+
+                setCompetitions(comps);
+                // Seleccionamos la primera por defecto
+                setSelectedCompId(comps[0].id);
+                setSelectedSeasonId(comps[0].seasonId);
             }
         }
-        fetchIds();
+        fetchCompetitions();
         loadMyLeagues();
     }, [supabase]);
 
+    // Cuando cambia la competición seleccionada, buscamos su Jornada 1
+    useEffect(() => {
+        if (!selectedSeasonId) return;
+
+        async function fetchRound() {
+            const { data: round } = await supabase
+                .from("rounds")
+                .select("id")
+                .eq("season_id", selectedSeasonId)
+                .eq("round_number", 1)
+                .maybeSingle();
+
+            if (round) {
+                setRound1Id(round.id);
+            } else {
+                setRound1Id(null);
+            }
+        }
+        fetchRound();
+    }, [selectedSeasonId, supabase]);
+
     const handleCreateLeague = async () => {
-        if (!round1Id || !compId || !seasonId) return;
+        if (!round1Id || !selectedCompId || !selectedSeasonId) {
+            setError("No hay una jornada disponible para esta competición.");
+            return;
+        }
+
         setLoading(true);
         setError(null);
         const code = Math.random().toString(36).substring(2, 8).toUpperCase();
 
         const { data, error } = await supabase.rpc("create_private_league", {
-            p_competition_id: compId,
-            p_season_id: seasonId,
+            p_competition_id: selectedCompId,
+            p_season_id: selectedSeasonId,
             p_name: "Mi Liga de Amigos",
             p_join_code: code,
             p_round_id: round1Id,
@@ -103,7 +150,7 @@ export function LeagueManager() {
             setLoading(false);
             return;
         }
-        await loadMyLeagues(); // Recargamos la lista
+        await loadMyLeagues();
         setLoading(false);
     };
 
@@ -149,15 +196,53 @@ export function LeagueManager() {
                 <div className="grid md:grid-cols-2 gap-6">
                     <div className="border border-gray-200 p-4 rounded bg-gray-50">
                         <h4 className="font-medium text-gray-800 mb-2">Crear nueva liga</h4>
-                        <button onClick={handleCreateLeague} disabled={loading || !round1Id} className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded transition disabled:opacity-50">
+
+                        {/* NUEVO SELECTOR DINÁMICO */}
+                        <div className="mb-3">
+                            <label className="block text-xs text-gray-500 mb-1">Competición</label>
+                            <select
+                                value={selectedCompId}
+                                onChange={(e) => {
+                                    const comp = competitions.find(c => c.id === e.target.value);
+                                    if (comp) {
+                                        setSelectedCompId(comp.id);
+                                        setSelectedSeasonId((comp as any).seasonId);
+                                    }
+                                }}
+                                className="w-full px-3 py-2 border rounded text-sm text-gray-800"
+                            >
+                                {competitions.length === 0 && <option value="">Cargando...</option>}
+                                {competitions.map((c: any) => (
+                                    <option key={c.id} value={c.id}>
+                                        {c.name} ({c.seasonName})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <button
+                            onClick={handleCreateLeague}
+                            disabled={loading || !round1Id}
+                            className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded transition disabled:opacity-50 mt-2"
+                        >
                             {loading ? "Creando..." : "Crear Liga"}
                         </button>
                     </div>
 
                     <div className="border border-gray-200 p-4 rounded bg-gray-50">
                         <h4 className="font-medium text-gray-800 mb-2">Unirse a una liga</h4>
-                        <input type="text" placeholder="Código (Ej: ABC123)" value={joinCode} onChange={(e) => setJoinCode(e.target.value)} className="w-full px-3 py-2 border rounded mb-3 text-gray-800 uppercase" />
-                        <button onClick={handleJoinLeague} disabled={loading || !joinCode || !round1Id} className="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded transition disabled:opacity-50">
+                        <input
+                            type="text"
+                            placeholder="Código (Ej: ABC123)"
+                            value={joinCode}
+                            onChange={(e) => setJoinCode(e.target.value)}
+                            className="w-full px-3 py-2 border rounded mb-3 text-gray-800 uppercase"
+                        />
+                        <button
+                            onClick={handleJoinLeague}
+                            disabled={loading || !joinCode || !round1Id}
+                            className="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded transition disabled:opacity-50"
+                        >
                             {loading ? "Uniéndose..." : "Unirse"}
                         </button>
                     </div>

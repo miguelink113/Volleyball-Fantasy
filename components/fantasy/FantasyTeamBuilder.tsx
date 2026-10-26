@@ -10,20 +10,8 @@ import {
 } from "@/lib/services/fantasy/fantasy-team.service";
 import type { PlayerPosition } from "@/domain/player/player.types";
 
-const rounds = [
-    ...Array.from({ length: 22 }, (_, index) => ({ number: index + 1, label: `Jornada ${index + 1}` })),
-    { number: 23, label: "Cuartos de final" },
-    { number: 24, label: "Semifinales" },
-    { number: 25, label: "Final" },
-];
-
 function displayPosition(position: PlayerPosition): string {
     return position === "unknown" ? "DESCONOCIDO" : position;
-}
-
-interface RosterResponse {
-    teams: Array<{ id: string; name: string }>;
-    players: Array<{ id: string; displayName: string; position: PlayerPosition; currentTeamId?: string; price: number; }>;
 }
 
 export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
@@ -37,6 +25,10 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
     const [seasonUuid, setSeasonUuid] = useState<string>("");
     const [competitionRfevbId, setCompetitionRfevbId] = useState<number | null>(null);
     const [seasonRfevbId, setSeasonRfevbId] = useState<number | null>(null);
+    const [seasonName, setSeasonName] = useState<string>("");
+
+    // NUEVO: Estado dinámico para las jornadas
+    const [rounds, setRounds] = useState<Array<{ number: number, label: string }>>([]);
 
     const [budget, setBudget] = useState<number>(0);
     const [teamName, setTeamName] = useState<string>("");
@@ -61,6 +53,11 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
             setSeasonUuid(teamPayload.season_id);
             setCompetitionRfevbId(teamPayload.competition_rfevb_id);
             setSeasonRfevbId(teamPayload.season_rfevb_id);
+
+            // NUEVO: Extraemos el nombre de la temporada
+            const sName = teamPayload.season_name || `Temporada ${teamPayload.season_rfevb_id}`;
+            setSeasonName(sName);
+
             setSelectedIds(teamPayload.activePlayerIds);
             setLineupIds(teamPayload.lineupPlayerIds);
             setBudget(teamPayload.team.budget);
@@ -79,7 +76,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                 club: teamsById.get(p.currentTeamId ?? "") ?? "Equipo desconocido",
                 position: p.position,
                 price: p.price,
-                season: "25-26",
+                season: sName, // <-- CAMBIADO: Usa el nombre dinámico de la temporada
                 weeklyScores: {},
             }));
 
@@ -96,7 +93,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [leagueId]);
 
-    // Cargar puntuaciones en cuanto tengamos el ID dinámico de la competición y temporada
+    // Cargar puntuaciones y jornadas en cuanto tengamos el ID dinámico
     useEffect(() => {
         if (!competitionRfevbId || !seasonRfevbId) return;
 
@@ -114,6 +111,15 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                     map[s.playerId][s.roundNumber] = s.score;
                 });
                 setAllScores(map);
+
+                // NUEVO: Guardamos las jornadas reales que vienen del backend
+                if (payload.rounds && payload.rounds.length > 0) {
+                    setRounds(payload.rounds);
+                    // Si la jornada actual no existe en esta temporada, seleccionamos la primera
+                    if (!payload.rounds.find((r: any) => r.number === selectedRound)) {
+                        setSelectedRound(payload.rounds[0].number);
+                    }
+                }
             })
             .catch((err) => setError(err.message))
             .finally(() => setScoresLoading(false));
@@ -180,6 +186,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                 <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                     <p className="text-sm text-slate-500">Equipo</p>
                     <p className="mt-2 text-xl font-bold text-slate-900 truncate">{teamName}</p>
+                    <p className="text-xs text-slate-400 mt-1">{seasonName}</p>
                 </div>
                 <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                     <p className="text-sm text-slate-500">Presupuesto</p>
@@ -248,7 +255,11 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                         <p className="text-sm text-slate-500">Todos los jugadores de la liga a 9M. Transacción en J{selectedRound}.</p>
                     </div>
                     <select value={selectedRound} onChange={(e) => setSelectedRound(Number(e.target.value))} className="rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700">
-                        {rounds.map((round) => <option key={round.number} value={round.number}>{round.label}</option>)}
+                        {rounds.length > 0 ? (
+                            rounds.map((round) => <option key={round.number} value={round.number}>{round.label}</option>)
+                        ) : (
+                            <option value={1}>Cargando jornadas...</option>
+                        )}
                     </select>
                 </div>
 

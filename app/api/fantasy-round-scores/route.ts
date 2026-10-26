@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
 
         if (seasonError || !seasonData) throw new Error("La temporada no pertenece a esta competición o no existe");
 
-        let rounds = [];
+        let rounds: any[] = []; // Tipado para evitar error de TS con never[]
         if (roundNumber) {
             const r = await getRoundBySeasonAndNumber(supabase, seasonData.id, roundNumber);
             if (r) rounds.push(r);
@@ -83,17 +83,27 @@ export async function GET(request: NextRequest) {
                     playerId,
                     roundNumber: round.round_number,
                     score: scoreData.score,
-                    breakdown: scoreData.breakdown, // AÑADIDO: La auditoría pedía el desglose
+                    breakdown: scoreData.breakdown, // Desglose visible
                     matchesPlayed: scoreData.matchesPlayed,
                     scoringVersion: scoringSystem.version,
                 });
             }
         }
 
+        // NUEVO: Preparamos la lista de jornadas formateadas para el frontend
+        const formattedRounds = rounds.map(r => ({
+            number: r.round_number,
+            label: r.round_number <= 22 ? `Jornada ${r.round_number}` :
+                r.round_number === 23 ? "Cuartos de final" :
+                    r.round_number === 24 ? "Semifinales" :
+                        r.round_number === 25 ? "Final" : `Jornada ${r.round_number}`
+        })).sort((a, b) => a.number - b.number);
+
         return NextResponse.json({
             success: true,
             competitionId: String(competitionId),
             seasonId: String(seasonId),
+            rounds: formattedRounds, // <-- AÑADIDO: Devolvemos las jornadas reales
             scores: scoresResult,
         });
 

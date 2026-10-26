@@ -1,0 +1,1 @@
+-- Migración aplicada directamente en el Dashboard remoto

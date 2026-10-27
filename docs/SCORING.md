@@ -122,4 +122,9 @@ líbero y central, diferencia de sets y exclusión de campos ambiguos.
 
 ## Uso actual y límites
 
-`/api/fantasy-round-scores` calcula el scoring sobre las estadísticas persistidas. En su respuesta actual incluye `playerId`, `roundNumber`, `score`, `matchesPlayed` y `scoringVersion`, pero no expone el desglose aunque el cálculo interno lo construye. La documentación de esta fórmula se corresponde con `domain/scoring/scoring-v1.system.ts`; el scoring histórico `basic-v1` no es el utilizado por esa ruta.
+La fórmula de `ScoringSystemV1` se utiliza en dos flujos:
+
+1. **Cálculo bajo demanda:** `/api/fantasy-round-scores` calcula el scoring sobre las estadísticas persistidas para simular alineaciones o auditar partidos. En su respuesta incluye `breakdown`, `matchesPlayed` y `scoringVersion`.
+2. **Persistencia:** El script `npm run calculate:scores` (usando `scoring-persistence.service.ts`) calcula y guarda los puntos en las tablas `player_match_scores`, `player_round_scores` y `fantasy_scores`.
+
+La interfaz gráfica utiliza las tablas persistidas para mostrar la clasificación real y los puntos históricos, garantizando que los resultados sean inmutables y no dependan de simulaciones de la plantilla actual.

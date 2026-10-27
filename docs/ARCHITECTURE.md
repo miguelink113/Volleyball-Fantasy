@@ -247,8 +247,11 @@ Las entidades de jornada exponen `startsAt` y `endsAt`. Estos límites se utiliz
 
 ## Estado actual y evolución
 
-La Fase 5 está completada: el catálogo deportivo está persistido, el mercado inicial está sembrado, los repositorios de lectura están implementados y las rutas de producto incluidas en el alcance utilizan Supabase.
+Las fases 1 a 9 están completadas y verificadas:
+- El catálogo deportivo está persistido y los repositorios de lectura implementados.
+- El mercado inicial está sembrado y la UI consume precios dinámicos.
+- Las ligas, el mercado de fichajes y las alineaciones están implementados mediante RPC, con validación de límites y bloqueos temporales.
+- El scoring se calcula y se persiste en las tablas históricas.
+- La clasificación privada y los puntos por jornada se leen de forma rápida desde la base de datos.
 
-Las fases 6 y 7 tienen implementación parcial y requieren pruebas funcionales de cierre. La fase 8 sigue pendiente: el componente `FantasyTeamBuilder.tsx` contiene un placeholder para guardar alineaciones. Consulta `docs/PROJECT_STATUS.md` y `docs/plan.md` para el estado y los criterios de aceptación actualizados.
-
-Las fases posteriores completarán el mercado y las transferencias, el bloqueo de alineaciones, la persistencia del scoring, la clasificación privada y la integración end-to-end.\n
+La Fase 10 (UI persistente y pulido visual) está en desarrollo, centrada en eliminar las últimas simulaciones en la interfaz y gestionar los estados de carga y error.

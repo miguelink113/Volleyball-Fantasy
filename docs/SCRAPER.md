@@ -489,9 +489,9 @@ La pantalla `/fantasy` solicita `GET /api/competition-roster?competition=152` y 
 
 Este comportamiento sustituye al mercado de demostración descrito en versiones anteriores de esta guía. `createDailyFantasyRoster` y la generación determinista de una selección diaria de 30 jugadores siguen en `lib/services/fantasy/fantasy-team.service.ts`, pero el `FantasyTeamBuilder` actual no llama a ese helper. No describas la selección diaria como comportamiento actual de la pantalla.
 
-La UI también carga el equipo de la liga mediante `/api/fantasy-team?league_id=...`; las compras y ventas llaman a la RPC `transfer_player`. El guardado de alineación sigue pendiente: el handler `toggleLineup` muestra un aviso y no modifica la base de datos.
+La UI también carga el equipo de la liga mediante `/api/fantasy-team?league_id=...`; las compras y ventas llaman a la RPC `transfer_player`, y el guardado de la alineación semanal llama a la RPC `save_lineup`. Ambas operaciones están protegidas por bloqueos temporales en la base de datos.
 
-**Limitación de temporada:** el roster usa `is_current=true`, pero `FantasyTeamBuilder` solicita los puntos con constantes `COMPETITION_ID = 152` y `SEASON_ID = 186` y muestra la etiqueta `25-26`. Antes de usar la aplicación para 2026/27, estos flujos deben obtener la misma temporada de una fuente común.
+**Limitación de temporada:** el roster usa `is_current=true`, y el componente `FantasyTeamBuilder` ya obtiene de forma dinámica la competición y la temporada desde la API para solicitar los puntos correspondientes. Sin embargo, la UI todavía debe pulirse en la Fase 10 para unificar la lectura de puntos históricos.
 
 ## Puntuaciones fantasy por jornada
 

@@ -34,10 +34,11 @@ El código de frontend invoca RPC para:
 - unirse a una liga mediante código;
 - abandonar una liga;
 - comprar o vender un jugador mediante `transfer_player`.
+- guardar la alineación semanal mediante `save_lineup`.
 
-Aunque la llamada parte del cliente de Supabase, las validaciones de seguridad y negocio deben ocurrir dentro de la función SQL y las restricciones de la base, no solo en React. La instantánea revisada no incluye las migraciones SQL, así que la lógica interna y la atomicidad de estas funciones deben contrastarse en el repositorio original.
+Aunque la llamada parte del cliente de Supabase, las validaciones de seguridad y negocio deben ocurrir dentro de la función SQL y las restricciones de la base, no solo en React.
 
-Las alineaciones son un caso pendiente: la UI no guarda los cambios y el endpoint `/api/fantasy-team` solo ofrece lectura. No debe asumirse que la mera existencia de `lineups` y `lineup_players` implica que el flujo de edición esté implementado.
+Las puntuaciones (tablas `player_match_scores`, `player_round_scores` y `fantasy_scores`) se escriben desde el script administrativo `scripts/ingest/calculate-scores.ts`, que es idempotente y está testeado.
 
 ## Seguridad y roles
 

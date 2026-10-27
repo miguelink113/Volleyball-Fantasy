@@ -20,6 +20,7 @@
     "test:repositories": "tsx scripts/tests/test-repositories.ts",
     "test:lineup-rules": "tsx scripts/tests/test-lineup-rules.ts",
     "test:scoring-persistence": "tsx scripts/tests/test-scoring-persistence.ts",
+    "test:lockout": "tsx scripts/tests/test-lockout.ts",
     "show:match-scores": "tsx scripts/tools/show-match-scores.ts",
     "ingest:roster": "tsx scripts/ingest/ingest-roster.ts",
     "ingest:market-values": "tsx scripts/ingest/ingest-market-values.ts",

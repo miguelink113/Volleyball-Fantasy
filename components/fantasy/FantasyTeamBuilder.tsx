@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { validateLineup, validateRosterSize, type FantasyDemoPlayer } from "@/lib/services/fantasy/fantasy-team.service";
+import { validateLineup, type FantasyDemoPlayer } from "@/lib/services/fantasy/fantasy-team.service";
 import type { PlayerPosition } from "@/domain/player/player.types";
 
 function displayPosition(position: PlayerPosition): string {
@@ -12,10 +12,11 @@ function displayPosition(position: PlayerPosition): string {
 export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
     const supabase = createClient();
 
-    // Estados de carga
+    // Estados de carga y error
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
     // Pestaña activa
     const [activeTab, setActiveTab] = useState<"lineup" | "market" | "ranking">("lineup");
@@ -35,18 +36,19 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
     const [budget, setBudget] = useState<number>(0);
     const [teamName, setTeamName] = useState<string>("");
 
-    // Jornadas y puntuaciones REALES
-    const [rounds, setRounds] = useState<Array<{ number: number, label: string, isLocked: boolean }>>([]);
+    // Jornadas, puntuaciones reales y ranking
+    const [rounds, setRounds] = useState<Array<{ number: number, label: string, isLocked: boolean, startsAt: string, endsAt: string }>>([]);
     const [myRealScores, setMyRealScores] = useState<Record<number, number>>({});
     const [ranking, setRanking] = useState<any[]>([]);
 
     const loadData = async () => {
         setLoading(true);
+        setError(null);
         try {
-            // 1. Cargar equipo
+            // 1. Cargar equipo y contexto
             const teamRes = await fetch(`/api/fantasy-team?league_id=${leagueId}`);
             const teamPayload = await teamRes.json();
-            if (!teamRes.ok || !teamPayload.success) throw new Error(teamPayload.error);
+            if (!teamRes.ok || !teamPayload.success) throw new Error(teamPayload.error || "Error cargando equipo");
 
             setTeamId(teamPayload.team.id);
             setSeasonUuid(teamPayload.season_id);
@@ -56,6 +58,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
             setBudget(teamPayload.team.budget);
             setTeamName(teamPayload.team.name);
 
+            // Limpieza de alineación (evitar jugadores fantasmas)
             const activeIds = teamPayload.activePlayerIds;
             const loadedLineup = teamPayload.lineupPlayerIds || [];
             const cleanLineup = loadedLineup.filter((id: string) => activeIds.includes(id));
@@ -63,24 +66,34 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
             setRosterIds(activeIds);
             setLineupIds(cleanLineup);
 
-            // 2. Cargar catálogo
+            // 2. Cargar catálogo de jugadores
             const rosterRes = await fetch(`/api/competition-roster?competition=${teamPayload.competition_rfevb_id}`);
             const rosterPayload = await rosterRes.json();
+            if (!rosterRes.ok || !rosterPayload.success) throw new Error("Error cargando el mercado");
+
             const teamsById = new Map(rosterPayload.teams.map((t: any) => [t.id, t.name]));
             setCatalogPlayers(rosterPayload.players.map((p: any) => ({
-                id: p.id, name: p.displayName, club: teamsById.get(p.currentTeamId ?? "") ?? "?", position: p.position, price: p.price, season: "", weeklyScores: {},
+                id: p.id,
+                name: p.displayName,
+                club: teamsById.get(p.currentTeamId ?? "") ?? "?",
+                position: p.position,
+                price: p.price,
+                season: "",
+                weeklyScores: {},
             })));
 
             // 3. Cargar puntuaciones reales y ranking
-            const scoresRes = await fetch(`/api/league-scores?league_id=${leagueId}`);
+            const [scoresRes, rankRes] = await Promise.all([
+                fetch(`/api/league-scores?league_id=${leagueId}`),
+                fetch(`/api/league-ranking?league_id=${leagueId}`)
+            ]);
             const scoresPayload = await scoresRes.json();
             if (scoresPayload.success) setMyRealScores(scoresPayload.scores);
 
-            const rankRes = await fetch(`/api/league-ranking?league_id=${leagueId}`);
             const rankPayload = await rankRes.json();
             if (rankPayload.success) setRanking(rankPayload.ranking);
 
-            // 4. Cargar jornadas y ver cuáles están bloqueadas
+            // 4. Cargar jornadas y bloqueos
             const { data: dbRounds } = await supabase
                 .from("rounds")
                 .select("round_number, starts_at, ends_at")
@@ -89,18 +102,25 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
 
             const now = new Date();
             const formattedRounds = (dbRounds || []).map(r => {
-                const isLocked = now >= new Date(r.starts_at) && now <= new Date(r.ends_at);
+                const isLocked = now >= new Date(r.starts_at);
                 return {
                     number: r.round_number,
                     label: r.round_number <= 22 ? `Jornada ${r.round_number}` : r.round_number === 23 ? "Cuartos" : r.round_number === 24 ? "Semis" : "Final",
-                    isLocked
+                    isLocked,
+                    startsAt: r.starts_at,
+                    endsAt: r.ends_at
                 };
             });
             setRounds(formattedRounds);
-            if (formattedRounds.length > 0) setSelectedRound(formattedRounds[0].number);
+
+            if (formattedRounds.length > 0) {
+                // Seleccionar la primera jornada no bloqueada o la primera por defecto
+                const firstOpen = formattedRounds.find(r => !r.isLocked);
+                setSelectedRound(firstOpen ? firstOpen.number : formattedRounds[0].number);
+            }
 
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Error");
+            setError(err instanceof Error ? err.message : "Error desconocido");
         } finally {
             setLoading(false);
         }
@@ -108,46 +128,92 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
 
     useEffect(() => { loadData(); }, [leagueId]);
 
+    // Limpiar mensajes después de 3 segundos
+    useEffect(() => {
+        if (successMsg) {
+            const timer = setTimeout(() => setSuccessMsg(null), 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [successMsg]);
+
     // Lógica de Alineación
     const toggleLineup = (playerId: string) => {
         if (lineupIds.includes(playerId)) {
             setLineupIds(lineupIds.filter(id => id !== playerId));
         } else {
-            if (lineupIds.length >= 7) return alert("Máximo 7 titulares.");
+            if (lineupIds.length >= 7) {
+                setError("Ya tienes 7 titulares. Quita a alguien antes de añadir otro.");
+                return;
+            }
             setLineupIds([...lineupIds, playerId]);
         }
+        setError(null);
     };
 
     const handleSaveLineup = async () => {
         const roundObj = rounds.find(r => r.number === selectedRound);
-        if (roundObj?.isLocked) return alert("La jornada está bloqueada.");
+        if (roundObj?.isLocked) {
+            setError("La jornada está bloqueada. No puedes modificar la alineación.");
+            return;
+        }
 
         const validation = validateLineup(lineupIds, rosterPlayers);
-        if (!validation.valid) return setError("Alineación inválida: " + validation.errors.join(", "));
+        if (!validation.valid) {
+            setError("Alineación inválida: " + validation.errors.join(", "));
+            return;
+        }
 
         setActionLoading(true);
+        setError(null);
+        setSuccessMsg(null);
+
         const { data: roundData } = await supabase.from("rounds").select("id").eq("season_id", seasonUuid).eq("round_number", selectedRound).single();
 
         const { error: rpcError } = await supabase.rpc("save_lineup", {
-            p_fantasy_team_id: teamId, p_round_id: roundData?.id, p_player_ids: lineupIds
+            p_fantasy_team_id: teamId,
+            p_round_id: roundData?.id,
+            p_player_ids: lineupIds
         });
 
-        if (rpcError) setError(rpcError.message);
-        else alert("✅ Alineación guardada");
+        if (rpcError) {
+            setError(rpcError.message);
+        } else {
+            setSuccessMsg("Alineación guardada correctamente.");
+            // Recargamos el ranking por si acaso
+            const rankRes = await fetch(`/api/league-ranking?league_id=${leagueId}`);
+            const rankPayload = await rankRes.json();
+            if (rankPayload.success) setRanking(rankPayload.ranking);
+        }
         setActionLoading(false);
     };
 
     // Lógica de Mercado
     const handleTransfer = async (playerId: string, type: "BUY" | "SELL") => {
+        const roundObj = rounds.find(r => r.number === selectedRound);
+        if (roundObj?.isLocked) {
+            setError("La jornada está bloqueada. No puedes comprar/vender jugadores.");
+            return;
+        }
+
         setActionLoading(true);
+        setError(null);
+        setSuccessMsg(null);
+
         const { data: roundData } = await supabase.from("rounds").select("id").eq("season_id", seasonUuid).eq("round_number", selectedRound).single();
 
         const { error: rpcError } = await supabase.rpc("transfer_player", {
-            p_fantasy_team_id: teamId, p_player_id: playerId, p_round_id: roundData?.id, p_type: type,
+            p_fantasy_team_id: teamId,
+            p_player_id: playerId,
+            p_round_id: roundData?.id,
+            p_type: type,
         });
 
-        if (rpcError) setError(rpcError.message);
-        else await loadData();
+        if (rpcError) {
+            setError(rpcError.message);
+        } else {
+            setSuccessMsg(type === "BUY" ? "Jugador fichado correctamente." : "Jugador vendido correctamente.");
+            await loadData(); // Recargamos todo para actualizar presupuesto y plantilla
+        }
         setActionLoading(false);
     };
 
@@ -158,17 +224,17 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
     const lineupValidation = useMemo(() => validateLineup(lineupIds, rosterPlayers), [lineupIds, rosterPlayers]);
     const currentRoundObj = rounds.find(r => r.number === selectedRound);
 
-    if (loading) return <div className="p-10 text-center animate-pulse">Cargando Fantasy...</div>;
+    if (loading) return <div className="p-10 text-center animate-pulse text-slate-500">Cargando Fantasy...</div>;
 
     return (
         <div className="max-w-6xl mx-auto space-y-6">
             {/* CABECERA */}
-            <header className="bg-slate-900 text-white rounded-xl p-6 shadow-lg flex justify-between items-center">
+            <header className="bg-slate-900 text-white rounded-xl p-6 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 className="text-3xl font-bold">{teamName}</h1>
                     <p className="text-slate-400 mt-1">{seasonName}</p>
                 </div>
-                <div className="flex gap-6 text-right">
+                <div className="flex gap-6 text-left md:text-right">
                     <div>
                         <p className="text-sm text-slate-400">Presupuesto</p>
                         <p className="text-2xl font-bold text-emerald-400">{budget.toFixed(1)}M</p>
@@ -180,26 +246,32 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                 </div>
             </header>
 
-            {error && <div className="bg-red-100 text-red-700 p-4 rounded-lg">⚠️ {error}</div>}
+            {/* MENSAJES DE ERROR / ÉXITO */}
+            {error && <div className="bg-red-100 text-red-700 p-4 rounded-lg shadow-sm font-semibold">⚠️ {error}</div>}
+            {successMsg && <div className="bg-emerald-100 text-emerald-700 p-4 rounded-lg shadow-sm font-semibold">✅ {successMsg}</div>}
 
             {/* SELECTOR DE JORNADA */}
-            <div className="flex items-center gap-4 bg-white p-4 rounded-lg shadow-sm border border-slate-200">
+            <div className="flex flex-col md:flex-row items-start md:items-center gap-4 bg-white p-4 rounded-lg shadow-sm border border-slate-200">
                 <label className="font-semibold text-slate-700">Jornada a gestionar:</label>
                 <select
                     value={selectedRound}
                     onChange={(e) => setSelectedRound(Number(e.target.value))}
-                    className="border p-2 rounded-md font-medium"
+                    className="border p-2 rounded-md font-medium w-full md:w-auto"
                 >
                     {rounds.map(r => <option key={r.number} value={r.number}>{r.label} {r.isLocked ? "🔒" : ""}</option>)}
                 </select>
-                {currentRoundObj?.isLocked && <span className="text-amber-600 text-sm font-bold">Las transferencias y alineaciones están cerradas.</span>}
+                {currentRoundObj?.isLocked && (
+                    <span className="text-amber-600 text-sm font-bold bg-amber-50 px-3 py-1 rounded">
+                        Las transferencias y alineaciones están cerradas para esta jornada.
+                    </span>
+                )}
             </div>
 
             {/* PESTAÑAS */}
-            <div className="flex gap-2 border-b border-slate-200">
-                <button onClick={() => setActiveTab("lineup")} className={`px-4 py-2 font-semibold ${activeTab === "lineup" ? "border-b-2 border-violet-600 text-violet-600" : "text-slate-500"}`}>Mi Alineación</button>
-                <button onClick={() => setActiveTab("market")} className={`px-4 py-2 font-semibold ${activeTab === "market" ? "border-b-2 border-violet-600 text-violet-600" : "text-slate-500"}`}>Mercado</button>
-                <button onClick={() => setActiveTab("ranking")} className={`px-4 py-2 font-semibold ${activeTab === "ranking" ? "border-b-2 border-violet-600 text-violet-600" : "text-slate-500"}`}>Clasificación</button>
+            <div className="flex gap-2 border-b border-slate-200 overflow-x-auto">
+                <button onClick={() => setActiveTab("lineup")} className={`px-4 py-2 font-semibold whitespace-nowrap ${activeTab === "lineup" ? "border-b-2 border-violet-600 text-violet-600" : "text-slate-500"}`}>Mi Alineación</button>
+                <button onClick={() => setActiveTab("market")} className={`px-4 py-2 font-semibold whitespace-nowrap ${activeTab === "market" ? "border-b-2 border-violet-600 text-violet-600" : "text-slate-500"}`}>Mercado</button>
+                <button onClick={() => setActiveTab("ranking")} className={`px-4 py-2 font-semibold whitespace-nowrap ${activeTab === "ranking" ? "border-b-2 border-violet-600 text-violet-600" : "text-slate-500"}`}>Clasificación</button>
             </div>
 
             {/* CONTENIDO: ALINEACIÓN */}
@@ -216,12 +288,17 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                                             <p className="font-semibold text-slate-800">{p.name}</p>
                                             <p className="text-xs text-slate-500">{p.club} · {displayPosition(p.position)}</p>
                                         </div>
-                                        <button onClick={() => toggleLineup(p.id)} disabled={currentRoundObj?.isLocked} className={`px-3 py-1 rounded text-sm font-medium ${isTitular ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-700'}`}>
+                                        <button
+                                            onClick={() => toggleLineup(p.id)}
+                                            disabled={actionLoading || currentRoundObj?.isLocked}
+                                            className={`px-3 py-1 rounded text-sm font-medium ${isTitular ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-700'}`}
+                                        >
                                             {isTitular ? 'Quitar' : 'Alinear'}
                                         </button>
                                     </div>
                                 );
                             })}
+                            {rosterPlayers.length === 0 && <p className="text-sm text-slate-500 text-center py-4">No tienes jugadores. Ve al Mercado para fichar.</p>}
                         </div>
                     </div>
 
@@ -248,7 +325,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                             disabled={actionLoading || lineupIds.length !== 7 || currentRoundObj?.isLocked}
                             className="w-full bg-slate-900 text-white py-3 rounded-lg font-bold hover:bg-slate-800 disabled:opacity-50"
                         >
-                            {actionLoading ? "Guardando..." : "Guardar Alineación"}
+                            {actionLoading ? "Guardando..." : currentRoundObj?.isLocked ? "Jornada Bloqueada" : "Guardar Alineación"}
                         </button>
                     </div>
                 </div>
@@ -262,7 +339,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                         {catalogPlayers.map(p => {
                             const isOwned = rosterIds.includes(p.id);
                             return (
-                                <div key={p.id} className="border p-3 rounded flex justify-between items-center">
+                                <div key={p.id} className="border p-3 rounded flex justify-between items-center bg-white">
                                     <div>
                                         <p className="font-semibold text-sm">{p.name}</p>
                                         <p className="text-xs text-slate-500">{p.club} · {displayPosition(p.position)}</p>
@@ -272,7 +349,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                                         <button
                                             onClick={() => handleTransfer(p.id, isOwned ? "SELL" : "BUY")}
                                             disabled={actionLoading || currentRoundObj?.isLocked}
-                                            className={`px-2 py-1 rounded text-xs font-bold ${isOwned ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}
+                                            className={`px-3 py-1 rounded text-xs font-bold transition disabled:opacity-50 ${isOwned ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}
                                         >
                                             {isOwned ? "Vender" : "Comprar"}
                                         </button>
@@ -287,7 +364,6 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
             {/* CONTENIDO: CLASIFICACIÓN */}
             {activeTab === "ranking" && (
                 <div className="space-y-6">
-                    {/* Historial de puntos reales */}
                     <div className="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
                         <h3 className="font-bold text-lg mb-4 text-slate-800">Mis Puntos Reales</h3>
                         <div className="flex flex-wrap gap-2">
@@ -300,7 +376,6 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                         </div>
                     </div>
 
-                    {/* Ranking General */}
                     <div className="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
                         <h3 className="font-bold text-lg mb-4 text-slate-800">Clasificación General</h3>
                         <table className="w-full text-left text-sm">
@@ -322,6 +397,11 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                                     <td className="p-3 text-right font-bold text-violet-600">{row.totalPoints}</td>
                                 </tr>
                             ))}
+                            {ranking.length === 0 && (
+                                <tr>
+                                    <td colSpan={3} className="p-4 text-center text-slate-500">No hay datos de clasificación todavía.</td>
+                                </tr>
+                            )}
                             </tbody>
                         </table>
                     </div>

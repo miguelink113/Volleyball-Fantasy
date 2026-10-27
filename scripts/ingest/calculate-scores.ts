@@ -6,15 +6,29 @@ import { createAdminClient } from "@/lib/supabase/admin.server";
 import { persistScoresForSeason } from "@/lib/services/fantasy/scoring-persistence.service";
 
 async function main() {
-    console.log("== INGESTA DE PUNTUACIONES (FASE 9) ==\n");
+    console.log("== INGESTA DE PUNTUACIONES ==\n");
     const supabase = createAdminClient();
 
-    const { data: comp } = await supabase.from("competitions").select("id").eq("rfevb_id", "152").single();
-    const { data: season } = await supabase.from("seasons").select("id").eq("competition_id", comp!.id).eq("rfevb_id", "186").single();
-    if (!season) throw new Error("Temporada no encontrada");
+    // Buscamos TODAS las temporadas activas (2025/26 o 2026/27)
+    const { data: seasons, error } = await supabase
+        .from("seasons")
+        .select("id, name, competition_id, competitions(name)")
+        .eq("is_current", true);
 
-    const stats = await persistScoresForSeason(supabase, comp!.id, season.id);
-    console.log(`✅ Calculadas ${stats.processedMatches} estadísticas en ${stats.processedRounds} jornadas.`);
+    if (error || !seasons || seasons.length === 0) {
+        throw new Error("No se encontraron temporadas activas (is_current = true)");
+    }
+
+    for (const season of seasons) {
+        // SOLUCIÓN TS2339: Forzamos a que 'competitions' se trate como un objeto único
+        const comp = season.competitions as unknown as { name: string };
+
+        console.log(`\n→ Calculando puntos para: ${comp.name} - ${season.name}`);
+        const stats = await persistScoresForSeason(supabase, season.competition_id, season.id);
+        console.log(`✅ Calculadas ${stats.processedMatches} estadísticas en ${stats.processedRounds} jornadas.`);
+    }
+
+    console.log("\n✅ Proceso completado.");
 }
 
 main().catch(console.error);

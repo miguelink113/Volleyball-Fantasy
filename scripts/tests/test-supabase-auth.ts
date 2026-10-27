@@ -393,14 +393,9 @@ async function run() {
             .eq("id", user1Id)
             .select();
 
+        // RLS bloquea la actualización devolviendo 0 filas afectadas.
         assert(
-            !!changedIdError,
-            "No se permite cambiar el ID del perfil a otro usuario."
-        );
-
-        assert(
-            !changedIdProfile ||
-            changedIdProfile.length === 0,
+            !changedIdProfile || changedIdProfile.length === 0,
             "El perfil no ha cambiado de propietario."
         );
 

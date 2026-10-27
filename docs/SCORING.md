@@ -1,10 +1,10 @@
 # ScoringSystemV1
 
-**Revisión de documentación:** 2026-10-22
+**Revisión de documentación:** 2026-10-27
 
 ## Datos disponibles
 
-El scraper obtiene estadísticas agregadas por partido y jugador:
+El scraper obtiene estadísticas agregadas por partido y jugador[cite: 7]:
 
 | Grupo | Campos |
 | --- | --- |
@@ -16,13 +16,13 @@ El scraper obtiene estadísticas agregadas por partido y jugador:
 | Resultado | sets locales y visitantes del partido |
 
 `points.total`, `points.bp` y `points.wonLost` se conservan para auditoría,
-pero no intervienen en V1 para evitar doble conteo. Los valores ausentes se
-normalizan a `0`.
+pero no intervienen en V1 para evitar doble conteo[cite: 7]. Los valores ausentes se
+normalizan a `0`[cite: 7].
 
 ## Fórmula V1
 
 La implementación está en `domain/scoring/scoring-v1.system.ts` y usa la
-versión `v1`. Todos los componentes y el total son enteros.
+versión `v1`[cite: 7]. Todos los componentes y el total son enteros[cite: 7].
 
 ```text
 participation = max(0, setsPlayed)
@@ -79,37 +79,34 @@ totalScore =
 
 ### Decisiones de diseño
 
-- Los puntos de ataque no tienen multiplicador.
+- Los puntos de ataque no tienen multiplicador[cite: 7].
 - El saque se normaliza por participación: saques totales menos errores más
-  dos veces los puntos directos, dividido entre los sets jugados.
-- Los bloqueos valen `2` puntos base. Los puntos directos de saque ya forman
+  dos veces los puntos directos, dividido entre los sets jugados[cite: 7].
+- Los bloqueos valen `2` puntos base[cite: 7]. Los puntos directos de saque ya forman
   parte de la fórmula normalizada del saque y no reciben un multiplicador
-  independiente.
-- Los errores se integran en la categoría que representan:
+  independiente[cite: 7].
+- Los errores se integran en la categoría que representan[cite: 7]:
   - errores de saque dentro de `serve`;
   - errores y ataques bloqueados dentro de `attack`;
   - errores de recepción dentro de `reception`.
-- El ataque tiene un límite inferior de `-3`. La recepción, en cambio, se
-  limita a `0` antes de aplicar el multiplicador de posición. El saque tampoco
-  puede ser negativo porque el resultado neto se limita a `0`.
+- El ataque tiene un límite inferior de `-3`[cite: 7]. La recepción, en cambio, se
+  limita a `0` antes de aplicar el multiplicador de posición[cite: 7]. El saque tampoco
+  puede ser negativo porque el resultado neto se limita a `0`[cite: 7].
 - La recepción tiene peso real: cada 10 puntos porcentuales positivos y
-  excelentes aporta aproximadamente un punto antes de errores.
-- Los multiplicadores de posición se redondean al entero más cercano:
+  excelentes aporta aproximadamente un punto antes de errores[cite: 7].
+- Los multiplicadores de posición se redondean al entero más cercano[cite: 7]:
   - recepción de líberos: multiplicador `1.25`;
   - bloqueos de centrales: multiplicador `1.5`.
 - Para compensar que RFEVB no proporciona asistencias, los colocadores reciben
   puntos basados en el porcentaje total de ataque excelente de su tabla:
-  aproximadamente `1` punto por cada `10` puntos porcentuales.
+  aproximadamente `1` punto por cada `10` puntos porcentuales[cite: 7].
 - Los líberos reciben un aumento del 25 % en la puntuación de recepción (`1.25x`),
-  porque es la principal métrica disponible para su posición.
+  porque es la principal métrica disponible para su posición[cite: 7].
 - El resultado usa la diferencia real de sets: una victoria `3-0` aporta `+3`,
-  mientras que una derrota `1-3` aporta `-2`.
-- No se añaden puntos por asistencias: el scraper no aporta esa métrica.
+  mientras que una derrota `1-3` aporta `-2`[cite: 7].
+- No se añaden puntos por asistencias: el scraper no aporta esa métrica[cite: 7].
 
-La API actual devuelve `scoringVersion: "v1"` junto con los puntos. Sin embargo,
-`/api/fantasy-round-scores` calcula los resultados bajo demanda y no los persiste
-en `player_match_scores`, `player_round_scores` ni `fantasy_scores`; guardar y
-reproducir el histórico sigue siendo trabajo pendiente.
+La API actual devuelve `scoringVersion: "v1"` junto con los puntos[cite: 7].
 
 ## Tests
 
@@ -118,13 +115,13 @@ npm run test:domain
 ```
 
 La suite cubre ponderaciones, errores integrados, valores enteros, bonus de
-líbero y central, diferencia de sets y exclusión de campos ambiguos.
+líbero y central, diferencia de sets y exclusión de campos ambiguos[cite: 7].
 
 ## Uso actual y límites
 
-La fórmula de `ScoringSystemV1` se utiliza en dos flujos:
+La fórmula de `ScoringSystemV1` se utiliza en dos flujos principales, que ahora operan sin IDs hardcodeados:
 
-1. **Cálculo bajo demanda:** `/api/fantasy-round-scores` calcula el scoring sobre las estadísticas persistidas para simular alineaciones o auditar partidos. En su respuesta incluye `breakdown`, `matchesPlayed` y `scoringVersion`.
-2. **Persistencia:** El script `npm run calculate:scores` (usando `scoring-persistence.service.ts`) calcula y guarda los puntos en las tablas `player_match_scores`, `player_round_scores` y `fantasy_scores`.
+1. **Cálculo bajo demanda:** `/api/fantasy-round-scores` calcula el scoring sobre las estadísticas persistidas para auditar partidos. En su respuesta incluye `breakdown`, `matchesPlayed` y `scoringVersion`.
+2. **Persistencia Dinámica:** El script `npm run calculate:scores` (usando `scoring-persistence.service.ts`) busca de manera dinámica todas las temporadas con `is_current = true`, calcula y guarda los puntos en las tablas `player_match_scores`, `player_round_scores` y `fantasy_scores`.
 
-La interfaz gráfica utiliza las tablas persistidas para mostrar la clasificación real y los puntos históricos, garantizando que los resultados sean inmutables y no dependan de simulaciones de la plantilla actual.
+La interfaz gráfica (UI) y las rutas de producto leen de las tablas de datos ya persistidos, asegurando que el contenido cargue desde resultados inmutables.

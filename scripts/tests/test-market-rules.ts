@@ -26,6 +26,7 @@ async function run() {
     let roundId = "";
     let player1Id = "";
     let player2Id = "";
+    let originalRound: any = null;
 
     try {
         // 1. Setup: Crear usuario, loguearse
@@ -52,6 +53,13 @@ async function run() {
         const { data: round, error: roundErr } = await admin.from("rounds").select("id, starts_at, ends_at").eq("season_id", season.id).eq("round_number", 1).single();
         if (roundErr || !round) throw new Error("No se encontró la jornada 1 de la temporada 186");
         roundId = round.id;
+        originalRound = round;
+
+        // PARCHE: Forzar la jornada al futuro para evitar el bloqueo de la Fase 10
+        await admin.from("rounds").update({
+            starts_at: new Date(Date.now() + 86400000).toISOString(),
+            ends_at: new Date(Date.now() + 172800000).toISOString()
+        }).eq("id", roundId);
 
         console.log("→ Creando liga...");
         const { data: newLeagueId, error: leagueErr } = await userClient.rpc("create_private_league", {
@@ -90,14 +98,11 @@ async function run() {
 
         // TEST 2: Límite de 14 jugadores
         console.log("Test 2: Límite de plantilla (14 max)");
-
-        // Damos presupuesto de sobra para asegurarnos de que el límite salta por cantidad, no por dinero
         await admin.from("fantasy_teams").update({ budget: 500 }).eq("id", teamId);
 
         let limitErr = null;
         let boughtCount = 0;
 
-        // Buscamos 20 jugadores que NO tengamos ya
         const excludeIds2 = [...ownedIds, player1Id].join(',');
         const { data: extraPlayers } = await admin
             .from("players")
@@ -129,11 +134,7 @@ async function run() {
 
         // TEST 3: Exclusividad
         console.log("Test 3: Exclusividad de jugador");
-
-        // 1. Cogemos un jugador que ya esté en el equipo
         const { data: ownedPlayer } = await admin.from("fantasy_team_players").select("player_id").eq("fantasy_team_id", teamId).eq("is_active", true).limit(1).single();
-
-        // 2. Hacemos hueco vendiendo a otro jugador (porque tenemos 14, si no, salta el límite primero)
         const { data: playerToSell } = await admin.from("fantasy_team_players").select("player_id").eq("fantasy_team_id", teamId).eq("is_active", true).neq("player_id", ownedPlayer!.player_id).limit(1).single();
 
         await userClient.rpc("transfer_player", {
@@ -143,7 +144,6 @@ async function run() {
             p_type: "SELL"
         });
 
-        // 3. Intentamos comprar al ownedPlayer de nuevo
         const { error: exclusiveErr } = await userClient.rpc("transfer_player", {
             p_fantasy_team_id: teamId,
             p_player_id: ownedPlayer!.player_id,
@@ -162,13 +162,13 @@ async function run() {
         if (!lockErr || !lockErr.message.includes("Transfers are closed")) throw new Error("No saltó el bloqueo de jornada");
         console.log("  ✔ Transferencias bloqueadas durante la jornada.\n");
 
-        // Restaurar la jornada
-        await admin.from("rounds").update({ starts_at: round.starts_at, ends_at: round.ends_at }).eq("id", roundId);
-
         console.log("✅ TODOS LOS TESTS DE LA FASE 7 HAN PASADO.");
 
     } finally {
-        // Limpieza
+        // Restaurar fechas originales y limpiar
+        if (roundId && originalRound) {
+            await admin.from("rounds").update({ starts_at: originalRound.starts_at, ends_at: originalRound.ends_at }).eq("id", roundId);
+        }
         if (leagueId) await admin.from("private_leagues").delete().eq("id", leagueId);
         if (userId) await admin.auth.admin.deleteUser(userId);
         console.log("\n🧹 Limpieza completada.");

@@ -2,12 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import {
-    calculateLineupScoreForRound,
-    validateLineup,
-    validateRosterSize,
-    type FantasyDemoPlayer,
-} from "@/lib/services/fantasy/fantasy-team.service";
+import { validateLineup, validateRosterSize, type FantasyDemoPlayer } from "@/lib/services/fantasy/fantasy-team.service";
 import type { PlayerPosition } from "@/domain/player/player.types";
 
 function displayPosition(position: PlayerPosition): string {
@@ -16,366 +11,322 @@ function displayPosition(position: PlayerPosition): string {
 
 export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
     const supabase = createClient();
-    const [catalogPlayers, setCatalogPlayers] = useState<FantasyDemoPlayer[]>([]);
-    const [selectedIds, setSelectedIds] = useState<string[]>([]);
-    const [lineupIds, setLineupIds] = useState<string[]>([]);
 
-    // Contexto dinámico de la liga
+    // Estados de carga
+    const [loading, setLoading] = useState(true);
+    const [actionLoading, setActionLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    // Pestaña activa
+    const [activeTab, setActiveTab] = useState<"lineup" | "market" | "ranking">("lineup");
+
+    // Contexto
     const [teamId, setTeamId] = useState<string>("");
     const [seasonUuid, setSeasonUuid] = useState<string>("");
     const [competitionRfevbId, setCompetitionRfevbId] = useState<number | null>(null);
     const [seasonRfevbId, setSeasonRfevbId] = useState<number | null>(null);
     const [seasonName, setSeasonName] = useState<string>("");
+    const [selectedRound, setSelectedRound] = useState<number>(1);
 
-    // NUEVO: Estado dinámico para las jornadas
-    const [rounds, setRounds] = useState<Array<{ number: number, label: string }>>([]);
-
+    // Datos
+    const [catalogPlayers, setCatalogPlayers] = useState<FantasyDemoPlayer[]>([]);
+    const [rosterIds, setRosterIds] = useState<string[]>([]);
+    const [lineupIds, setLineupIds] = useState<string[]>([]);
     const [budget, setBudget] = useState<number>(0);
     const [teamName, setTeamName] = useState<string>("");
-    const [selectedRound, setSelectedRound] = useState<number>(1);
-    const [loading, setLoading] = useState(true);
-    const [transferLoading, setTransferLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [allScores, setAllScores] = useState<Record<string, Record<number, number>>>({});
-    const [scoresLoading, setScoresLoading] = useState(false);
+
+    // Jornadas y puntuaciones REALES
+    const [rounds, setRounds] = useState<Array<{ number: number, label: string, isLocked: boolean }>>([]);
+    const [myRealScores, setMyRealScores] = useState<Record<number, number>>({});
+    const [ranking, setRanking] = useState<any[]>([]);
 
     const loadData = async () => {
         setLoading(true);
         try {
-            // 1. Primero obtenemos el equipo para saber a qué competición y temporada pertenece
+            // 1. Cargar equipo
             const teamRes = await fetch(`/api/fantasy-team?league_id=${leagueId}`);
             const teamPayload = await teamRes.json();
+            if (!teamRes.ok || !teamPayload.success) throw new Error(teamPayload.error);
 
-            if (!teamRes.ok || !teamPayload.success) throw new Error(teamPayload.error || "Error cargando tu equipo");
-
-            // 2. Guardamos el contexto dinámico
             setTeamId(teamPayload.team.id);
             setSeasonUuid(teamPayload.season_id);
             setCompetitionRfevbId(teamPayload.competition_rfevb_id);
             setSeasonRfevbId(teamPayload.season_rfevb_id);
-
-            // NUEVO: Extraemos el nombre de la temporada
-            const sName = teamPayload.season_name || `Temporada ${teamPayload.season_rfevb_id}`;
-            setSeasonName(sName);
-
-            setSelectedIds(teamPayload.activePlayerIds);
-            setLineupIds(teamPayload.lineupPlayerIds);
+            setSeasonName(teamPayload.season_name || `Temporada ${teamPayload.season_rfevb_id}`);
             setBudget(teamPayload.team.budget);
             setTeamName(teamPayload.team.name);
 
-            // 3. Ahora que sabemos la competición, cargamos el catálogo (mercado) de ESA competición
+            const activeIds = teamPayload.activePlayerIds;
+            const loadedLineup = teamPayload.lineupPlayerIds || [];
+            const cleanLineup = loadedLineup.filter((id: string) => activeIds.includes(id));
+
+            setRosterIds(activeIds);
+            setLineupIds(cleanLineup);
+
+            // 2. Cargar catálogo
             const rosterRes = await fetch(`/api/competition-roster?competition=${teamPayload.competition_rfevb_id}`);
             const rosterPayload = await rosterRes.json();
-
-            if (!rosterRes.ok || !rosterPayload.success) throw new Error("Error cargando el mercado");
-
             const teamsById = new Map(rosterPayload.teams.map((t: any) => [t.id, t.name]));
-            const realPlayers: FantasyDemoPlayer[] = rosterPayload.players.map((p: any) => ({
-                id: p.id,
-                name: p.displayName,
-                club: teamsById.get(p.currentTeamId ?? "") ?? "Equipo desconocido",
-                position: p.position,
-                price: p.price,
-                season: sName, // <-- CAMBIADO: Usa el nombre dinámico de la temporada
-                weeklyScores: {},
-            }));
+            setCatalogPlayers(rosterPayload.players.map((p: any) => ({
+                id: p.id, name: p.displayName, club: teamsById.get(p.currentTeamId ?? "") ?? "?", position: p.position, price: p.price, season: "", weeklyScores: {},
+            })));
 
-            setCatalogPlayers(realPlayers);
+            // 3. Cargar puntuaciones reales y ranking
+            const scoresRes = await fetch(`/api/league-scores?league_id=${leagueId}`);
+            const scoresPayload = await scoresRes.json();
+            if (scoresPayload.success) setMyRealScores(scoresPayload.scores);
+
+            const rankRes = await fetch(`/api/league-ranking?league_id=${leagueId}`);
+            const rankPayload = await rankRes.json();
+            if (rankPayload.success) setRanking(rankPayload.ranking);
+
+            // 4. Cargar jornadas y ver cuáles están bloqueadas
+            const { data: dbRounds } = await supabase
+                .from("rounds")
+                .select("round_number, starts_at, ends_at")
+                .eq("season_id", teamPayload.season_id)
+                .order("round_number");
+
+            const now = new Date();
+            const formattedRounds = (dbRounds || []).map(r => {
+                const isLocked = now >= new Date(r.starts_at) && now <= new Date(r.ends_at);
+                return {
+                    number: r.round_number,
+                    label: r.round_number <= 22 ? `Jornada ${r.round_number}` : r.round_number === 23 ? "Cuartos" : r.round_number === 24 ? "Semis" : "Final",
+                    isLocked
+                };
+            });
+            setRounds(formattedRounds);
+            if (formattedRounds.length > 0) setSelectedRound(formattedRounds[0].number);
+
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Error desconocido");
+            setError(err instanceof Error ? err.message : "Error");
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => {
-        loadData();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [leagueId]);
+    useEffect(() => { loadData(); }, [leagueId]);
 
-    // Cargar puntuaciones y jornadas en cuanto tengamos el ID dinámico
-    useEffect(() => {
-        if (!competitionRfevbId || !seasonRfevbId) return;
-
-        setScoresLoading(true);
-        fetch(`/api/fantasy-round-scores?competition=${competitionRfevbId}&season=${seasonRfevbId}`)
-            .then(async (res) => {
-                const payload = await res.json();
-                if (!res.ok || !payload.success) throw new Error(payload.error);
-                return payload;
-            })
-            .then((payload) => {
-                const map: Record<string, Record<number, number>> = {};
-                payload.scores.forEach((s: any) => {
-                    if (!map[s.playerId]) map[s.playerId] = {};
-                    map[s.playerId][s.roundNumber] = s.score;
-                });
-                setAllScores(map);
-
-                // NUEVO: Guardamos las jornadas reales que vienen del backend
-                if (payload.rounds && payload.rounds.length > 0) {
-                    setRounds(payload.rounds);
-                    // Si la jornada actual no existe en esta temporada, seleccionamos la primera
-                    if (!payload.rounds.find((r: any) => r.number === selectedRound)) {
-                        setSelectedRound(payload.rounds[0].number);
-                    }
-                }
-            })
-            .catch((err) => setError(err.message))
-            .finally(() => setScoresLoading(false));
-    }, [competitionRfevbId, seasonRfevbId]);
-
-    // ─── TRANSFERENCIAS (Fase 7) ───
-    const handleTransfer = async (playerId: string, type: "BUY" | "SELL") => {
-        if (!teamId) return;
-        setTransferLoading(true);
-        setError(null);
-
-        const { data: roundData } = await supabase
-            .from("rounds")
-            .select("id")
-            .eq("season_id", seasonUuid)
-            .eq("round_number", selectedRound)
-            .single();
-
-        if (!roundData) {
-            setError("No se encontró la jornada para realizar la transacción");
-            setTransferLoading(false);
-            return;
-        }
-
-        const { error: rpcError } = await supabase.rpc("transfer_player", {
-            p_fantasy_team_id: teamId,
-            p_player_id: playerId,
-            p_round_id: roundData.id,
-            p_type: type,
-        });
-
-        if (rpcError) {
-            setError(rpcError.message);
-            setTransferLoading(false);
-            return;
-        }
-
-        await loadData();
-        setTransferLoading(false);
-    };
-
-    // Placeholder para la Fase 8 (Alineación)
+    // Lógica de Alineación
     const toggleLineup = (playerId: string) => {
         if (lineupIds.includes(playerId)) {
             setLineupIds(lineupIds.filter(id => id !== playerId));
         } else {
-            if (lineupIds.length >= 7) {
-                alert("Solo puedes seleccionar 7 titulares. Quita a alguien primero.");
-                return;
-            }
+            if (lineupIds.length >= 7) return alert("Máximo 7 titulares.");
             setLineupIds([...lineupIds, playerId]);
         }
     };
 
     const handleSaveLineup = async () => {
-        if (!teamId || !seasonUuid) return;
+        const roundObj = rounds.find(r => r.number === selectedRound);
+        if (roundObj?.isLocked) return alert("La jornada está bloqueada.");
 
-        // Validación rápida en cliente antes de llamar al servidor
         const validation = validateLineup(lineupIds, rosterPlayers);
-        if (!validation.valid) {
-            setError("La alineación no es válida. Revisa los errores antes de guardar.");
-            return;
-        }
+        if (!validation.valid) return setError("Alineación inválida: " + validation.errors.join(", "));
 
-        setTransferLoading(true);
-        setError(null);
+        setActionLoading(true);
+        const { data: roundData } = await supabase.from("rounds").select("id").eq("season_id", seasonUuid).eq("round_number", selectedRound).single();
 
-        // Buscamos el UUID de la jornada seleccionada
-        const { data: roundData, error: roundError } = await supabase
-            .from("rounds")
-            .select("id")
-            .eq("season_id", seasonUuid)
-            .eq("round_number", selectedRound)
-            .single();
-
-        if (roundError || !roundData) {
-            setError("No se encontró la jornada seleccionada.");
-            setTransferLoading(false);
-            return;
-        }
-
-        // Llamada a la RPC
         const { error: rpcError } = await supabase.rpc("save_lineup", {
-            p_fantasy_team_id: teamId,
-            p_round_id: roundData.id,
-            p_player_ids: lineupIds
+            p_fantasy_team_id: teamId, p_round_id: roundData?.id, p_player_ids: lineupIds
         });
 
-        if (rpcError) {
-            setError(rpcError.message);
-            setTransferLoading(false);
-            return;
-        }
-
-        alert("✅ Alineación guardada correctamente");
-        setTransferLoading(false);
+        if (rpcError) setError(rpcError.message);
+        else alert("✅ Alineación guardada");
+        setActionLoading(false);
     };
 
+    // Lógica de Mercado
+    const handleTransfer = async (playerId: string, type: "BUY" | "SELL") => {
+        setActionLoading(true);
+        const { data: roundData } = await supabase.from("rounds").select("id").eq("season_id", seasonUuid).eq("round_number", selectedRound).single();
+
+        const { error: rpcError } = await supabase.rpc("transfer_player", {
+            p_fantasy_team_id: teamId, p_player_id: playerId, p_round_id: roundData?.id, p_type: type,
+        });
+
+        if (rpcError) setError(rpcError.message);
+        else await loadData();
+        setActionLoading(false);
+    };
+
+    // Helpers
     const playerMap = useMemo(() => new Map(catalogPlayers.map((p) => [p.id, p])), [catalogPlayers]);
-    const rosterPlayers = useMemo(() => selectedIds.flatMap((id) => playerMap.get(id) ? [playerMap.get(id)!] : []), [playerMap, selectedIds]);
-    const lineupPlayers = useMemo(() => lineupIds.flatMap((id) => playerMap.get(id) ? [playerMap.get(id)!] : []), [lineupIds, playerMap]);
-
-    const rosterValidation = useMemo(() => validateRosterSize(selectedIds), [selectedIds]);
+    const rosterPlayers = useMemo(() => rosterIds.flatMap(id => playerMap.get(id) ? [playerMap.get(id)!] : []), [playerMap, rosterIds]);
+    const lineupPlayers = useMemo(() => lineupIds.flatMap(id => playerMap.get(id) ? [playerMap.get(id)!] : []), [lineupIds, playerMap]);
     const lineupValidation = useMemo(() => validateLineup(lineupIds, rosterPlayers), [lineupIds, rosterPlayers]);
-    const lineupScore = calculateLineupScoreForRound(lineupIds, selectedRound, allScores);
+    const currentRoundObj = rounds.find(r => r.number === selectedRound);
 
-    if (loading) return <p className="rounded-lg bg-white p-6 text-slate-600">Cargando tu equipo y el mercado...</p>;
+    if (loading) return <div className="p-10 text-center animate-pulse">Cargando Fantasy...</div>;
 
     return (
-        <div className="space-y-8">
-            {error && (
-                <div className="rounded-lg bg-red-100 p-4 font-semibold text-red-700">
-                    ⚠️ {error}
+        <div className="max-w-6xl mx-auto space-y-6">
+            {/* CABECERA */}
+            <header className="bg-slate-900 text-white rounded-xl p-6 shadow-lg flex justify-between items-center">
+                <div>
+                    <h1 className="text-3xl font-bold">{teamName}</h1>
+                    <p className="text-slate-400 mt-1">{seasonName}</p>
+                </div>
+                <div className="flex gap-6 text-right">
+                    <div>
+                        <p className="text-sm text-slate-400">Presupuesto</p>
+                        <p className="text-2xl font-bold text-emerald-400">{budget.toFixed(1)}M</p>
+                    </div>
+                    <div>
+                        <p className="text-sm text-slate-400">Plantilla</p>
+                        <p className="text-2xl font-bold">{rosterIds.length}/14</p>
+                    </div>
+                </div>
+            </header>
+
+            {error && <div className="bg-red-100 text-red-700 p-4 rounded-lg">⚠️ {error}</div>}
+
+            {/* SELECTOR DE JORNADA */}
+            <div className="flex items-center gap-4 bg-white p-4 rounded-lg shadow-sm border border-slate-200">
+                <label className="font-semibold text-slate-700">Jornada a gestionar:</label>
+                <select
+                    value={selectedRound}
+                    onChange={(e) => setSelectedRound(Number(e.target.value))}
+                    className="border p-2 rounded-md font-medium"
+                >
+                    {rounds.map(r => <option key={r.number} value={r.number}>{r.label} {r.isLocked ? "🔒" : ""}</option>)}
+                </select>
+                {currentRoundObj?.isLocked && <span className="text-amber-600 text-sm font-bold">Las transferencias y alineaciones están cerradas.</span>}
+            </div>
+
+            {/* PESTAÑAS */}
+            <div className="flex gap-2 border-b border-slate-200">
+                <button onClick={() => setActiveTab("lineup")} className={`px-4 py-2 font-semibold ${activeTab === "lineup" ? "border-b-2 border-violet-600 text-violet-600" : "text-slate-500"}`}>Mi Alineación</button>
+                <button onClick={() => setActiveTab("market")} className={`px-4 py-2 font-semibold ${activeTab === "market" ? "border-b-2 border-violet-600 text-violet-600" : "text-slate-500"}`}>Mercado</button>
+                <button onClick={() => setActiveTab("ranking")} className={`px-4 py-2 font-semibold ${activeTab === "ranking" ? "border-b-2 border-violet-600 text-violet-600" : "text-slate-500"}`}>Clasificación</button>
+            </div>
+
+            {/* CONTENIDO: ALINEACIÓN */}
+            {activeTab === "lineup" && (
+                <div className="grid md:grid-cols-2 gap-6">
+                    <div className="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
+                        <h3 className="font-bold text-lg mb-4 text-slate-800">Plantilla ({rosterIds.length})</h3>
+                        <div className="space-y-2">
+                            {rosterPlayers.map(p => {
+                                const isTitular = lineupIds.includes(p.id);
+                                return (
+                                    <div key={p.id} className={`flex justify-between items-center p-3 rounded border ${isTitular ? 'bg-violet-50 border-violet-200' : 'bg-slate-50'}`}>
+                                        <div>
+                                            <p className="font-semibold text-slate-800">{p.name}</p>
+                                            <p className="text-xs text-slate-500">{p.club} · {displayPosition(p.position)}</p>
+                                        </div>
+                                        <button onClick={() => toggleLineup(p.id)} disabled={currentRoundObj?.isLocked} className={`px-3 py-1 rounded text-sm font-medium ${isTitular ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-700'}`}>
+                                            {isTitular ? 'Quitar' : 'Alinear'}
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    <div className="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
+                        <h3 className="font-bold text-lg mb-4 text-slate-800">Titulares ({lineupIds.length}/7)</h3>
+                        <div className="space-y-2 mb-4">
+                            {lineupPlayers.map(p => (
+                                <div key={p.id} className="flex justify-between p-3 bg-slate-50 rounded border border-slate-100">
+                                    <span className="font-medium">{p.name}</span>
+                                    <span className="text-sm text-slate-500">{displayPosition(p.position)}</span>
+                                </div>
+                            ))}
+                            {lineupIds.length === 0 && <p className="text-slate-400 text-sm text-center py-4">Selecciona 7 jugadores de la izquierda</p>}
+                        </div>
+
+                        {lineupValidation.errors.length > 0 && (
+                            <div className="bg-red-50 text-red-600 p-3 rounded text-sm mb-4">
+                                {lineupValidation.errors.map(e => <p key={e}>• {e}</p>)}
+                            </div>
+                        )}
+
+                        <button
+                            onClick={handleSaveLineup}
+                            disabled={actionLoading || lineupIds.length !== 7 || currentRoundObj?.isLocked}
+                            className="w-full bg-slate-900 text-white py-3 rounded-lg font-bold hover:bg-slate-800 disabled:opacity-50"
+                        >
+                            {actionLoading ? "Guardando..." : "Guardar Alineación"}
+                        </button>
+                    </div>
                 </div>
             )}
 
-            <section className="grid gap-4 md:grid-cols-4">
-                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                    <p className="text-sm text-slate-500">Equipo</p>
-                    <p className="mt-2 text-xl font-bold text-slate-900 truncate">{teamName}</p>
-                    <p className="text-xs text-slate-400 mt-1">{seasonName}</p>
-                </div>
-                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                    <p className="text-sm text-slate-500">Presupuesto</p>
-                    <p className="mt-2 text-3xl font-bold text-emerald-600">{budget.toFixed(1)}M</p>
-                </div>
-                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                    <p className="text-sm text-slate-500">Plantilla</p>
-                    <p className="mt-2 text-3xl font-bold text-slate-900">{selectedIds.length}/14</p>
-                </div>
-                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                    <p className="text-sm text-slate-500">Puntos J{selectedRound}</p>
-                    <p className="mt-2 text-3xl font-bold text-violet-600">{scoresLoading ? "..." : lineupScore}</p>
-                </div>
-            </section>
-
-            <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h2 className="text-2xl font-bold text-slate-900 mb-4">Mi equipo y alineación</h2>
-                <div className="grid gap-6 lg:grid-cols-2">
-                    <div>
-                        <h3 className="mb-4 text-lg font-bold text-slate-900">Plantilla ({selectedIds.length}/14)</h3>
-                        <div className="space-y-3">
-                            {rosterPlayers.length > 0 ? (
-                                rosterPlayers.map((player) => {
-                                    const isInLineup = lineupIds.includes(player.id);
-                                    return (
-                                        <div key={player.id} className={`flex items-center justify-between gap-3 rounded-lg border p-3 ${isInLineup ? "border-emerald-500 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
-                                            <div className="min-w-0 flex-1">
-                                                <p className="truncate font-semibold text-slate-900">{player.name}</p>
-                                                <p className="text-sm text-slate-600">{player.club} · {displayPosition(player.position)}</p>
-                                            </div>
-                                            <button type="button" onClick={() => toggleLineup(player.id)} className={`rounded px-3 py-2 text-sm font-semibold transition ${isInLineup ? "bg-amber-500 text-white hover:bg-amber-600" : "bg-sky-600 text-white hover:bg-sky-700"}`}>
-                                                {isInLineup ? "Quitar" : "Alinear"}
-                                            </button>
-                                        </div>
-                                    );
-                                })
-                            ) : (
-                                <p className="text-sm text-slate-500">Todavía no tienes jugadores en la plantilla.</p>
-                            )}
-                        </div>
+            {/* CONTENIDO: MERCADO */}
+            {activeTab === "market" && (
+                <div className="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
+                    <h3 className="font-bold text-lg mb-4 text-slate-800">Mercado de Fichajes</h3>
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {catalogPlayers.map(p => {
+                            const isOwned = rosterIds.includes(p.id);
+                            return (
+                                <div key={p.id} className="border p-3 rounded flex justify-between items-center">
+                                    <div>
+                                        <p className="font-semibold text-sm">{p.name}</p>
+                                        <p className="text-xs text-slate-500">{p.club} · {displayPosition(p.position)}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="font-bold text-emerald-600 text-sm mb-1">{p.price}M</p>
+                                        <button
+                                            onClick={() => handleTransfer(p.id, isOwned ? "SELL" : "BUY")}
+                                            disabled={actionLoading || currentRoundObj?.isLocked}
+                                            className={`px-2 py-1 rounded text-xs font-bold ${isOwned ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}
+                                        >
+                                            {isOwned ? "Vender" : "Comprar"}
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
+                </div>
+            )}
 
-                    <div>
-                        <h3 className="text-lg font-bold text-slate-900">Titulares ({lineupIds.length}/7)</h3>
-                        <div className="mt-4 space-y-2">
-                            {lineupPlayers.map((player) => (
-                                <div key={player.id} className="flex items-center justify-between rounded bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                                    <span>{player.name}</span>
-                                    <span>{displayPosition(player.position)}</span>
+            {/* CONTENIDO: CLASIFICACIÓN */}
+            {activeTab === "ranking" && (
+                <div className="space-y-6">
+                    {/* Historial de puntos reales */}
+                    <div className="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
+                        <h3 className="font-bold text-lg mb-4 text-slate-800">Mis Puntos Reales</h3>
+                        <div className="flex flex-wrap gap-2">
+                            {rounds.map(r => (
+                                <div key={r.number} className="border rounded p-2 text-center min-w-[80px]">
+                                    <p className="text-xs text-slate-500">{r.label}</p>
+                                    <p className="font-bold text-lg">{myRealScores[r.number] ?? "-"}</p>
                                 </div>
                             ))}
                         </div>
-
-                        {/* NUEVO BOTÓN DE GUARDAR */}
-                        <button
-                            onClick={handleSaveLineup}
-                            disabled={transferLoading || lineupIds.length !== 7}
-                            className="mt-4 w-full rounded bg-slate-900 px-4 py-2 font-bold text-white transition hover:bg-slate-800 disabled:opacity-50"
-                        >
-                            {transferLoading ? "Guardando..." : "Guardar Alineación"}
-                        </button>
-
-                        {lineupValidation.errors.length > 0 && (
-                            <div className="mt-4 rounded bg-red-50 p-3 text-sm text-red-700">
-                                {lineupValidation.errors.map((error) => <p key={error}>{error}</p>)}
-                            </div>
-                        )}
                     </div>
-                </div>
-            </section>
 
-            <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="mb-4 flex items-center justify-between">
-                    <div>
-                        <h2 className="text-2xl font-bold text-slate-900">Mercado de fichajes</h2>
-                        <p className="text-sm text-slate-500">Todos los jugadores de la liga a 9M. Transacción en J{selectedRound}.</p>
-                    </div>
-                    <select value={selectedRound} onChange={(e) => setSelectedRound(Number(e.target.value))} className="rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700">
-                        {rounds.length > 0 ? (
-                            rounds.map((round) => <option key={round.number} value={round.number}>{round.label}</option>)
-                        ) : (
-                            <option value={1}>Cargando jornadas...</option>
-                        )}
-                    </select>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    {catalogPlayers.map((player) => {
-                        const isSelected = selectedIds.includes(player.id);
-                        return (
-                            <div key={player.id} className={`flex items-center justify-between gap-3 rounded-lg border p-3 ${isSelected ? "border-violet-500 bg-violet-50" : "border-slate-200 bg-slate-50"}`}>
-                                <div className="min-w-0 flex-1">
-                                    <p className="truncate font-semibold text-slate-900">{player.name}</p>
-                                    <p className="text-sm text-slate-600">{player.club} · {displayPosition(player.position)} · {player.price}M</p>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={() => handleTransfer(player.id, isSelected ? "SELL" : "BUY")}
-                                    disabled={transferLoading}
-                                    className={`rounded px-3 py-2 text-sm font-semibold transition disabled:opacity-50 ${isSelected ? "bg-red-500 text-white hover:bg-red-600" : "bg-emerald-600 text-white hover:bg-emerald-700"}`}
-                                >
-                                    {isSelected ? "Vender" : "Comprar"}
-                                </button>
-                            </div>
-                        );
-                    })}
-                </div>
-            </section>
-
-            <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h3 className="text-lg font-bold text-slate-900 mb-4">Puntuación por jornada</h3>
-                <div className="overflow-x-auto">
-                    <table className="min-w-full text-left text-sm">
-                        <thead>
-                        <tr className="border-b border-slate-200 text-slate-600">
-                            <th className="px-3 py-2 font-medium">Jornada</th>
-                            <th className="px-3 py-2 font-medium">Puntuación</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        {rounds.map((round) => {
-                            const score = calculateLineupScoreForRound(lineupIds, round.number, allScores);
-                            return (
-                                <tr key={round.number} className="border-b border-slate-100">
-                                    <td className="px-3 py-2 text-slate-700">{round.label}</td>
-                                    <td className={`px-3 py-2 font-semibold ${round.number === selectedRound ? "text-violet-700" : "text-slate-700"}`}>
-                                        {scoresLoading ? "..." : score}
+                    {/* Ranking General */}
+                    <div className="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
+                        <h3 className="font-bold text-lg mb-4 text-slate-800">Clasificación General</h3>
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-slate-50 text-slate-600">
+                            <tr>
+                                <th className="p-3">Pos</th>
+                                <th className="p-3">Equipo</th>
+                                <th className="p-3 text-right">Puntos</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {ranking.map((row, i) => (
+                                <tr key={row.teamId} className="border-b last:border-0 hover:bg-slate-50">
+                                    <td className="p-3 font-bold text-slate-400">{i + 1}</td>
+                                    <td className="p-3">
+                                        <p className="font-semibold text-slate-800">{row.teamName}</p>
+                                        <p className="text-xs text-slate-500">{row.username}</p>
                                     </td>
+                                    <td className="p-3 text-right font-bold text-violet-600">{row.totalPoints}</td>
                                 </tr>
-                            );
-                        })}
-                        </tbody>
-                    </table>
+                            ))}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-            </section>
+            )}
         </div>
     );
 }

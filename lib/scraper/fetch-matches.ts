@@ -14,6 +14,7 @@ export interface Match {
     categoryId: string;
     seasonId: string;
     round: number;
+    groupName: string | null;
     homeTeam: string;
     awayTeam: string;
     matchDate: Date | null;
@@ -29,10 +30,6 @@ export class ScraperError extends Error {
 
 // ───────────────────────────── timezone ─────────────────────────────
 
-/**
- * Offset (en ms) del huso indicado en el instante `date`.
- * Ej. Madrid devuelve +1h (CET) o +2h (CEST) según la fecha.
- */
 function getTimeZoneOffsetMs(date: Date, timeZone: string): number {
     const dtf = new Intl.DateTimeFormat("en-US", {
         timeZone,
@@ -60,10 +57,6 @@ function getTimeZoneOffsetMs(date: Date, timeZone: string): number {
     return asUtc - date.getTime();
 }
 
-/**
- * Convierte un wall-clock (`YYYY-MM-DD HH:mm`) en el huso indicado a un
- * instante UTC. Dos iteraciones son suficientes para resolver DST.
- */
 function wallClockToUtc(
     year: number,
     month: number,
@@ -79,11 +72,6 @@ function wallClockToUtc(
     return new Date(naive - offset2);
 }
 
-/**
- * Parsea el formato de RFEVB: "25/10/2025 - 17:00".
- * Interpretado en horario peninsular (Europe/Madrid).
- * Devuelve null si el formato no encaja.
- */
 export function parseRfevbDatetime(
     value: string,
     timeZone: string = MADRID_TZ
@@ -113,11 +101,8 @@ async function getCompetitionMatchesHtml(
         ID: String(competitionId),
         PID: String(seasonId),
     });
-
     const url = `${COMPETITION_MATCHES_URL}?${params.toString()}`;
-
     console.log(`Descargando: ${url}`);
-
     let response: Response;
     try {
         response = await fetch(url, {
@@ -135,13 +120,9 @@ async function getCompetitionMatchesHtml(
             }`
         );
     }
-
     if (!response.ok) {
-        throw new ScraperError(
-            `La web respondió con HTTP ${response.status}`
-        );
+        throw new ScraperError(`La web respondió con HTTP ${response.status}`);
     }
-
     const html = await response.text();
     if (!html.trim()) {
         throw new ScraperError("La web devolvió un HTML vacío.");
@@ -180,43 +161,29 @@ function extractTeamNames(
 ): { homeTeam: string; awayTeam: string } | null {
     let homeTeam: string | null = null;
     let awayTeam: string | null = null;
-
     $(`[onclick*="mID=${matchId}"] span`).each((_, element) => {
         const id = $(element).attr("id");
         if (!id) return;
-
         const text = $(element).text().replace(/\s+/g, " ").trim();
         if (!text) return;
-
         if (id.endsWith("_LBL_HomeTeamName") && !homeTeam) homeTeam = text;
         if (id.endsWith("_LBL_GuestTeamName") && !awayTeam) awayTeam = text;
         if (id.endsWith("_Label6") && !homeTeam) homeTeam = text;
         if (id.endsWith("_Label7") && !awayTeam) awayTeam = text;
     });
-
     if (!homeTeam || !awayTeam) return null;
     return { homeTeam, awayTeam };
 }
 
-/**
- * Encuentra el valor de `..._HF_MatchDatetime` asociado al partido.
- *
- * Estrategia: subir desde el link del partido hasta encontrar un ancestro
- * cuyo id contenga `RADLIST_Matches_ctrl<N>_`. Ese ctrl identifica de forma
- * única el partido; a partir del prefijo se localiza el input oculto con la
- * fecha. Walk-up con límite de seguridad para no colgarse en HTML raro.
- */
 function findMatchDatetimeFromLink(
     $: cheerio.CheerioAPI,
     linkEl: unknown
 ): string | null {
     let node: any = $(linkEl as any);
     let prefix: string | null = null;
-
     for (let i = 0; i < 20; i++) {
         const parent = node.parent();
         if (!parent || parent.length === 0) break;
-
         const id = parent.attr("id");
         if (id) {
             const m = id.match(/^(.*RADLIST_Matches_ctrl\d+_)/);
@@ -227,7 +194,6 @@ function findMatchDatetimeFromLink(
         }
         node = parent;
     }
-
     if (!prefix) return null;
     const inputId = `${prefix}HF_MatchDatetime`;
     const input = $(`input[id="${inputId}"]`);
@@ -238,93 +204,88 @@ function findMatchDatetimeFromLink(
 
 function extractMatchLinks(html: string): Match[] {
     const $ = cheerio.load(html);
-
     const matches: Match[] = [];
     const seenMatchIds = new Set<string>();
 
-    const roundContainers = $("div.TabContent_Border");
-    console.log(
-        `Contenedores de jornadas encontrados: ${roundContainers.length}`
-    );
+    // 1. Obtener nombres de las pestañas en orden
+    const tabNames: string[] = [];
+    $(".rtsUL .rtsLI a .rtsTxt").each((_, el) => {
+        tabNames.push($(el).text().trim());
+    });
 
-    roundContainers.each((index, container) => {
-        const roundNumber = index + 1;
+    // 2. Obtener paneles de contenido (rmpView) en orden
+    const panels = $("div.rmpView");
 
-        $(container)
-            .find("[onclick]")
-            .each((_, element) => {
-                const onclick = $(element).attr("onclick");
-                if (!onclick) return;
-                if (!onclick.includes("MatchStatistics.aspx")) return;
+    // 3. Para cada panel, obtener su nombre de grupo
+    const panelGroupMap = new Map<any, string>();
+    panels.each((index, panel) => {
+        const groupName = tabNames[index] || `Grupo ${index + 1}`;
+        panelGroupMap.set(panel, groupName);
+    });
 
-                const params = extractMatchParams(onclick);
-                if (!params) return;
+    const roundCounters: Record<string, number> = {};
 
-                const matchId = params.get("mID");
-                const competitionId = params.get("ID");
-                const categoryId = params.get("CID");
-                const seasonId = params.get("PID");
+    $("div.TabContent_Border").each((index, container) => {
+        // Encontrar el panel padre
+        const panel = $(container).closest(".rmpView");
+        const groupName = panelGroupMap.get(panel[0]) || "Grupo Desconocido";
 
-                if (!matchId || !competitionId || !categoryId || !seasonId) {
-                    return;
-                }
-                if (seenMatchIds.has(matchId)) return;
+        // Incrementar contador de jornada para este grupo
+        roundCounters[groupName] = (roundCounters[groupName] || 0) + 1;
+        const roundNumber = roundCounters[groupName];
 
-                const rawDatetime = findMatchDatetimeFromLink($, element);
-                const matchDate = rawDatetime
-                    ? parseRfevbDatetime(rawDatetime)
-                    : null;
+        $(container).find("[onclick]").each((_, element) => {
+            const onclick = $(element).attr("onclick");
+            if (!onclick) return;
+            if (!onclick.includes("MatchStatistics.aspx")) return;
+            const params = extractMatchParams(onclick);
+            if (!params) return;
+            const matchId = params.get("mID");
+            const competitionId = params.get("ID");
+            const categoryId = params.get("CID");
+            const seasonId = params.get("PID");
+            if (!matchId || !competitionId || !categoryId || !seasonId) return;
+            if (seenMatchIds.has(matchId)) return;
 
-                if (rawDatetime && !matchDate) {
-                    console.warn(
-                        `Fecha no parseable para partido ${matchId}: "${rawDatetime}"`
-                    );
-                }
+            const rawDatetime = findMatchDatetimeFromLink($, element);
+            const matchDate = rawDatetime ? parseRfevbDatetime(rawDatetime) : null;
+            if (rawDatetime && !matchDate) {
+                console.warn(`Fecha no parseable para partido ${matchId}: "${rawDatetime}"`);
+            }
 
-                const teamNames = extractTeamNames($, matchId);
+            const teamNames = extractTeamNames($, matchId);
+            seenMatchIds.add(matchId);
 
-                seenMatchIds.add(matchId);
-
-                if (!teamNames) {
-                    console.warn(
-                        `No se pudieron obtener los equipos del partido ${matchId}`
-                    );
-                    matches.push({
-                        matchId,
-                        competitionId,
-                        categoryId,
-                        seasonId,
-                        round: roundNumber,
-                        homeTeam: "Desconocido",
-                        awayTeam: "Desconocido",
-                        matchDate,
-                        url: getMatchUrl(
-                            matchId,
-                            competitionId,
-                            categoryId,
-                            seasonId
-                        ),
-                    });
-                    return;
-                }
-
+            if (!teamNames) {
+                console.warn(`No se pudieron obtener los equipos del partido ${matchId}`);
                 matches.push({
                     matchId,
                     competitionId,
                     categoryId,
                     seasonId,
                     round: roundNumber,
-                    homeTeam: teamNames.homeTeam,
-                    awayTeam: teamNames.awayTeam,
+                    groupName,
+                    homeTeam: "Desconocido",
+                    awayTeam: "Desconocido",
                     matchDate,
-                    url: getMatchUrl(
-                        matchId,
-                        competitionId,
-                        categoryId,
-                        seasonId
-                    ),
+                    url: getMatchUrl(matchId, competitionId, categoryId, seasonId),
                 });
+                return;
+            }
+
+            matches.push({
+                matchId,
+                competitionId,
+                categoryId,
+                seasonId,
+                round: roundNumber,
+                groupName,
+                homeTeam: teamNames.homeTeam,
+                awayTeam: teamNames.awayTeam,
+                matchDate,
+                url: getMatchUrl(matchId, competitionId, categoryId, seasonId),
             });
+        });
     });
 
     return matches;
@@ -338,15 +299,12 @@ export async function scrapeMatches(
     console.log(
         `Buscando partidos. Competición: ${competitionId}, Temporada: ${seasonId}`
     );
-
     const html = await getCompetitionMatchesHtml(competitionId, seasonId);
     const matches = extractMatchLinks(html);
-
     const filteredMatches =
         roundNumber === undefined
             ? matches
             : matches.filter((match) => match.round === roundNumber);
-
     console.log(`Partidos encontrados: ${filteredMatches.length}`);
     return filteredMatches;
 }

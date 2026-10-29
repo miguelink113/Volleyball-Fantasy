@@ -1,12 +1,12 @@
 # Desarrollo local
 
-**Revisión de documentación:** 2026-10-27
+**Revisión de documentación:** 2026-10-28
 
 ## Requisitos
 
-- Node.js compatible con Next.js 16 y npm[cite: 3].
-- Proyecto Supabase configurado y variables de entorno locales[cite: 3].
-- `SUPABASE_REMOTE_DB_URL` solo si se ejecuta la prueba de esquema remoto[cite: 3].
+- Node.js compatible con Next.js 16 y npm.
+- Proyecto Supabase configurado y variables de entorno locales.
+- `SUPABASE_REMOTE_DB_URL` solo si se ejecuta la prueba de esquema remoto.
 
 ## Instalación y ejecución
 
@@ -15,15 +15,15 @@ npm install
 npm run dev
 ```
 
-Abre `http://localhost:3000`[cite: 3]. No versionar secretos ni la URI PostgreSQL[cite: 3]. `lib/supabase/admin.server.ts` requiere `SUPABASE_SECRET_KEY` y solo debe ejecutarse en servidor; el cliente de navegador usa la publishable key[cite: 3].
+Abre `http://localhost:3000`. No versionar secretos ni la URI PostgreSQL. `lib/supabase/admin.server.ts` requiere `SUPABASE_SECRET_KEY` y solo debe ejecutarse en servidor; el cliente de navegador usa la publishable key.
 
 ## Flujo de desarrollo
 
-1. **Extracción:** `lib/scraper/` consulta RFEVB[cite: 3].
-2. **Ingesta:** scripts de `scripts/ingest/` persisten el roster, partidos, estadísticas y valores de mercado[cite: 3].
+1. **Extracción:** `lib/scraper/` consulta RFEVB.
+2. **Ingesta:** scripts de `scripts/ingest/` persisten el roster, partidos, estadísticas y valores de mercado.
 3. **Cálculo de puntos:** `npm run calculate:scores` procesa dinámicamente todas las temporadas activas y actualiza las tablas de puntuaciones.
-4. **Lectura de producto:** los repositorios encapsulan consultas de Supabase[cite: 3].
-5. **Aplicación:** las APIs de datos persistidos exponen roster, scoring y ranking; el dashboard y `/fantasy` consumen algunos datos y operaciones mediante RPC[cite: 3].
+4. **Lectura de producto:** los repositorios encapsulan consultas de Supabase.
+5. **Aplicación:** las APIs de datos persistidos exponen roster, scoring y ranking; el dashboard y `/fantasy` consumen algunos datos y operaciones mediante RPC.
 
 ## Estructura relevante
 
@@ -52,21 +52,22 @@ supabase/migrations/         Migraciones SQL
 
 ## Ingesta
 
-Los comandos siguientes son ejemplos para los IDs documentados de la temporada 2025/26[cite: 3].
+Los comandos siguientes son ejemplos dinámicos (sustituye los IDs por la temporada correspondiente).
 
 ### Roster
 ```bash
-npm run ingest:roster -- --competition=152 --season=186 --season-name="2025/26"
+npx tsx scripts/ingest/ingest-roster.ts --competition=167 --season=203 --season-name="2026/27"
 ```
 
 ### Partidos y estadísticas
 ```bash
-npm run ingest:matches -- --competition=152 --season=186
+npx tsx scripts/ingest/ingest-matches.ts --competition=167 --season=203
 ```
+*(Nota: Si hay equipos cuyo nombre en el acta no coincide con el roster y no se pueden resolver automáticamente, el partido se omite con un warning).*
 
 ### Valores iniciales del mercado
 ```bash
-npm run ingest:market-values -- --competition=152 --season=186 --price=9
+npx tsx scripts/ingest/ingest-market-values.ts --competition=167 --season=203 --price=9
 ```
 
 ### Cálculo y persistencia de puntuaciones
@@ -83,7 +84,7 @@ npm run calculate:scores
 GET /api/competition-roster?competition=152
 ```
 
-Busca la competición en Supabase y usa la temporada con `is_current=true`[cite: 3].
+Busca la competición en Supabase y usa la temporada con `is_current=true`.
 
 ### Equipo de una liga
 
@@ -91,7 +92,7 @@ Busca la competición en Supabase y usa la temporada con `is_current=true`[cite:
 GET /api/fantasy-team?league_id=<uuid-de-liga>
 ```
 
-Consulta equipo, jugadores activos y la primera alineación encontrada[cite: 3].
+Consulta equipo, jugadores activos y la primera alineación encontrada.
 
 ### Ranking y puntuaciones reales
 
@@ -100,7 +101,7 @@ GET /api/league-ranking?league_id=<uuid-de-liga>
 GET /api/league-scores?league_id=<uuid-de-liga>
 ```
 
-Lecturas instantáneas de las tablas de resultados persistidos[cite: 3].
+Lecturas instantáneas de las tablas de resultados persistidos.
 
 ## Tests declarados en `package.json`
 
@@ -121,7 +122,7 @@ npm run test:scoring-persistence
 npm run build
 ```
 
-## Consideraciones sobre el sistema
+## Limitaciones conocidas que afectan al desarrollo
 
-- La ingesta desde RFEVB y el cálculo de puntuaciones se ejecutan manualmente; el despliegue en producción requerirá tareas programadas (cron)[cite: 3].
-- Toda la UI, rutas HTTP, comandos de tests y scripts operativos operan ya sobre IDs dinámicos sin hardcoding.
+- La resolución automática de equipos con nombres muy dispares requiere mejora (fuzzy matching). Actualmente los partidos no resueltos se omiten por seguridad.
+- La ingesta desde RFEVB y el cálculo de puntuaciones se ejecutan manualmente; el despliegue en producción requerirá tareas programadas (cron).

@@ -248,6 +248,7 @@ async function upsertRound(
         competitionId: string;
         seasonId: string;
         roundNumber: number;
+        groupName: string | null;
         startsAt: Date;
         endsAt: Date;
     }
@@ -256,6 +257,7 @@ async function upsertRound(
         competition_id: params.competitionId,
         season_id: params.seasonId,
         round_number: params.roundNumber,
+        group_name: params.groupName,
         name: null,
         starts_at: params.startsAt.toISOString(),
         ends_at: params.endsAt.toISOString(),
@@ -264,16 +266,23 @@ async function upsertRound(
 
     const { error } = await supabase
         .from("rounds")
-        .upsert([row], { onConflict: "season_id,round_number" });
+        .upsert([row], { onConflict: "season_id,round_number,group_name" });
 
     if (error) throw error;
 
-    const { data, error: selectError } = await supabase
+    let query = supabase
         .from("rounds")
         .select("id")
         .eq("season_id", params.seasonId)
-        .eq("round_number", params.roundNumber)
-        .single();
+        .eq("round_number", params.roundNumber);
+
+    if (params.groupName) {
+        query = query.eq("group_name", params.groupName);
+    } else {
+        query = query.is("group_name", null);
+    }
+
+    const { data, error: selectError } = await query.single();
 
     if (selectError) throw selectError;
     return data.id;
@@ -354,15 +363,25 @@ async function main() {
         throw new Error("El scraper no devolvió partidos. Abortando.");
     }
 
-    const roundMap = new Map<number, ScrapedMatch[]>();
+    // Agrupar por Grupo + Jornada para evitar colisiones de round_number
+    const roundMap = new Map<string, ScrapedMatch[]>();
     for (const m of matches) {
-        const list = roundMap.get(m.round) ?? [];
+        const groupKey = m.groupName || "General";
+        const key = `${groupKey}|${m.round}`; // <-- CAMBIA EL GUION POR |
+        const list = roundMap.get(key) ?? [];
         list.push(m);
-        roundMap.set(m.round, list);
+        roundMap.set(key, list);
     }
-    const roundNumbers = [...roundMap.keys()].sort((a, b) => a - b);
+
+    const roundKeys = [...roundMap.keys()].sort((a, b) => {
+        const [groupA, roundA] = a.split("|"); // <-- CAMBIA EL GUION POR |
+        const [groupB, roundB] = b.split("|"); // <-- CAMBIA EL GUION POR |
+        if (groupA !== groupB) return groupA.localeCompare(groupB);
+        return Number(roundA) - Number(roundB);
+    });
+
     console.log(
-        `  ${matches.length} partidos en ${roundNumbers.length} jornadas`
+        `  ${matches.length} partidos en ${roundKeys.length} bloques (Grupo+Jornada)`
     );
 
     const resolver = new TeamAliasResolver(supabase);
@@ -376,20 +395,18 @@ async function main() {
     let totalSkippedDuplicatePlayer = 0;
     let totalRoundsSkippedNoDates = 0;
 
-    // IDs de partidos que esperamos encontrar en Supabase al finalizar.
-    // Es la verificación real: si RFEVB devuelve N partidos pero omitimos M
-    // legítimamente (equipo sin resolver, jornada sin fecha), no queremos
-    // que el script aborte por eso. Solo abortamos si un partido que
-    // intentamos persistir no aparece.
     const expectedPersistedMatchIds = new Set<string>();
 
-    for (const roundNumber of roundNumbers) {
-        const roundMatches = roundMap.get(roundNumber)!;
+    for (const roundKey of roundKeys) {
+        const roundMatches = roundMap.get(roundKey)!;
+        const [groupNameStr, roundNumStr] = roundKey.split("|"); // <-- CAMBIA EL GUION POR |
+        const roundNumber = Number(roundNumStr);
+        const groupName = groupNameStr === "General" ? null : groupNameStr;
 
         const dated = roundMatches.filter((m) => m.matchDate !== null);
         if (dated.length === 0) {
             console.warn(
-                `  ⚠ Jornada ${roundNumber} sin fechas. Se omite entera.`
+                `  ⚠ Jornada ${groupName || ''} ${roundNumber} sin fechas. Se omite entera.`
             );
             totalRoundsSkippedNoDates++;
             continue;
@@ -406,7 +423,7 @@ async function main() {
         const endsAt = startOfDayAfterMadrid(last.matchDate!);
 
         console.log(
-            `\n→ Jornada ${roundNumber}: ${roundMatches.length} partidos ` +
+            `\n→ ${groupName ? `${groupName} - ` : ''}Jornada ${roundNumber}: ${roundMatches.length} partidos ` +
             `[${startsAt.toISOString()} → ${endsAt.toISOString()}]`
         );
 
@@ -414,11 +431,11 @@ async function main() {
             competitionId,
             seasonId,
             roundNumber,
+            groupName,
             startsAt,
             endsAt,
         });
 
-        // Una sola carga del índice por jornada, y resolución en bloque.
         const rawNames = roundMatches.flatMap((m) => [
             m.homeTeam,
             m.awayTeam,
@@ -452,6 +469,14 @@ async function main() {
                 awayTeamId
             );
 
+            // Asignar el grupo a los equipos si no lo tienen ya
+            if (scraped.groupName) {
+                await supabase.from("teams").update({ group_name: scraped.groupName })
+                    .eq("id", homeTeam.teamId).is("group_name", null);
+                await supabase.from("teams").update({ group_name: scraped.groupName })
+                    .eq("id", awayTeam.teamId).is("group_name", null);
+            }
+
             // Stats
             let statsData: Awaited<
                 ReturnType<typeof scrapeMatch>
@@ -476,6 +501,7 @@ async function main() {
                 season_id: seasonId,
                 round_id: roundId,
                 rfevb_match_id: scraped.matchId,
+                group_name: scraped.groupName, // <-- Guardamos el grupo en el partido
                 match_date: scraped.matchDate?.toISOString() ?? null,
                 home_team_id: homeTeam.teamId,
                 away_team_id: awayTeam.teamId,
@@ -537,11 +563,6 @@ async function main() {
 
             let cursor = 0;
             const statsRows: Array<Record<string, unknown>> = [];
-            // Deduplicación intra-partido por roster player.
-            // Si dos entradas del acta resuelven al mismo roster player
-            // (por ejemplo, una por nombre y otra por dorsal), el upsert
-            // fallaría con 21000 "ON CONFLICT ... cannot affect row a second
-            // time". Se queda la primera y se audita el resto.
             const seenPlayerIds = new Set<string>();
 
             for (let teamIdx = 0; teamIdx < mapped.teams.length; teamIdx++) {

@@ -4,7 +4,7 @@
 
 ## Datos disponibles
 
-El scraper obtiene estadísticas agregadas por partido y jugador[cite: 7]:
+El scraper obtiene estadísticas agregadas por partido y jugador:
 
 | Grupo | Campos |
 | --- | --- |
@@ -15,14 +15,11 @@ El scraper obtiene estadísticas agregadas por partido y jugador[cite: 7]:
 | Bloqueo | `block.points` |
 | Resultado | sets locales y visitantes del partido |
 
-`points.total`, `points.bp` y `points.wonLost` se conservan para auditoría,
-pero no intervienen en V1 para evitar doble conteo[cite: 7]. Los valores ausentes se
-normalizan a `0`[cite: 7].
+`points.total`, `points.bp` y `points.wonLost` se conservan para auditoría, pero no intervienen en V1 para evitar doble conteo. Los valores ausentes se normalizan a `0`.
 
 ## Fórmula V1
 
-La implementación está en `domain/scoring/scoring-v1.system.ts` y usa la
-versión `v1`[cite: 7]. Todos los componentes y el total son enteros[cite: 7].
+La implementación está en `domain/scoring/scoring-v1.system.ts` y usa la versión `v1`. Todos los componentes y el total son enteros.
 
 ```text
 participation = max(0, setsPlayed)
@@ -79,34 +76,24 @@ totalScore =
 
 ### Decisiones de diseño
 
-- Los puntos de ataque no tienen multiplicador[cite: 7].
-- El saque se normaliza por participación: saques totales menos errores más
-  dos veces los puntos directos, dividido entre los sets jugados[cite: 7].
-- Los bloqueos valen `2` puntos base[cite: 7]. Los puntos directos de saque ya forman
-  parte de la fórmula normalizada del saque y no reciben un multiplicador
-  independiente[cite: 7].
-- Los errores se integran en la categoría que representan[cite: 7]:
+- Los puntos de ataque no tienen multiplicador.
+- El saque se normaliza por participación: saques totales menos errores más dos veces los puntos directos, dividido entre los sets jugados.
+- Los bloqueos valen `2` puntos base. Los puntos directos de saque ya forman parte de la fórmula normalizada del saque y no reciben un multiplicador independiente.
+- Los errores se integran en la categoría que representan:
   - errores de saque dentro de `serve`;
   - errores y ataques bloqueados dentro de `attack`;
   - errores de recepción dentro de `reception`.
-- El ataque tiene un límite inferior de `-3`[cite: 7]. La recepción, en cambio, se
-  limita a `0` antes de aplicar el multiplicador de posición[cite: 7]. El saque tampoco
-  puede ser negativo porque el resultado neto se limita a `0`[cite: 7].
-- La recepción tiene peso real: cada 10 puntos porcentuales positivos y
-  excelentes aporta aproximadamente un punto antes de errores[cite: 7].
-- Los multiplicadores de posición se redondean al entero más cercano[cite: 7]:
+- El ataque tiene un límite inferior de `-3`. La recepción, en cambio, se limita a `0` antes de aplicar el multiplicador de posición. El saque tampoco puede ser negativo porque el resultado neto se limita a `0`.
+- La recepción tiene peso real: cada 10 puntos porcentuales positivos y excelentes aporta aproximadamente un punto antes de errores.
+- Los multiplicadores de posición se redondean al entero más cercano:
   - recepción de líberos: multiplicador `1.25`;
   - bloqueos de centrales: multiplicador `1.5`.
-- Para compensar que RFEVB no proporciona asistencias, los colocadores reciben
-  puntos basados en el porcentaje total de ataque excelente de su tabla:
-  aproximadamente `1` punto por cada `10` puntos porcentuales[cite: 7].
-- Los líberos reciben un aumento del 25 % en la puntuación de recepción (`1.25x`),
-  porque es la principal métrica disponible para su posición[cite: 7].
-- El resultado usa la diferencia real de sets: una victoria `3-0` aporta `+3`,
-  mientras que una derrota `1-3` aporta `-2`[cite: 7].
-- No se añaden puntos por asistencias: el scraper no aporta esa métrica[cite: 7].
+- Para compensar que RFEVB no proporciona asistencias, los colocadores reciben puntos basados en el porcentaje total de ataque excelente de su tabla: aproximadamente `1` punto por cada `10` puntos porcentuales.
+- Los líberos reciben un aumento del 25 % en la puntuación de recepción (`1.25x`), porque es la principal métrica disponible para su posición.
+- El resultado usa la diferencia real de sets: una victoria `3-0` aporta `+3`, mientras que una derrota `1-3` aporta `-2`.
+- No se añaden puntos por asistencias: el scraper no aporta esa métrica.
 
-La API actual devuelve `scoringVersion: "v1"` junto con los puntos[cite: 7].
+La API actual devuelve `scoringVersion: "v1"` junto con los puntos.
 
 ## Tests
 
@@ -114,8 +101,7 @@ La API actual devuelve `scoringVersion: "v1"` junto con los puntos[cite: 7].
 npm run test:domain
 ```
 
-La suite cubre ponderaciones, errores integrados, valores enteros, bonus de
-líbero y central, diferencia de sets y exclusión de campos ambiguos[cite: 7].
+La suite cubre ponderaciones, errores integrados, valores enteros, bonus de líbero y central, diferencia de sets y exclusión de campos ambiguos.
 
 ## Uso actual y límites
 

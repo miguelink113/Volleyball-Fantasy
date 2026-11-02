@@ -15,7 +15,11 @@ import {
     type MatchMappingContext,
     type ResolvedMatchTeam,
 } from "@/lib/services/ingestion/map-scraped-match";
-import { TeamAliasResolver } from "@/lib/services/ingestion/team-alias-resolver";
+import {
+    TeamAliasResolver,
+    calculateSimilarity,
+    calculateContainment,
+} from "@/lib/services/ingestion/team-alias-resolver";
 
 const MADRID_TZ = "Europe/Madrid";
 
@@ -343,6 +347,16 @@ async function main() {
         );
     }
 
+    // Cargamos todos los equipos de la temporada
+    const { data: teamsData } = await supabase
+        .from("teams")
+        .select("id, name")
+        .eq("season_id", seasonId);
+
+    const teamsList = (teamsData || []) as { id: string; name: string }[];
+    const teamNameById = new Map<string, string>();
+    for (const t of teamsList) teamNameById.set(t.id, t.name);
+
     const rosterByTeamId = new Map<string, RosterPlayer[]>();
     for (const row of rosterRows as RosterPlayer[]) {
         const list = rosterByTeamId.get(row.team_id) ?? [];
@@ -363,19 +377,19 @@ async function main() {
         throw new Error("El scraper no devolvió partidos. Abortando.");
     }
 
-    // Agrupar por Grupo + Jornada para evitar colisiones de round_number
+    // Agrupar por Grupo + Jornada
     const roundMap = new Map<string, ScrapedMatch[]>();
     for (const m of matches) {
         const groupKey = m.groupName || "General";
-        const key = `${groupKey}|${m.round}`; // <-- CAMBIA EL GUION POR |
+        const key = `${groupKey}|${m.round}`;
         const list = roundMap.get(key) ?? [];
         list.push(m);
         roundMap.set(key, list);
     }
 
     const roundKeys = [...roundMap.keys()].sort((a, b) => {
-        const [groupA, roundA] = a.split("|"); // <-- CAMBIA EL GUION POR |
-        const [groupB, roundB] = b.split("|"); // <-- CAMBIA EL GUION POR |
+        const [groupA, roundA] = a.split("|");
+        const [groupB, roundB] = b.split("|");
         if (groupA !== groupB) return groupA.localeCompare(groupB);
         return Number(roundA) - Number(roundB);
     });
@@ -397,16 +411,26 @@ async function main() {
 
     const expectedPersistedMatchIds = new Set<string>();
 
+    // Mapa para el diagnóstico: actaName -> { rosterName, similarity, status }
+    const matchResolutions = new Map<
+        string,
+        {
+            rosterName: string;
+            similarity: number;
+            status: "OK" | "NO RESUELTO" | "AMBIGUO";
+        }
+    >();
+
     for (const roundKey of roundKeys) {
         const roundMatches = roundMap.get(roundKey)!;
-        const [groupNameStr, roundNumStr] = roundKey.split("|"); // <-- CAMBIA EL GUION POR |
+        const [groupNameStr, roundNumStr] = roundKey.split("|");
         const roundNumber = Number(roundNumStr);
         const groupName = groupNameStr === "General" ? null : groupNameStr;
 
         const dated = roundMatches.filter((m) => m.matchDate !== null);
         if (dated.length === 0) {
             console.warn(
-                `  ⚠ Jornada ${groupName || ''} ${roundNumber} sin fechas. Se omite entera.`
+                `  ⚠ Jornada ${groupName || ""} ${roundNumber} sin fechas. Se omite entera.`
             );
             totalRoundsSkippedNoDates++;
             continue;
@@ -423,7 +447,7 @@ async function main() {
         const endsAt = startOfDayAfterMadrid(last.matchDate!);
 
         console.log(
-            `\n→ ${groupName ? `${groupName} - ` : ''}Jornada ${roundNumber}: ${roundMatches.length} partidos ` +
+            `\n→ ${groupName ? `${groupName} - ` : ""}Jornada ${roundNumber}: ${roundMatches.length} partidos ` +
             `[${startsAt.toISOString()} → ${endsAt.toISOString()}]`
         );
 
@@ -436,14 +460,42 @@ async function main() {
             endsAt,
         });
 
-        const rawNames = roundMatches.flatMap((m) => [
-            m.homeTeam,
-            m.awayTeam,
-        ]);
-        const resolvedByName = await resolver.resolveMany(
-            aliasCtx,
-            rawNames
+        // ────────────────────────────────────────────────
+        // NUEVA RESOLUCIÓN POR JORNADA (exactos → containment)
+        // ────────────────────────────────────────────────
+        const actNames = roundMatches.flatMap((m) => [m.homeTeam, m.awayTeam]);
+
+        const resolvedByName = resolver.resolveJornada(
+            actNames,
+            teamsList.map((t) => ({ teamId: t.id, name: t.name })),
+            50 // umbral mínimo de containment
         );
+
+        // DIAGNÓSTICO
+        for (const rawName of new Set(actNames)) {
+            if (matchResolutions.has(rawName)) continue;
+
+            const teamId = resolvedByName.get(rawName);
+            if (teamId) {
+                const rosterName = teamNameById.get(teamId) || "?";
+                // Preferimos mostrar containment si es el caso, si no similarity
+                const containmentScore = calculateContainment(rawName, rosterName);
+                const similarityScore = calculateSimilarity(rawName, rosterName);
+                const score = Math.max(containmentScore, similarityScore);
+
+                matchResolutions.set(rawName, {
+                    rosterName,
+                    similarity: score,
+                    status: "OK",
+                });
+            } else {
+                matchResolutions.set(rawName, {
+                    rosterName: "—",
+                    similarity: 0,
+                    status: "NO RESUELTO",
+                });
+            }
+        }
 
         for (const scraped of roundMatches) {
             const homeTeamId = resolvedByName.get(scraped.homeTeam) ?? null;
@@ -471,16 +523,20 @@ async function main() {
 
             // Asignar el grupo a los equipos si no lo tienen ya
             if (scraped.groupName) {
-                await supabase.from("teams").update({ group_name: scraped.groupName })
-                    .eq("id", homeTeam.teamId).is("group_name", null);
-                await supabase.from("teams").update({ group_name: scraped.groupName })
-                    .eq("id", awayTeam.teamId).is("group_name", null);
+                await supabase
+                    .from("teams")
+                    .update({ group_name: scraped.groupName })
+                    .eq("id", homeTeam.teamId)
+                    .is("group_name", null);
+                await supabase
+                    .from("teams")
+                    .update({ group_name: scraped.groupName })
+                    .eq("id", awayTeam.teamId)
+                    .is("group_name", null);
             }
 
             // Stats
-            let statsData: Awaited<
-                ReturnType<typeof scrapeMatch>
-            > | null = null;
+            let statsData: Awaited<ReturnType<typeof scrapeMatch>> | null = null;
             try {
                 statsData = await scrapeMatch(
                     scraped.matchId,
@@ -501,7 +557,7 @@ async function main() {
                 season_id: seasonId,
                 round_id: roundId,
                 rfevb_match_id: scraped.matchId,
-                group_name: scraped.groupName, // <-- Guardamos el grupo en el partido
+                group_name: scraped.groupName,
                 match_date: scraped.matchDate?.toISOString() ?? null,
                 home_team_id: homeTeam.teamId,
                 away_team_id: awayTeam.teamId,
@@ -705,11 +761,15 @@ async function main() {
         `Stats de jugador:     ${statsCount} (esta ejecución: ${totalStatsPersisted})`
     );
     console.log("");
-    console.log(`Jornadas sin fecha (omitidas):    ${totalRoundsSkippedNoDates}`);
+    console.log(
+        `Jornadas sin fecha (omitidas):    ${totalRoundsSkippedNoDates}`
+    );
     console.log(`Partidos sin equipo resuelto:     ${totalSkippedNoTeam}`);
     console.log(`Partidos sin stats:               ${totalSkippedNoStats}`);
     console.log(`Stats sin cruce de jugador:       ${totalSkippedNoPlayer}`);
-    console.log(`Stats con jugador duplicado:      ${totalSkippedDuplicatePlayer}`);
+    console.log(
+        `Stats con jugador duplicado:      ${totalSkippedDuplicatePlayer}`
+    );
 
     if (missing.length > 0) {
         const preview = missing.slice(0, 5).join(", ");
@@ -718,6 +778,79 @@ async function main() {
             `Partidos esperados no persistidos (${missing.length}): ${preview}${suffix}`
         );
     }
+
+    // ═══ TABLA DE DIAGNÓSTICO: EMPAREJAMIENTO DE EQUIPOS ═══
+    console.log("\n\n═══ Diagnóstico de Emparejamiento de Equipos ═══\n");
+
+    const sortedResolutions = Array.from(matchResolutions.entries()).sort(
+        (a, b) => {
+            if (a[1].status !== b[1].status)
+                return a[1].status === "NO RESUELTO" ? -1 : 1;
+            return a[1].similarity - b[1].similarity;
+        }
+    );
+
+    const colActa = 55;
+    const colRoster = 40;
+    const colSim = 10;
+    const colStatus = 15;
+
+    console.log(
+        "Nombre en Acta".padEnd(colActa) +
+        "Nombre en Roster".padEnd(colRoster) +
+        "% Sim.".padEnd(colSim) +
+        "Estado".padEnd(colStatus)
+    );
+    console.log("-".repeat(colActa + colRoster + colSim + colStatus));
+
+    let okCount = 0;
+    let koCount = 0;
+    for (const [actaName, info] of sortedResolutions) {
+        if (info.status === "OK") okCount++;
+        else koCount++;
+
+        const actaPadded =
+            actaName.length > colActa - 2
+                ? actaName.slice(0, colActa - 3) + "…"
+                : actaName;
+        const rosterPadded =
+            info.rosterName.length > colRoster - 2
+                ? info.rosterName.slice(0, colRoster - 3) + "…"
+                : info.rosterName;
+
+        console.log(
+            actaPadded.padEnd(colActa) +
+            rosterPadded.padEnd(colRoster) +
+            String(info.similarity).padEnd(colSim) +
+            info.status.padEnd(colStatus)
+        );
+    }
+
+    console.log("-".repeat(colActa + colRoster + colSim + colStatus));
+    console.log(`Total nombres en actas: ${matchResolutions.size}`);
+    console.log(`Resueltos: ${okCount} | No resueltos: ${koCount}`);
+
+    // ¿Hay equipos del roster que NO aparecen en ninguna acta?
+    const seenRosterNames = new Set<string>();
+    for (const info of matchResolutions.values()) {
+        if (info.status === "OK" && info.rosterName !== "—") {
+            seenRosterNames.add(info.rosterName);
+        }
+    }
+
+    const missingFromActas = teamsList.filter(
+        (t) => !seenRosterNames.has(t.name)
+    );
+    if (missingFromActas.length > 0) {
+        console.log(
+            `\n⚠ Equipos del roster que no aparecen en ninguna acta (${missingFromActas.length}):`
+        );
+        for (const t of missingFromActas) {
+            console.log(`  - ${t.name}`);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════
 
     console.log("\n✅ Ingesta de partidos completada y verificada.");
 }

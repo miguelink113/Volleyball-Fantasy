@@ -15,7 +15,7 @@ export interface RegisterAliasInput {
 
 export interface TeamAliasIndex {
     exact: Map<string, string>;
-    entries: Array<{ tokens: Set<string>; teamId: string }>;
+    entries: Array<{ tokens: Set<string>; teamId: string; normalized: string }>;
 }
 
 /**
@@ -24,12 +24,8 @@ export interface TeamAliasIndex {
  * tokens que NUNCA distinguen a dos equipos de una misma liga.
  */
 const STOPWORDS = new Set([
-    // forma societaria
     "club", "cv", "cdv", "vb", "voley", "volei", "voleibol", "volleyball",
-    // artículos y conjunciones
-    "de", "del", "la", "las", "los", "el", "y",
-    // patrocinios y descriptores frecuentes
-    "fundacion", "elite", "energy", "cox", "anaya", "avk",
+    "de", "del", "la", "las", "los", "el", "y", "ad", "cde", "cd",
 ]);
 
 export function normalizeTeamAlias(value: string): string {
@@ -48,29 +44,95 @@ function tokensOf(normalized: string): Set<string> {
     return new Set(normalized.split(/\s+/).filter(Boolean));
 }
 
-function tokenMatches(a: string, b: string): boolean {
-    if (a === b) return true;
-    if (a.length < 3 || b.length < 3) return false;
-    const [shorter, longer] =
-        a.length <= b.length ? [a, b] : [b, a];
-    return (
-        longer.startsWith(shorter) &&
-        longer.length - shorter.length <= 3
-    );
+/** % de tokens de `from` que aparecen en `to` (containment puro). */
+function containment(from: Set<string>, to: Set<string>): number {
+    if (from.size === 0) return 0;
+    let hits = 0;
+    for (const t of from) {
+        if (to.has(t)) hits++;
+    }
+    return hits / from.size;
 }
 
-function isTokenSubset(subset: Set<string>, superset: Set<string>): boolean {
-    for (const t of subset) {
-        let found = false;
-        for (const u of superset) {
-            if (tokenMatches(t, u)) {
-                found = true;
-                break;
+/**
+ * Calcula la similitud entre dos palabras (no strings completos).
+ * Tolerancia para typos dentro de una palabra (ej. "barca" vs "barça").
+ */
+function wordSimilarity(a: string, b: string): number {
+    if (a === b) return 1;
+    if (a.length < 3 || b.length < 3) return 0;
+
+    const maxLength = Math.max(a.length, b.length);
+    const distance = levenshteinDistance(a, b);
+    return 1 - distance / maxLength;
+}
+
+function levenshteinDistance(a: string, b: string): number {
+    const matrix = Array.from({ length: b.length + 1 }, (_, i) => [i]);
+    for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+
+    for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+            if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+                matrix[i][j] = Math.min(
+                    matrix[i - 1][j - 1] + 1,
+                    matrix[i][j - 1] + 1,
+                    matrix[i - 1][j] + 1
+                );
             }
         }
-        if (!found) return false;
     }
-    return true;
+    return matrix[b.length][a.length];
+}
+
+/**
+ * Calcula la similitud entre dos conjuntos de tokens.
+ * 1. Busca palabras en común (con tolerancia a typos).
+ * 2. Devuelve la media de similitud de las palabras coincidentes.
+ */
+function tokenSetSimilarity(a: Set<string>, b: Set<string>): number {
+    if (a.size === 0 && b.size === 0) return 1;
+    if (a.size === 0 || b.size === 0) return 0;
+
+    let totalSimilarity = 0;
+    let matchCount = 0;
+
+    for (const tokenA of a) {
+        let bestMatchScore = 0;
+        for (const tokenB of b) {
+            const score = wordSimilarity(tokenA, tokenB);
+            if (score > bestMatchScore) bestMatchScore = score;
+        }
+
+        if (bestMatchScore >= 0.7) {
+            totalSimilarity += bestMatchScore;
+            matchCount++;
+        }
+    }
+
+    if (matchCount === 0) return 0;
+    return totalSimilarity / Math.max(a.size, b.size);
+}
+
+export function calculateSimilarity(a: string, b: string): number {
+    const normA = normalizeTeamAlias(a);
+    const normB = normalizeTeamAlias(b);
+    if (!normA || !normB) return 0;
+    const tokensA = tokensOf(normA);
+    const tokensB = tokensOf(normB);
+    return Math.round(tokenSetSimilarity(tokensA, tokensB) * 100);
+}
+
+/** Score de containment bidireccional (0-100). */
+export function calculateContainment(a: string, b: string): number {
+    const tokensA = tokensOf(normalizeTeamAlias(a));
+    const tokensB = tokensOf(normalizeTeamAlias(b));
+    if (tokensA.size === 0 || tokensB.size === 0) return 0;
+    const s1 = containment(tokensA, tokensB);
+    const s2 = containment(tokensB, tokensA);
+    return Math.round(Math.max(s1, s2) * 100);
 }
 
 export class TeamAliasResolver {
@@ -112,6 +174,7 @@ export class TeamAliasResolver {
             entries.push({
                 tokens: tokensOf(row.normalized_alias),
                 teamId: row.team_id,
+                normalized: row.normalized_alias,
             });
         }
         return { exact, entries };
@@ -165,15 +228,6 @@ export class TeamAliasResolver {
         return deduped.size;
     }
 
-    /**
-     * Resuelve un nombre de acta al team_id de Supabase.
-     *
-     * Estrategia:
-     *   1. Match exacto contra `team_source_aliases` (lo registrado del
-     *      roster y lo registrado manualmente).
-     *   2. Si falla, comparación por subset de tokens contra el índice
-     *      completo. Se exige que SOLO UN team_id coincida.
-     */
     async resolveTeamId(
         ctx: TeamAliasResolverContext,
         rawName: string
@@ -195,29 +249,180 @@ export class TeamAliasResolver {
         const inputTokens = tokensOf(normalized);
         if (inputTokens.size === 0) return null;
 
-        const candidates: Array<{ teamId: string; size: number }> = [];
+        // 1. Subset / superset exacto
+        const subsetCandidates: Array<{ teamId: string; size: number }> = [];
         for (const entry of index.entries) {
-            if (
-                isTokenSubset(inputTokens, entry.tokens) ||
-                isTokenSubset(entry.tokens, inputTokens)
-            ) {
-                candidates.push({
+            const isSubset = [...inputTokens].every((t) => entry.tokens.has(t));
+            const isSuperset = [...entry.tokens].every((t) => inputTokens.has(t));
+            if (isSubset || isSuperset) {
+                subsetCandidates.push({
                     teamId: entry.teamId,
                     size: entry.tokens.size,
                 });
             }
         }
 
-        if (candidates.length === 0) return null;
-        if (candidates.length === 1) return candidates[0].teamId;
+        if (subsetCandidates.length === 1) return subsetCandidates[0].teamId;
 
-        // Con varios candidatos, gana el de menos tokens (nombre más
-        // específico). Solo abortamos si hay empate en longitud.
-        candidates.sort((a, b) => a.size - b.size);
-        if (candidates[0].size === candidates[1].size) {
+        if (subsetCandidates.length > 1) {
+            subsetCandidates.sort((a, b) => a.size - b.size);
+            if (subsetCandidates[0].size !== subsetCandidates[1].size) {
+                return subsetCandidates[0].teamId;
+            }
             return null;
         }
-        return candidates[0].teamId;
+
+        // 2. Fuzzy matching basado en PALABRAS
+        const similarityCandidates: Array<{ teamId: string; score: number }> = [];
+        for (const entry of index.entries) {
+            const score = tokenSetSimilarity(inputTokens, entry.tokens);
+            if (score >= 0.5) {
+                similarityCandidates.push({ teamId: entry.teamId, score });
+            }
+        }
+
+        if (similarityCandidates.length === 0) return null;
+
+        similarityCandidates.sort((a, b) => b.score - a.score);
+
+        if (
+            similarityCandidates.length === 1 ||
+            similarityCandidates[0].score - similarityCandidates[1].score >= 0.15
+        ) {
+            return similarityCandidates[0].teamId;
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolución por jornada (la que pediste):
+     * 1. Coincidencias exactas → se sacan del pool.
+     * 2. Resto → containment (palabras contenidas) con asignación greedy 1-a-1.
+     *
+     * Devuelve Map<actName, teamId | null>
+     */
+    resolveJornada(
+        actNames: string[],
+        roster: Array<{ teamId: string; name: string }>,
+        minContainment = 33
+    ): Map<string, string | null> {
+        const result = new Map<string, string | null>();
+
+        // Preparar actas (únicas)
+        const uniqueActNames = [...new Set(actNames)];
+        const acts = uniqueActNames.map((raw) => {
+            const normalized = normalizeTeamAlias(raw);
+            return {
+                raw,
+                normalized,
+                tokens: tokensOf(normalized),
+            };
+        });
+
+        // Preparar roster
+        let remainingRoster = roster.map((r) => {
+            const normalized = normalizeTeamAlias(r.name);
+            return {
+                teamId: r.teamId,
+                name: r.name,
+                normalized,
+                tokens: tokensOf(normalized),
+            };
+        });
+
+        let remainingActs = [...acts];
+
+        // ─────────────────────────────────────────────
+        // PASO 1: Coincidencias EXACTAS
+        // ─────────────────────────────────────────────
+        const exactMatchedActs = new Set<string>();
+        const exactMatchedRosterIds = new Set<string>();
+
+        for (const a of remainingActs) {
+            if (!a.normalized) continue;
+            const match = remainingRoster.find((r) => r.normalized === a.normalized);
+            if (match) {
+                result.set(a.raw, match.teamId);
+                exactMatchedActs.add(a.raw);
+                exactMatchedRosterIds.add(match.teamId);
+                console.log(`  ✓ Exacto: "${a.raw}" → ${match.name}`);
+            }
+        }
+
+        remainingActs = remainingActs.filter((a) => !exactMatchedActs.has(a.raw));
+        remainingRoster = remainingRoster.filter(
+            (r) => !exactMatchedRosterIds.has(r.teamId)
+        );
+
+        // ─────────────────────────────────────────────
+        // PASO 2: Containment (palabras contenidas)
+        // ─────────────────────────────────────────────
+        type Candidate = {
+            actRaw: string;
+            teamId: string;
+            rosterName: string;
+            score: number;
+            direction: "act→roster" | "roster→act" | "both";
+        };
+
+        const candidates: Candidate[] = [];
+
+        for (const a of remainingActs) {
+            if (a.tokens.size === 0) continue;
+
+            for (const r of remainingRoster) {
+                if (r.tokens.size === 0) continue;
+
+                const scoreActInRoster = containment(a.tokens, r.tokens);
+                const scoreRosterInAct = containment(r.tokens, a.tokens);
+                const best = Math.max(scoreActInRoster, scoreRosterInAct);
+
+                if (best === 0) continue;
+
+                candidates.push({
+                    actRaw: a.raw,
+                    teamId: r.teamId,
+                    rosterName: r.name,
+                    score: Math.round(best * 100),
+                    direction:
+                        scoreActInRoster === scoreRosterInAct
+                            ? "both"
+                            : scoreActInRoster > scoreRosterInAct
+                                ? "act→roster"
+                                : "roster→act",
+                });
+            }
+        }
+
+        // Greedy 1-a-1 por score descendente
+        candidates.sort((x, y) => y.score - x.score);
+
+        const usedActs = new Set<string>();
+        const usedRoster = new Set<string>();
+
+        for (const c of candidates) {
+            if (usedActs.has(c.actRaw) || usedRoster.has(c.teamId)) continue;
+            if (c.score < minContainment) continue;
+
+            result.set(c.actRaw, c.teamId);
+            usedActs.add(c.actRaw);
+            usedRoster.add(c.teamId);
+
+            console.log(
+                `  ✓ Containment ${c.score}% (${c.direction}): "${c.actRaw}" ↔ "${c.rosterName}"`
+            );
+        }
+
+        // Los que queden sin emparejar
+        for (const a of remainingActs) {
+            if (!result.has(a.raw)) {
+                result.set(a.raw, null);
+                console.warn(`  ✗ Sin match: "${a.raw}"`);
+            }
+        }
+
+        return result;
     }
 
     async resolveMany(

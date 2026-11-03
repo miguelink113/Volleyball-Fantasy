@@ -67,6 +67,7 @@ function createScrapedMatch(): ScrapedMatch {
         awayTeam: "Equipo Visitante",
         matchDate: null,                      // ← añadir esta línea
         url: "https://example.test/match-1",
+        groupName: null,
     };
 }
 

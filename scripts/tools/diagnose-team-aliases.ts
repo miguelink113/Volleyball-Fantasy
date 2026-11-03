@@ -116,8 +116,12 @@ async function diagnoseCompetition(
         const tokens = new Set(
             team.normalized.split(/\s+/).filter(Boolean)
         );
-        index.entries.push({ tokens, teamId: team.rfevbId });
-        if (!index.exact.has(team.normalized)) {
+            index.entries.push({
+                tokens,
+                teamId: team.rfevbId,
+                normalized: team.normalized,
+            });
+            if (!index.exact.has(team.normalized)) {
             index.exact.set(team.normalized, team.rfevbId);
         }
     }

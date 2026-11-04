@@ -65,7 +65,7 @@ function createScrapedMatch(): ScrapedMatch {
         round: 1,
         homeTeam: "Equipo Local",
         awayTeam: "Equipo Visitante",
-        matchDate: null,                      // ← añadir esta línea
+        matchDate: null,
         url: "https://example.test/match-1",
         groupName: null,
     };
@@ -104,6 +104,8 @@ function createMatchStats(
             { home: 25, away: 18 },
         ],
         teams,
+        officialRound: 1,
+        officialGroup: null,
     };
 }
 

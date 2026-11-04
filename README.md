@@ -2,7 +2,7 @@
 
 Aplicación web de fantasy de voleibol construida con Next.js, TypeScript y Supabase. El repositorio combina la extracción de datos de RFEVB, un dominio tipado, persistencia del catálogo y una interfaz con autenticación, ligas privadas y gestión del equipo fantasy.
 
-> **Estado de esta revisión:** Las fases 1 a 11 están **completadas y verificadas**. La ingesta de la temporada 26/27 está finalizada con soporte para múltiples grupos y un algoritmo avanzado de resolución de alias. La UI está totalmente adaptada para ligas con múltiples grupos.
+> **Estado de esta revisión:** Las fases 1 a 11 están **completadas y verificadas**. La ingesta de la temporada 26/27 está finalizada con soporte para múltiples grupos y un algoritmo avanzado de resolución de alias. La aplicación se encuentra **desplegada en producción en Vercel**. Actualmente nos encontramos trabajando en la Fase 12 (rediseño UI y nuevas funcionalidades).
 
 ## Estado actual
 
@@ -19,7 +19,7 @@ Las competiciones base son Superliga Masculina, Superliga Femenina, Superliga 2 
 
 ### Funcionalidad implementada en el código
 
-- Autenticación y perfil con Supabase Auth.
+- Autenticación y perfil con Supabase Auth (configurado para producción).
 - Ingesta administrativa del roster, jornadas, partidos y estadísticas desde RFEVB.
 - **Soporte multi-grupo:** Capacidad de procesar competiciones divididas en grupos. La UI unifica las jornadas para el usuario.
 - **TeamAliasResolver v2:** Resolución automática de equipos con containment y asignación greedy (evita omisiones por nombres dispares).
@@ -28,12 +28,15 @@ Las competiciones base son Superliga Masculina, Superliga Femenina, Superliga 2 
 - `GET /api/fantasy-round-scores` calcula bajo demanda puntuaciones por jornada (con desglose) a partir de partidos y estadísticas persistidos.
 - Dashboard dinámico con gestión de ligas y validaciones corregidas.
 - Pantalla fantasy con pestañas (Alineación, Mercado, Clasificación), validación de límites estrictos en backend y bloqueos temporales.
+- **Despliegue:** Frontend y API alojados en Vercel. CI/CD automático.
 
-### Incompleto o pendiente de confirmar
+### Incompleto o pendiente de confirmar (Fase 12 y 13)
 
-- Definir estrategia de bloqueo temporal en jornadas multi-grupo (actualmente usa la fecha más temprana).
-- Despliegue en staging y producción (Fase 12).
-- Tareas programadas (Cron) para automatizar ingesta y cálculo de puntos.
+- **Valores de mercado dinámicos:** Fórmula basada en rendimiento.
+- **Página de resultados:** Vista de partidos por jornada.
+- **Rediseño UI:** Implementación del diseño Desktop-First (modo oscuro).
+- Definir estrategia de bloqueo temporal en jornadas multi-grupo.
+- Tareas programadas (Cron) para automatizar ingesta y cálculo de puntos (Fase 13).
 
 ## Arquitectura
 
@@ -112,6 +115,6 @@ npm run show:match-scores -- 1 1
 
 ## Próximas prioridades
 
-1. Despliegue en staging y producción (Fase 12).
-2. Automatización de scripts de ingesta y cálculo (cron).
-3. Refinamiento de la lógica de bloqueo para competiciones multi-grupo.
+1. Implementar valores de mercado dinámicos y página de resultados (Fase 12).
+2. Rediseño de la interfaz a Desktop-First (Fase 12).
+3. Automatización de scripts mediante cron jobs (Fase 13).

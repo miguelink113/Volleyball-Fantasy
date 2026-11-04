@@ -25,6 +25,12 @@ Abre `http://localhost:3000`. No versionar secretos ni la URI PostgreSQL. `lib/s
 4. **Lectura de producto:** los repositorios encapsulan consultas de Supabase.
 5. **Aplicación:** las APIs de datos persistidos exponen roster, scoring y ranking; el dashboard y `/fantasy` consumen algunos datos y operaciones mediante RPC.
 
+## Estrategia de Ramas y Despliegue (Vercel)
+
+- **`main`**: Rama de producción. Cualquier `push` o *merge* a esta rama dispara un despliegue automático en Vercel.
+- **`feature/nombre`**: Ramas para desarrollo de nuevas funcionalidades (ej. rediseño UI, mercado dinámico). Cada `push` a estas ramas genera una **Preview URL** en Vercel para probar los cambios en internet sin afectar a la web pública.
+- **Variables de Entorno en Vercel**: Se configuran en el panel del proyecto (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`).
+
 ## Estructura relevante
 
 ```text
@@ -125,6 +131,8 @@ npm run build
 
 ## Limitaciones conocidas que afectan al desarrollo
 
+- **Valores de mercado dinámicos:** Actualmente los precios son estáticos. Pendiente implementar la fórmula en la Fase 12.
+- **Página de resultados:** Pendiente crear la vista de partidos en la Fase 12.
 - **Bloqueo en ligas multi-grupo:** El candado de la jornada fantasy se calcula tomando la fecha del primer partido del grupo más madrugador. Si un grupo juega los viernes y otro los domingos, el bloqueo afecta a ambos el viernes. Pendiente definir la estrategia final.
 - **Cruce de jugadores:** Quedan algunas estadísticas de jugadores sin emparejar en las actas (fichajes de última hora o "Unknown Player" de RFEVB).
-- La ingesta desde RFEVB y el cálculo de puntuaciones se ejecutan manualmente; el despliegue en producción requerirá tareas programadas (cron).
+- La ingesta desde RFEVB y el cálculo de puntuaciones se ejecutan manualmente; el despliegue en producción requerirá tareas programadas (cron) en la Fase 13.

@@ -164,6 +164,8 @@ La interfaz utiliza pestañas y es 100% dinámica. Lee exclusivamente las tempor
 
 Las puntuaciones de todas las jornadas se cargan en una sola petición para reducir las solicitudes sucesivas y evitar parpadeos durante la actualización de la interfaz.
 
+**Evolución futura (Fase 12):** Se planea la inclusión de una vista de resultados de partidos por jornada y un rediseño visual completo (Desktop-First).
+
 ## Flujo de datos de producto
 
 ### Lectura del roster
@@ -256,3 +258,4 @@ Las fases 1 a 11 están completadas y verificadas:
 - El scoring se calcula y se persiste en las tablas históricas.
 - La clasificación privada y los puntos por jornada se leen de forma rápida desde la base de datos.
 - La UI (Login, Dashboard, Fantasy) ha sido refactorizada para operar 100% de forma dinámica, manejar correctamente los estados y bloqueos, y agrupar jornadas de múltiples grupos.
+- La aplicación está desplegada en producción (Vercel) con Supabase Auth.

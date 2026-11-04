@@ -25,7 +25,7 @@ La solución mantiene separadas la fuente RFEVB, la normalización, el dominio, 
 13. **Alineaciones (Fase 8):** RPC `save_lineup` con validación de composición y bloqueo temporal.
 14. **Scoring persistente (Fase 9):** servicio de cálculo, persistencia idempotente y API de ranking privado.
 15. **UI persistente (Fase 10):** Refactorización visual (Login/Dashboard/Fantasy), sin IDs hardcodeados, bloqueos estrictos en backend y tests comprobados.
-16. **Integración end-to-end (Fase 11):** Flujo completo probado con usuarios. Ingesta completa de la temporada 26/27. Refactorización de `TeamAliasResolver` para evitar omisiones de partidos. UI adaptada para competiciones con múltiples grupos.
+16. **Integración end-to-end (Fase 11):** Flujo completo probado con usuarios. Ingesta completa de la temporada 26/27. Refactorización de `TeamAliasResolver` para evitar omisiones de partidos. UI adaptada para competiciones con múltiples grupos. Despliegue en producción (Vercel) y Supabase Auth configurado.
 
 ### Estado del catálogo persistido
 
@@ -56,6 +56,7 @@ Las cuatro competiciones de la temporada 2025/26 y 2026/27 están incluidas. La 
 - Las mutaciones sensibles se validan en el servidor y la base de datos, no solo en la interfaz.
 - No se incluyen pagos, ligas públicas, mercado entre participantes, chat ni automatización del scraper.
 - **Manejo de grupos:** Para el backend, los grupos se tratan como jornadas independientes (ej. Jornada 1 - Grupo A). Para la UI fantasy, las jornadas se agrupan por `round_number` para que todos los jugadores compitan bajo una misma "Jornada 1".
+- **Despliegue:** Frontend alojado en Vercel; base de datos en Supabase. CI/CD automático desde GitHub.
 
 ## Fases 1 a 10 — Completadas ✅
 
@@ -70,7 +71,7 @@ Las cuatro competiciones de la temporada 2025/26 y 2026/27 están incluidas. La 
 - **Fase 9 — Scoring persistente y ranking privado:** Servicio `scoring-persistence`, APIs de lectura y tests de aislamiento e idempotencia.
 - **Fase 10 — UI persistente:** Datos 100% dinámicos en frontend, gestión completa persistente y comprobación de bloqueos temporales a través de `test:lockout`.
 
-## Fase 11 — Integración end-to-end
+## Fase 11 — Integración end-to-end ✅
 
 Probar con varios usuarios el ciclo completo:
 - Registro e inicio de sesión.
@@ -81,21 +82,24 @@ Probar con varios usuarios el ciclo completo:
 - Ingesta y puntuación.
 - Clasificación privada.
 - **Mejorar `TeamAliasResolver`** para evitar omisiones de partidos por discrepancias de nombres.
+- **Despliegue y Auth:** Configuración de Vercel y Supabase en producción.
 
-## Fase 12 — Despliegue y Refinamiento
+## Fase 12 — Refinamiento de Producto y Rediseño UI (ACTUAL)
 
-### Despliegue
-- Separar las variables públicas de los secretos.
-- Aplicar migraciones de forma controlada.
-- Configurar Supabase Auth.
-- Desplegar primero en staging.
-- No publicar claves de servicio ni credenciales PostgreSQL.
-- Verificar las operaciones y permisos antes de habilitar producción.
+### Funcionalidades nuevas
+- **Valores de mercado dinámicos:** Implementar una fórmula que modifique el valor de los jugadores en función de su rendimiento (puntuaciones) a lo largo de las jornadas.
+- **Página de resultados:** Crear una vista para consultar los resultados de los partidos de las diferentes jornadas, mostrando sets y estadísticas destacadas.
 
-### Refinamiento (Deuda técnica)
+### Refinamiento (Deuda técnica y UI)
+- **Rediseño visual (Desktop-First):** Adaptar la interfaz actual a un diseño moderno con modo oscuro (basado en los mockups proporcionados). Optimizado para PC, con navegación lateral y tarjetas de jugador detalladas.
 - **Lógica de bloqueo multi-grupo:** Definir si la jornada fantasy se bloquea con el primer partido del grupo más madrugador o si se segmenta por grupo.
 - **Cruce de jugadores:** Resolver estadísticas de jugadores no emparejados (fichajes de última hora o "Unknown Player" de RFEVB).
-- **Automatización:** Configurar tareas cron para la ingesta y el cálculo de puntuaciones.
+
+## Fase 13 — Despliegue Final y Automatización
+
+- **Automatización (Cron):** Configurar tareas programadas (GitHub Actions o Vercel Cron) para ejecutar la ingesta y el cálculo de puntuaciones de forma automática.
+- **Verificación de producción:** Pruebas finales de RLS, permisos y rendimiento en el entorno de Vercel/Supabase.
+- **Migraciones controladas:** Flujo para aplicar cambios SQL sin riesgo.
 
 ## Lista de cierre previa (Verificada)
 
@@ -109,7 +113,7 @@ Probar con varios usuarios el ciclo completo:
 - [x] Fase 8: RPC `save_lineup` validando plantilla, composición 1/1/2/2/1 y bloqueo temporal probados (`npm run test:lineup-rules`).
 - [x] Fase 9: `npm run test:scoring-persistence` verifica idempotencia y aislamiento.
 - [x] Fase 10: `npm run test:lockout` verifica los bloqueos de backend mediante el timestamp `starts_at`. UI completamente dinámica.
-- [x] Fase 11: Ingesta 26/27 completada. `TeamAliasResolver` v2 resolviendo >99% de equipos. UI unificada para multi-grupo.
+- [x] Fase 11: Ingesta 26/27 completada. `TeamAliasResolver` v2 resolviendo >99% de equipos. UI unificada para multi-grupo. Despliegue exitoso en Vercel.
 - [x] Todos los tests pertinentes y `npm run build` pasan en el mismo commit.
 
 ## Calidad y validación

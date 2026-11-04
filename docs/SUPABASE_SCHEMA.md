@@ -22,11 +22,11 @@ El test de esquema comprueba tablas, columnas, algunos tipos y nullabilidad, rel
 - integridad entre equipos fantasy, ligas, alineaciones, jornadas y jugadores;
 - índice/restricción para evitar la propiedad activa duplicada de un jugador dentro de una liga;
 - RLS activado en las 20 tablas de aplicación;
-- funciones `create_private_league`, `join_private_league`, `leave_private_league` y `transfer_player` con privilegios de ejecución esperados.
+- funciones `create_private_league`, `join_private_league`, `leave_private_league`, `transfer_player` y `save_lineup` con privilegios de ejecución esperados.
 
 El test es una comprobación estructural. No demuestra por sí solo que las funciones creen las filas correctas, apliquen el presupuesto, gestionen saldos, sean atómicas o manejen adecuadamente condiciones de carrera.
 
-## Operaciones de escritura
+## Operaciones de escritura y mantenimiento
 
 El código de frontend invoca RPC para:
 
@@ -39,6 +39,8 @@ El código de frontend invoca RPC para:
 Aunque la llamada parte del cliente de Supabase, las validaciones de seguridad y negocio deben ocurrir dentro de la función SQL y las restricciones de la base, no solo en React.
 
 **Bloqueo temporal estricto:** Es importante destacar que se aplica un bloqueo de temporalidad a nivel de backend. Si `now() >= starts_at`, las RPCs `transfer_player` y `save_lineup` bloquean firmemente las operaciones de alineación y transferencias para salvaguardar la integridad de la jornada en curso independientemente de lo que envíe el cliente.
+
+**Mantenimiento de Temporadas:** Para evitar que el Dashboard muestre temporadas de años anteriores, el script `ingest-roster` desmarca automáticamente la bandera `is_current` de las temporadas antiguas de esa competición al ingerir una nueva. Además, actualiza el nombre de la competición si se le pasa el parámetro `--competition-name`.
 
 Las puntuaciones (tablas `player_match_scores`, `player_round_scores` y `fantasy_scores`) se escriben desde el script administrativo `scripts/ingest/calculate-scores.ts`, que es idempotente y está testeado.
 

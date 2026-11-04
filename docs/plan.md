@@ -8,7 +8,7 @@ La solución mantiene separadas la fuente RFEVB, la normalización, el dominio, 
 
 ## Estado
 
-### Completado (Fases 1 a 10)
+### Completado (Fases 1 a 11)
 
 1. **Dominio:** contratos tipados para competición, temporada, equipo, jugador, partido, estadísticas, jornada, fantasy y scoring. TypeScript estricto y contratos del dominio en camelCase.
 2. **Scoring:** `ScoringSystemV1` definido según los datos disponibles, probado e integrado en el cálculo de puntuaciones.
@@ -25,17 +25,18 @@ La solución mantiene separadas la fuente RFEVB, la normalización, el dominio, 
 13. **Alineaciones (Fase 8):** RPC `save_lineup` con validación de composición y bloqueo temporal.
 14. **Scoring persistente (Fase 9):** servicio de cálculo, persistencia idempotente y API de ranking privado.
 15. **UI persistente (Fase 10):** Refactorización visual (Login/Dashboard/Fantasy), sin IDs hardcodeados, bloqueos estrictos en backend y tests comprobados.
+16. **Integración end-to-end (Fase 11):** Flujo completo probado con usuarios. Ingesta completa de la temporada 26/27. Refactorización de `TeamAliasResolver` para evitar omisiones de partidos. UI adaptada para competiciones con múltiples grupos.
 
 ### Estado del catálogo persistido
 
-| Entidad | Registros (25/26) |
-| --- | ---: |
-| Equipos | 94 |
-| Jugadores | 1.449 |
-| Partidos | 1.045 |
-| Estadísticas de jugador | 25.262 |
+| Entidad | Registros (25/26) | Registros (26/27) |
+| --- | ---: | ---: |
+| Equipos | 94 | 96 |
+| Jugadores | 1.449 | 1.388 |
+| Partidos | 1.045 | 277 |
+| Estadísticas de jugador | 25.262 | 5.527 |
 
-Las cuatro competiciones de la temporada 2025/26 están incluidas.
+Las cuatro competiciones de la temporada 2025/26 y 2026/27 están incluidas. La UI oculta las temporadas inactivas mediante el flag `is_current`.
 
 ## Decisiones vigentes
 
@@ -54,6 +55,7 @@ Las cuatro competiciones de la temporada 2025/26 están incluidas.
 - Si el propietario abandona, la propiedad pasa al miembro restante más antiguo; si es el único miembro, la liga se elimina.
 - Las mutaciones sensibles se validan en el servidor y la base de datos, no solo en la interfaz.
 - No se incluyen pagos, ligas públicas, mercado entre participantes, chat ni automatización del scraper.
+- **Manejo de grupos:** Para el backend, los grupos se tratan como jornadas independientes (ej. Jornada 1 - Grupo A). Para la UI fantasy, las jornadas se agrupan por `round_number` para que todos los jugadores compitan bajo una misma "Jornada 1".
 
 ## Fases 1 a 10 — Completadas ✅
 
@@ -80,14 +82,20 @@ Probar con varios usuarios el ciclo completo:
 - Clasificación privada.
 - **Mejorar `TeamAliasResolver`** para evitar omisiones de partidos por discrepancias de nombres.
 
-## Fase 12 — Despliegue
+## Fase 12 — Despliegue y Refinamiento
 
+### Despliegue
 - Separar las variables públicas de los secretos.
 - Aplicar migraciones de forma controlada.
 - Configurar Supabase Auth.
 - Desplegar primero en staging.
 - No publicar claves de servicio ni credenciales PostgreSQL.
 - Verificar las operaciones y permisos antes de habilitar producción.
+
+### Refinamiento (Deuda técnica)
+- **Lógica de bloqueo multi-grupo:** Definir si la jornada fantasy se bloquea con el primer partido del grupo más madrugador o si se segmenta por grupo.
+- **Cruce de jugadores:** Resolver estadísticas de jugadores no emparejados (fichajes de última hora o "Unknown Player" de RFEVB).
+- **Automatización:** Configurar tareas cron para la ingesta y el cálculo de puntuaciones.
 
 ## Lista de cierre previa (Verificada)
 
@@ -101,6 +109,7 @@ Probar con varios usuarios el ciclo completo:
 - [x] Fase 8: RPC `save_lineup` validando plantilla, composición 1/1/2/2/1 y bloqueo temporal probados (`npm run test:lineup-rules`).
 - [x] Fase 9: `npm run test:scoring-persistence` verifica idempotencia y aislamiento.
 - [x] Fase 10: `npm run test:lockout` verifica los bloqueos de backend mediante el timestamp `starts_at`. UI completamente dinámica.
+- [x] Fase 11: Ingesta 26/27 completada. `TeamAliasResolver` v2 resolviendo >99% de equipos. UI unificada para multi-grupo.
 - [x] Todos los tests pertinentes y `npm run build` pasan en el mismo commit.
 
 ## Calidad y validación

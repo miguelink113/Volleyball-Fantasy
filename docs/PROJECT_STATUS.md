@@ -2,20 +2,18 @@
 
 ## Resumen
 
-Las fases 1 a 10 están **completadas y verificadas** mediante ejecuciones reproducibles. El proyecto dispone de un dominio tipado, un sistema de puntuación versionado, persistencia en Supabase, ingesta idempotente del catálogo deportivo, repositorios de lectura, gestión de ligas, mercado de fichajes, guardado de alineaciones, persistencia de puntuaciones y clasificación privada. La interfaz (UI) ha sido refactorizada para ser 100% dinámica.
+Las fases 1 a 11 están **completadas y verificadas** mediante ejecuciones reproducibles. El proyecto dispone de un dominio tipado, un sistema de puntuación versionado, persistencia en Supabase, ingesta idempotente del catálogo deportivo, repositorios de lectura, gestión de ligas, mercado de fichajes, guardado de alineaciones, persistencia de puntuaciones y clasificación privada.
 
-La Fase 11 está en progreso. Se ha ingestado la temporada 2026/27 con soporte para los grupos de Superliga 2. El principal bloqueo actual es la resolución automática de nombres de equipos muy dispares entre actas y rosters, lo que provoca que algunos partidos se omitan (por seguridad).
+Durante la Fase 11, se completó la ingesta de la temporada 2026/27. Se ha implementado un avanzado `TeamAliasResolver` (con containment y asignación greedy) que ha resuelto casi la totalidad de los nombres dispares entre actas y rosters (incluyendo casos complejos como "Melilla"), evitando omisiones de partidos. Además, la UI se ha adaptado para agrupar jornadas de competiciones multi-grupo.
 
-La ingesta base está completada para las cuatro competiciones de la temporada 2025/26.
+| Entidad | Registros (25/26) | Registros (26/27) |
+| --- | ---: | ---: |
+| Equipos | 94 | 96 |
+| Jugadores | 1.449 | 1.388 |
+| Partidos | 1.045 | 277 |
+| Estadísticas de jugador | 25.262 | 5.527 |
 
-| Entidad | Registros persistidos (25/26) |
-| --- | ---: |
-| Equipos | 94 |
-| Jugadores | 1.449 |
-| Partidos | 1.045 |
-| Estadísticas de jugador | 25.262 |
-
-La tabla `player_market_values` contiene valores de 9M para todos los jugadores en todas las jornadas.
+La tabla `player_market_values` contiene valores sembrados para todos los jugadores en todas las jornadas.
 
 ## Estado de las fases
 
@@ -32,7 +30,7 @@ La tabla `player_market_values` contiene valores de 9M para todos los jugadores 
 | 8. Alineaciones | ✅ Completada | RPC `save_lineup` y tests superados. |
 | 9. Scoring persistente | ✅ Completada | Script de persistencia, APIs y tests de idempotencia/aislamiento. |
 | 10. UI persistente | ✅ Completada | Refactorización visual terminada, navegación dinámica y test de bloqueo `test:lockout` superado. |
-| 11. Integración 26/27 | ⏳ En progreso | Pendiente de mejorar el `TeamAliasResolver`. |
+| 11. Integración 26/27 | ✅ Completada | Ingesta de 4 competiciones exitosa. Resolver de equipos v2 implementado. UI adaptada a multi-grupo. |
 
 ## Implementado
 
@@ -53,7 +51,9 @@ La tabla `player_market_values` contiene valores de 9M para todos los jugadores 
 
 ### Ingesta y catálogo
 - Scripts de ingesta idempotentes.
-- Resolución de alias de equipos (con omisión segura en caso de ambigüedad extrema).
+- **TeamAliasResolver v2:** Contiene lógica de `resolveJornada` con containment bidireccional y asignación greedy sin restricción 1-a-1 (permite absorber varios nombres en la misma jornada).
+- Pre-paso de caché en la ingesta de partidos para leer la jornada oficial desde la página de stats (`officialRound`), ignorando los partidos aplazados en el listado general.
+- Registro automático del nombre real de las competiciones y desmarcado de temporadas antiguas (`is_current`).
 - Repositorios tipados con propiedades camelCase.
 
 ### Scoring y Clasificación
@@ -63,11 +63,11 @@ La tabla `player_market_values` contiene valores de 9M para todos los jugadores 
 - Test `test-scoring-persistence.ts` que verifica la idempotencia y el aislamiento entre ligas.
 
 ### Frontend
-- `/dashboard`: Gestión de ligas y equipos dinámica.
-- `/fantasy`: Muestra plantilla, mercado, puntos dinámicos, permite comprar/vender y guardar alineaciones. La navegación y el estado son 100% dinámicos leyendo las temporadas actuales.
-- Temporadas y jornadas son dinámicas (extraídas de la API, sin IDs hardcodeados).
+- `/dashboard`: Gestión de ligas dinámica. Unificación visual de "Crear" y "Unirse". Arreglado el bug que impedía crear ligas en competiciones multi-grupo.
+- `/fantasy`: Agrupación inteligente de jornadas por número (evita duplicados de "Jornada 1" en Superliga 2). Candado de bloqueo calculado a partir de la fecha del primer partido de la jornada.
 - CI configurado en GitHub Actions (TypeScript, tests y build).
-- `npm run test:lockout` asegura las reglas de backend de bloqueo estricto por `starts_at`.
 
 ## Deuda técnica conocida
-- Mejorar la heurística de `TeamAliasResolver` (fuzzy matching) para no omitir partidos de equipos con nombres cambiantes o patrocinadores.
+- **Bloqueo en ligas multi-grupo:** Actualmente, si el Grupo A juega el viernes y el Grupo B el domingo, el candado se activa el viernes para todos. Se debe decidir si es el comportamiento deseado.
+- **Cruce de jugadores:** Quedan estadísticas de jugadores sin emparejar en las actas (principalmente "Unknown Player" de RFEVB o fichajes que no están en el roster oficial).
+- **Automatización:** La ingesta y el cálculo de puntuaciones se ejecutan manualmente; el despliegue requerirá tareas programadas (cron).

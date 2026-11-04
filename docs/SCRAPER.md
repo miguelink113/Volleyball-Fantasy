@@ -1,6 +1,6 @@
 # Scraper RFEVB
 
-**Revisión de documentación:** 2026-10-28
+**Revisión de documentación:** 2026-11-04
 
 Scraper desarrollado con **Next.js + TypeScript + Cheerio** para obtener el
 catálogo de competiciones de voleibol, sus equipos, jugadores, partidos y
@@ -40,7 +40,7 @@ Parámetros:
 | ------------- | -------------------- |------|
 | `competition` | ID de la competición | `152` |
 | `season`      | ID de la temporada   | `186` |
-| `round`       | Jornada opcional     | `10` |
+| `round`       | Jornada opcional     | `10`  |
 
 #### Ejemplo
 
@@ -73,7 +73,7 @@ La respuesta contiene los partidos encontrados:
 }
 ```
 
-**Soporte multi-grupo (Nuevo):** Si la competición tiene grupos (como la Superliga 2 Masculina y Femenina), el scraper detecta dinámicamente las pestañas de la web (usando los elementos `span.rtsTxt` de Telerik) y asocia cada contenedor de partidos (`div.TabContent_Border`) a su grupo correspondiente. Esto permite reiniciar la numeración de jornadas para cada grupo (Jornada 1 del Grupo A vs Jornada 1 del Grupo B) y evita que los equipos de distintos grupos se mezclen en la ingesta.
+**Soporte multi-grupo:** Si la competición tiene grupos (como la Superliga 2 Masculina y Femenina), el scraper detecta dinámicamente las pestañas de la web (usando los elementos `span.rtsTxt` de Telerik) y asocia cada contenedor de partidos (`div.TabContent_Border`) a su grupo correspondiente. Esto permite reiniciar la numeración de jornadas para cada grupo (Jornada 1 del Grupo A vs Jornada 1 del Grupo B) y evita que los equipos de distintos grupos se mezclen en la ingesta.
 
 ---
 
@@ -293,9 +293,6 @@ Si la posición no puede resolverse desde el roster, el dominio utiliza
 `unknown` y la presentación debe mostrar `DESCONOCIDO`. No se sustituye
 silenciosamente por `outside`.
 
-En la comprobación actual de la competición `152` se obtienen 12 equipos y
-180 jugadores.
-
 ## Integración con el dominio deportivo
 
 `../lib/services/ingestion/map-scraped-match.ts` contiene el adaptador histórico para
@@ -341,13 +338,11 @@ histórico y no debe utilizarse en la demo, scripts ni resultados persistidos.
 
 ### Resolución de Nombres de Equipo (DataProject)
 
-Se ha verificado mediante inspección directa del HTML (Oct 2026) que DataProject **no inyecta IDs técnicos (`TeamID` ni `PlayerID`)** en el DOM de las actas centrales de los partidos (`MatchStatistics.aspx`). Los 12 `TeamID` que aparecen en el código fuente corresponden al menú de navegación global, imposibilitando extraerlos para asociarlos a las estadísticas.
+Se ha verificado mediante inspección directa del HTML (Oct 2026) que DataProject **no inyecta IDs técnicos (`TeamID` ni `PlayerID`)** en el DOM de las actas centrales de los partidos (`MatchStatistics.aspx`). Los nombres de los equipos difieren sistemáticamente entre la página de la plantilla oficial (ej. `CV Melilla`) y el acta del partido (ej. `Club Voleibol Melilla`).
 
-Además, los nombres de los equipos difieren sistemáticamente entre la página de la plantilla oficial (ej. `CV Melilla`) y el acta del partido (ej. `Club Voleibol Melilla`).
+**Decisión Técnica (Fase 11):** Se ha implementado `TeamAliasResolver` con una estrategia en dos pasos (Exacto -> Containment) y un algoritmo de asignación greedy en `resolveJornada`.
 
-**Decisión Técnica (Opción 3a):** Implementar una tabla de alias en la base de datos (`team_source_aliases`) para unificar y auto-resolver asíncronamente los nombres de origen antes de pasarlos al mapper estricto del dominio.
-
-**Limitación actual (Nuevo):** Si el nombre en el acta es muy distinto (ej. "CVA Extremadura Tránsitos Suroeste" vs "CVA Extremadura"), el `TeamAliasResolver` no lo resuelve con seguridad. Para evitar corromper la base de datos asignando estadísticas al equipo equivocado, **la ingesta omite el partido entero** y registra un warning. La solución a futuro es implementar fuzzy matching o usar un LLM para inferir el alias.
+Esta lógica permite que un solo equipo absorba múltiples nombres del acta en la misma jornada (por ejemplo, si RFEVB publica "Club Voleibol Melilla" y "Melilla Ciudad del Deporte" en la misma jornada). Gracias a esto, la temporada 2026/27 se ha ingerido con una tasa de éxito del 99%, omitiendo únicamente partidos con jugadores anonimizados ("Unknown Player") o estadísticas ausentes.
 
 ## Ejecutar el scraper
 
@@ -389,7 +384,7 @@ lib/
 * `fetch-matches.ts`: obtiene los partidos. Extrae la fecha de cada uno desde
   `HF_MatchDatetime` (`DD/MM/YYYY - HH:MM`, Europe/Madrid) y la expone como
   `matchDate: Date | null`. **También extrae el `groupName`** analizando el DOM para saber a qué grupo pertenece la jornada.
-* `fetch-match-statistics.ts`: obtiene las estadísticas de un partido.
+* `fetch-match-statistics.ts`: obtiene las estadísticas de un partido. Extrae también la jornada oficial y el grupo oficial (`officialRound`, `officialGroup`).
 * `fetch-competition-statistics.ts`: combina partidos y estadísticas.
 * `fetch-competition-roster.ts`: obtiene equipos y jugadores de una
   competición y los adapta a `Team` y `Player`.
@@ -491,13 +486,11 @@ estables se construyen con el identificador oficial (`rfevb:team:<id>` y
 
 ## Uso del catálogo persistido en el fantasy actual
 
-La pantalla `/fantasy` solicita `GET /api/competition-roster` y convierte los jugadores y equipos devueltos en los modelos que muestra `FantasyTeamBuilder`. La ruta obtiene la competición por su ID RFEVB, busca la temporada marcada `is_current=true` y añade el precio leído de `player_market_values` para la primera jornada disponible. Si el precio de un jugador no existe, aplica un fallback de 9M.
-
-Este comportamiento sustituye al mercado de demostración descrito en versiones anteriores de esta guía. `createDailyFantasyRoster` y la generación determinista de una selección diaria de 30 jugadores siguen en `lib/services/fantasy/fantasy-team.service.ts`, pero el `FantasyTeamBuilder` actual no llama a ese helper. No describas la selección diaria como comportamiento actual de la pantalla.
+La pantalla `/fantasy` solicita `GET /api/competition-roster` y convierte los jugadores y equipos devueltos en los modelos que muestra `FantasyTeamBuilder`. La ruta obtiene la competición por su ID RFEVB, busca la temporada marcada `is_current=true` y añade el precio leído de `player_market_values` para la primera jornada disponible. Si el precio de un jugador no existe, aplica un fallback.
 
 La UI también carga el equipo de la liga mediante `/api/fantasy-team?league_id=...`; las compras y ventas llaman a la RPC `transfer_player`, y el guardado de la alineación semanal llama a la RPC `save_lineup`. Ambas operaciones están protegidas por bloqueos temporales en la base de datos.
 
-**Nota sobre flujo dinámico:** Todo el flujo es dinámico y se adapta a la temporada que esté marcada como activa en la base de datos. Ya no se usan IDs hardcodeados.
+**Nota sobre flujo dinámico y multi-grupo:** Todo el flujo es dinámico y se adapta a la temporada que esté marcada como activa en la base de datos. En competiciones con múltiples grupos, el frontend unifica las jornadas visualmente mediante `round_number`.
 
 ## Puntuaciones fantasy por jornada
 
@@ -508,11 +501,9 @@ GET /api/fantasy-round-scores?competition=152&season=186
 GET /api/fantasy-round-scores?competition=152&season=186&round=1
 ```
 
-`competition` y `season` son los identificadores RFEVB; `round` es opcional. La ruta lee `rounds`, `matches` y `match_player_stats` de Supabase a través de los repositorios y calcula la puntuación con `ScoringSystemV1`. No obtiene las estadísticas de RFEVB en directo. **Limitación conocida del código:** la ruta resuelve la temporada solo por `rfevb_id` y no valida que esa temporada pertenezca a la competición recibida.
+`competition` y `season` son los identificadores RFEVB; `round` es opcional. La ruta lee `rounds`, `matches` y `match_player_stats` de Supabase a través de los repositorios y calcula la puntuación con `ScoringSystemV1`. No obtiene las estadísticas de RFEVB en directo.
 
-La respuesta actual contiene `playerId`, `roundNumber`, `score`, `matchesPlayed` y `scoringVersion`. El cálculo interno agrega el desglose, pero la ruta actual no lo incluye en la respuesta y no guarda los resultados en `player_match_scores`, `player_round_scores` ni `fantasy_scores`.
-
-La ruta filtra las jornadas por el `rfevb_id` de la temporada consultada y calcula todas las jornadas si no se proporciona `round`. El cliente `FantasyTeamBuilder` carga las puntuaciones de la temporada fija 186 y las guarda en estado React durante la sesión; no existe la caché de cliente por jornada descrita en versiones previas de este documento.
+La ruta filtra las jornadas por el `rfevb_id` de la temporada consultada y calcula todas las jornadas si no se proporciona `round`.
 
 ## Tests del contrato de dominio
 

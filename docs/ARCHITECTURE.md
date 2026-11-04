@@ -51,12 +51,13 @@ lib/services/ingestion/
 
 El scraper extrae equipos, jugadores, partidos y estadísticas de RFEVB. Los scripts administrativos coordinan la ingesta y persisten los resultados en Supabase.
 
-**Soporte multi-grupo:** Competiciones como la Superliga 2 se dividen en grupos (A, B, C). El scraper analiza el DOM para detectar las pestañas de grupo (Telerik RadTabStrip) y asocia cada jornada y partido a su grupo correspondiente, evitando colisiones de `round_number` (la Jornada 1 del Grupo A es independiente de la del Grupo B).
+**Soporte multi-grupo:** Competiciones como la Superliga 2 se dividen en grupos (A, B, C). El scraper analiza el DOM para detectar los grupos y asocia cada jornada y partido a su grupo correspondiente, evitando colisiones de `round_number`.
+
+**Resolución de partidos y jornadas:** La ingesta lee la página oficial de cada partido (`MatchStatistics.aspx`) para extraer la jornada oficial (`officialRound`) y el grupo (`officialGroup`), ignorando el orden del listado general que puede incluir partidos aplazados.
 
 La capa de ingesta:
 - Normaliza los datos externos.
-- Valida identificadores y relaciones.
-- Resuelve las discrepancias de nombres de equipos (si no es unívoco, omite el partido para no corromper las estadísticas).
+- **Resolución de alias (v2):** `TeamAliasResolver` utiliza `resolveJornada` para cruzar los nombres de las actas con el roster. Utiliza containment bidireccional y asignación greedy, permitiendo que un mismo equipo absorba múltiples nombres en la misma jornada (ej. "Club Voleibol Melilla" y "Melilla Ciudad del Deporte").
 - Cruza los jugadores de las actas con los jugadores del roster.
 - Realiza upserts idempotentes.
 - Registra warnings cuando no es posible resolver un registro de forma unívoca.
@@ -159,6 +160,8 @@ La página principal del flujo fantasy es:
 
 La interfaz utiliza pestañas y es 100% dinámica. Lee exclusivamente las temporadas activas (`is_current = true`), identificando los UUIDs de Supabase correspondientes para la gestión de equipos y jugadores. Los valores de mercado mostrados proceden de `player_market_values`.
 
+**Manejo de grupos en UI:** Aunque en la base de datos existen 3 jornadas 1 (Grupos A, B, C), el frontend agrupa las jornadas por `round_number` mediante un `Map`. De este modo, el usuario ve y gestiona una única "Jornada 1" unificada.
+
 Las puntuaciones de todas las jornadas se cargan en una sola petición para reducir las solicitudes sucesivas y evitar parpadeos durante la actualización de la interfaz.
 
 ## Flujo de datos de producto
@@ -217,7 +220,7 @@ Entidad de dominio
 Frontend: precio del jugador
 ```
 
-Los valores iniciales del mercado son de 9M para todos los jugadores en todas las jornadas.
+Los valores iniciales del mercado se siembran por defecto para todos los jugadores en todas las jornadas.
 
 ## Identificadores y normalización
 
@@ -246,10 +249,10 @@ Las entidades de jornada exponen `startsAt` y `endsAt`. El bloqueo de alineacion
 
 ## Estado actual y evolución
 
-Las fases 1 a 10 están completadas y verificadas:
+Las fases 1 a 11 están completadas y verificadas:
 - El catálogo deportivo está persistido y los repositorios de lectura implementados.
 - El mercado inicial está sembrado y la UI consume precios dinámicos.
 - Las ligas, el mercado de fichajes y las alineaciones están implementados mediante RPC, con validación de límites y bloqueos temporales.
 - El scoring se calcula y se persiste en las tablas históricas.
 - La clasificación privada y los puntos por jornada se leen de forma rápida desde la base de datos.
-- La UI (Login, Dashboard, Fantasy) ha sido refactorizada para operar 100% de forma dinámica y manejar correctamente los estados y bloqueos.
+- La UI (Login, Dashboard, Fantasy) ha sido refactorizada para operar 100% de forma dinámica, manejar correctamente los estados y bloqueos, y agrupar jornadas de múltiples grupos.

@@ -2,40 +2,38 @@
 
 Aplicación web de fantasy de voleibol construida con Next.js, TypeScript y Supabase. El repositorio combina la extracción de datos de RFEVB, un dominio tipado, persistencia del catálogo y una interfaz con autenticación, ligas privadas y gestión del equipo fantasy.
 
-> **Estado de esta revisión:** Las fases 1 a 10 están **completadas y verificadas**. El objetivo del plan es un MVP para 2026/27, y la interfaz ya está preparada para usar temporadas dinámicas de forma nativa. La Fase 11 (integración end-to-end) está en curso, pendiente de la mejora del algoritmo de resolución de alias.
+> **Estado de esta revisión:** Las fases 1 a 11 están **completadas y verificadas**. La ingesta de la temporada 26/27 está finalizada con soporte para múltiples grupos y un algoritmo avanzado de resolución de alias. La UI está totalmente adaptada para ligas con múltiples grupos.
 
 ## Estado actual
 
 ### Catálogo documentado
 
-| Entidad | Último conteo documentado (2025/26) |
-| --- | ---: |
-| Equipos | 94 |
-| Jugadores | 1.449 |
-| Partidos | 1.045 |
-| Estadísticas de jugador | 25.262 |
+| Entidad | 2025/26 | 2026/27 (Actual) |
+| --- | ---: | ---: |
+| Equipos | 94 | 96 |
+| Jugadores | 1.449 | 1.388 |
+| Partidos | 1.045 | 277 |
+| Estadísticas de jugador | 25.262 | 5.527 |
 
-Las competiciones base son Superliga Masculina, Superliga Femenina, Superliga 2 Masculina y Superliga 2 Femenina. Se ha incorporado la ingesta de la temporada 2026/27. El script de mercado permite sembrar un precio fijo (9M por defecto) para cada jugador y jornada.
+Las competiciones base son Superliga Masculina, Superliga Femenina, Superliga 2 Masculina y Superliga 2 Femenina. El script de mercado permite sembrar un precio fijo para cada jugador y jornada.
 
 ### Funcionalidad implementada en el código
 
 - Autenticación y perfil con Supabase Auth.
 - Ingesta administrativa del roster, jornadas, partidos y estadísticas desde RFEVB.
-- **Soporte multi-grupo:** Capacidad de procesar competiciones divididas en grupos (ej. Superliga 2 - Grupos A, B, C) mediante el campo `group_name`, asignando jornadas independientes por grupo.
-- Resolución de alias de equipos entre el roster y las actas (omitiendo partidos de forma segura si el nombre no se resuelve con certeza).
+- **Soporte multi-grupo:** Capacidad de procesar competiciones divididas en grupos. La UI unifica las jornadas para el usuario.
+- **TeamAliasResolver v2:** Resolución automática de equipos con containment y asignación greedy (evita omisiones por nombres dispares).
 - Repositorios de lectura para equipos, jugadores, jornadas, partidos, estadísticas y valores de mercado.
 - `GET /api/competition-roster` lee el catálogo y los precios persistidos en Supabase basándose en la temporada `is_current = true`.
 - `GET /api/fantasy-round-scores` calcula bajo demanda puntuaciones por jornada (con desglose) a partir de partidos y estadísticas persistidos.
-- Dashboard dinámico para listar ligas propias y llamar a las operaciones RPC de creación, unión y salida.
-- Pantalla fantasy con pestañas (Alineación, Mercado, Clasificación) y navegación fluida de vuelta al Dashboard.
-- Validación estricta en base de datos: límite de plantilla (14), presupuesto, composición (1/1/2/2/1) y **bloqueo temporal estricto** en el backend basado en `starts_at`.
-- Guardado de alineaciones validado (RPC `save_lineup`).
-- Persistencia de puntuaciones y clasificación privada mediante `/api/league-ranking` y `/api/league-scores`.
+- Dashboard dinámico con gestión de ligas y validaciones corregidas.
+- Pantalla fantasy con pestañas (Alineación, Mercado, Clasificación), validación de límites estrictos en backend y bloqueos temporales.
 
 ### Incompleto o pendiente de confirmar
 
-- Mejorar el `TeamAliasResolver` para resolver discrepancias complejas (fuzzy matching) y evitar la omisión de partidos cuando el nombre del equipo en el acta difiere demasiado del roster.
-- Integración end-to-end total y despliegue en staging (Fases 11-12).
+- Definir estrategia de bloqueo temporal en jornadas multi-grupo (actualmente usa la fecha más temprana).
+- Despliegue en staging y producción (Fase 12).
+- Tareas programadas (Cron) para automatizar ingesta y cálculo de puntos.
 
 ## Arquitectura
 
@@ -66,7 +64,7 @@ Abre `http://localhost:3000`. No incluyas claves secretas ni URIs PostgreSQL en 
 GET /api/competition-roster?competition=152
 ```
 
-Consulta en Supabase la competición indicada y su temporada dinámica `is_current=true`. Devuelve equipos y jugadores con precio obtenido de los valores de mercado de la primera jornada disponible; si falta precio para un jugador, aplica un fallback de 9M.
+Consulta en Supabase la competición indicada y su temporada dinámica `is_current=true`. Devuelve equipos y jugadores con precio obtenido de los valores de mercado de la primera jornada disponible.
 
 ### Puntuaciones fantasy
 
@@ -114,6 +112,6 @@ npm run show:match-scores -- 1 1
 
 ## Próximas prioridades
 
-1. Mejorar la heurística de `TeamAliasResolver` para el cruce de actas con roster.
-2. Completar la integración end-to-end (Fase 11).
-3. Despliegue en staging y producción (Fase 12).
+1. Despliegue en staging y producción (Fase 12).
+2. Automatización de scripts de ingesta y cálculo (cron).
+3. Refinamiento de la lógica de bloqueo para competiciones multi-grupo.

@@ -1,6 +1,6 @@
 # Desarrollo local
 
-**Revisión de documentación:** 2026-10-28
+**Revisión de documentación:** 2026-11-04
 
 ## Requisitos
 
@@ -56,18 +56,19 @@ Los comandos siguientes son ejemplos dinámicos (sustituye los IDs por la tempor
 
 ### Roster
 ```bash
-npx tsx scripts/ingest/ingest-roster.ts --competition=167 --season=203 --season-name="2026/27"
+npx tsx scripts/ingest/ingest-roster.ts --competition=167 --season=203 --season-name="2026/27" --competition-name="Superliga 2 Masculina"
 ```
+*(Nota: El parámetro `--competition-name` es necesario para actualizar el nombre de la competición en la base de datos y desmarcar automáticamente las temporadas antiguas (`is_current = false`), evitando que aparezcan en el Dashboard).*
 
 ### Partidos y estadísticas
 ```bash
 npx tsx scripts/ingest/ingest-matches.ts --competition=167 --season=203
 ```
-*(Nota: Si hay equipos cuyo nombre en el acta no coincide con el roster y no se pueden resolver automáticamente, el partido se omite con un warning).*
+*(Nota: Este script descarga primero todas las estadísticas en caché para leer la jornada oficial de cada partido. Es normal que tarde un poco más, pero evita duplicar peticiones y asigna correctamente los partidos aplazados).*
 
 ### Valores iniciales del mercado
 ```bash
-npx tsx scripts/ingest/ingest-market-values.ts --competition=167 --season=203 --price=9
+npx tsx scripts/ingest/ingest-market-values.ts --competition=167 --season=203 --price=10
 ```
 
 ### Cálculo y persistencia de puntuaciones
@@ -124,5 +125,6 @@ npm run build
 
 ## Limitaciones conocidas que afectan al desarrollo
 
-- La resolución automática de equipos con nombres muy dispares requiere mejora (fuzzy matching). Actualmente los partidos no resueltos se omiten por seguridad.
+- **Bloqueo en ligas multi-grupo:** El candado de la jornada fantasy se calcula tomando la fecha del primer partido del grupo más madrugador. Si un grupo juega los viernes y otro los domingos, el bloqueo afecta a ambos el viernes. Pendiente definir la estrategia final.
+- **Cruce de jugadores:** Quedan algunas estadísticas de jugadores sin emparejar en las actas (fichajes de última hora o "Unknown Player" de RFEVB).
 - La ingesta desde RFEVB y el cálculo de puntuaciones se ejecutan manualmente; el despliegue en producción requerirá tareas programadas (cron).

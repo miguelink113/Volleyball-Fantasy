@@ -13,6 +13,7 @@ interface Args {
     competitionRfevbId: string;
     seasonRfevbId: string;
     seasonName: string;
+    competitionName: string;
 }
 
 function parseArgs(): Args {
@@ -26,30 +27,39 @@ function parseArgs(): Args {
     const competitionRfevbId = get("competition");
     const seasonRfevbId = get("season");
     const seasonName = get("season-name");
+    const competitionName = get("competition-name");
 
-    if (!competitionRfevbId || !seasonRfevbId || !seasonName) {
+    if (!competitionRfevbId || !seasonRfevbId || !seasonName || !competitionName) {
         console.error(
-            "Uso: npm run ingest:roster -- --competition=152 --season=186 --season-name=2026/27"
+            "Uso: npm run ingest:roster -- --competition=164 --season=199 --season-name=2026/27 --competition-name=\"Superliga Femenina 2\""
         );
         process.exit(1);
     }
 
-    return { competitionRfevbId, seasonRfevbId, seasonName };
+    return { competitionRfevbId, seasonRfevbId, seasonName, competitionName };
 }
 
 async function upsertCompetition(
     supabase: ReturnType<typeof createAdminClient>,
-    rfevbId: string
+    rfevbId: string,
+    name: string
 ): Promise<string> {
     const { data: existing, error: selectError } = await supabase
         .from("competitions")
-        .select("id")
+        .select("id, name")
         .eq("rfevb_id", rfevbId)
         .maybeSingle();
 
     if (selectError) throw selectError;
+
     if (existing) {
-        console.log(`  competición ya existente: ${existing.id}`);
+        // Si existe pero el nombre es distinto (ej. "Competición 164"), lo actualizamos
+        if (existing.name !== name) {
+            await supabase.from("competitions").update({ name }).eq("id", existing.id);
+            console.log(`  competición existente actualizada: ${existing.id} -> "${name}"`);
+        } else {
+            console.log(`  competición ya existente: ${existing.id}`);
+        }
         return existing.id;
     }
 
@@ -57,14 +67,14 @@ async function upsertCompetition(
         .from("competitions")
         .insert({
             rfevb_id: rfevbId,
-            name: `Competición ${rfevbId}`,
+            name,
             active: true,
         })
         .select("id")
         .single();
 
     if (insertError) throw insertError;
-    console.log(`  competición creada: ${inserted.id}`);
+    console.log(`  competición creada: ${inserted.id} ("${name}")`);
     return inserted.id;
 }
 
@@ -74,6 +84,14 @@ async function upsertSeason(
     rfevbId: string,
     name: string
 ): Promise<string> {
+    // 1. Desmarcar cualquier otra temporada de esta competición para que no salgan en el Dashboard
+    await supabase
+        .from("seasons")
+        .update({ is_current: false })
+        .eq("competition_id", competitionId)
+        .neq("rfevb_id", rfevbId);
+
+    // 2. Buscar si esta temporada ya existe
     const { data: existing, error: selectError } = await supabase
         .from("seasons")
         .select("id")
@@ -82,11 +100,18 @@ async function upsertSeason(
         .maybeSingle();
 
     if (selectError) throw selectError;
+
     if (existing) {
-        console.log(`  temporada ya existente: ${existing.id}`);
+        // Si ya existe, nos aseguramos de que esté marcada como actual
+        await supabase
+            .from("seasons")
+            .update({ is_current: true, name })
+            .eq("id", existing.id);
+        console.log(`  temporada ya existente (marcada como actual): ${existing.id}`);
         return existing.id;
     }
 
+    // 3. Si no existe, la insertamos
     const { data: inserted, error: insertError } = await supabase
         .from("seasons")
         .insert({
@@ -106,7 +131,7 @@ async function upsertSeason(
 async function main() {
     const args = parseArgs();
     console.log(
-        `→ Ingesta roster: competición=${args.competitionRfevbId} temporada=${args.seasonRfevbId} (${args.seasonName})`
+        `→ Ingesta roster: competición=${args.competitionRfevbId} (${args.competitionName}) temporada=${args.seasonRfevbId} (${args.seasonName})`
     );
 
     const supabase = createAdminClient();
@@ -114,7 +139,8 @@ async function main() {
     console.log("→ Asegurando competición…");
     const competitionId = await upsertCompetition(
         supabase,
-        args.competitionRfevbId
+        args.competitionRfevbId,
+        args.competitionName
     );
 
     console.log("→ Asegurando temporada…");
@@ -188,9 +214,6 @@ async function main() {
     );
 
     // --- Registrar aliases del roster ---
-    // Sin esto, el resolver no tiene contra qué comparar los nombres de
-    // las actas de partido. Es idempotente: upsert por
-    // (season_id, normalized_alias).
     console.log("→ Registrando aliases del roster…");
     const aliasResolver = new TeamAliasResolver(supabase);
 
@@ -261,7 +284,7 @@ async function main() {
     if (playerCountError) throw playerCountError;
 
     console.log("\n═══ Resumen ═══");
-    console.log(`Competición RFEVB:  ${args.competitionRfevbId}`);
+    console.log(`Competición RFEVB:  ${args.competitionRfevbId} (${args.competitionName})`);
     console.log(`Temporada RFEVB:    ${args.seasonRfevbId} (${args.seasonName})`);
     console.log(`Competition UUID:   ${competitionId}`);
     console.log(`Season UUID:        ${seasonId}`);

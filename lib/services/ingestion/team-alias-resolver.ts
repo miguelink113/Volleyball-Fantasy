@@ -296,11 +296,13 @@ export class TeamAliasResolver {
     }
 
     /**
-     * Resolución por jornada (la que pediste):
+     * Resolución por jornada:
      * 1. Coincidencias exactas → se sacan del pool.
-     * 2. Resto → containment (palabras contenidas) con asignación greedy 1-a-1.
+     * 2. Resto → containment (palabras contenidas) con asignación greedy.
      *
-     * Devuelve Map<actName, teamId | null>
+     * NOTA: Se permite que un mismo equipo del roster absorba varios nombres
+     * del acta si es necesario (ej. "Club Voleibol Melilla" y
+     * "Melilla Ciudad del Deporte" jugando en la misma jornada).
      */
     resolveJornada(
         actNames: string[],
@@ -320,8 +322,8 @@ export class TeamAliasResolver {
             };
         });
 
-        // Preparar roster
-        let remainingRoster = roster.map((r) => {
+        // Preparar roster completo (NO lo filtraremos luego)
+        const fullRoster = roster.map((r) => {
             const normalized = normalizeTeamAlias(r.name);
             return {
                 teamId: r.teamId,
@@ -331,29 +333,24 @@ export class TeamAliasResolver {
             };
         });
 
-        let remainingActs = [...acts];
-
         // ─────────────────────────────────────────────
         // PASO 1: Coincidencias EXACTAS
         // ─────────────────────────────────────────────
         const exactMatchedActs = new Set<string>();
-        const exactMatchedRosterIds = new Set<string>();
 
-        for (const a of remainingActs) {
+        for (const a of acts) {
             if (!a.normalized) continue;
-            const match = remainingRoster.find((r) => r.normalized === a.normalized);
+            const match = fullRoster.find((r) => r.normalized === a.normalized);
             if (match) {
                 result.set(a.raw, match.teamId);
                 exactMatchedActs.add(a.raw);
-                exactMatchedRosterIds.add(match.teamId);
                 console.log(`  ✓ Exacto: "${a.raw}" → ${match.name}`);
             }
         }
 
-        remainingActs = remainingActs.filter((a) => !exactMatchedActs.has(a.raw));
-        remainingRoster = remainingRoster.filter(
-            (r) => !exactMatchedRosterIds.has(r.teamId)
-        );
+        // Solo filtramos las ACTAS que ya se resolvieron.
+        // El roster se queda completo para el paso 2.
+        const remainingActs = acts.filter((a) => !exactMatchedActs.has(a.raw));
 
         // ─────────────────────────────────────────────
         // PASO 2: Containment (palabras contenidas)
@@ -371,7 +368,7 @@ export class TeamAliasResolver {
         for (const a of remainingActs) {
             if (a.tokens.size === 0) continue;
 
-            for (const r of remainingRoster) {
+            for (const r of fullRoster) {
                 if (r.tokens.size === 0) continue;
 
                 const scoreActInRoster = containment(a.tokens, r.tokens);
@@ -395,19 +392,17 @@ export class TeamAliasResolver {
             }
         }
 
-        // Greedy 1-a-1 por score descendente
+        // Greedy por score descendente
         candidates.sort((x, y) => y.score - x.score);
 
         const usedActs = new Set<string>();
-        const usedRoster = new Set<string>();
 
         for (const c of candidates) {
-            if (usedActs.has(c.actRaw) || usedRoster.has(c.teamId)) continue;
+            if (usedActs.has(c.actRaw)) continue;
             if (c.score < minContainment) continue;
 
             result.set(c.actRaw, c.teamId);
             usedActs.add(c.actRaw);
-            usedRoster.add(c.teamId);
 
             console.log(
                 `  ✓ Containment ${c.score}% (${c.direction}): "${c.actRaw}" ↔ "${c.rosterName}"`

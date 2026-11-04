@@ -36,8 +36,8 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
     const [budget, setBudget] = useState<number>(0);
     const [teamName, setTeamName] = useState<string>("");
 
-    // Jornadas, puntuaciones reales y ranking
-    const [rounds, setRounds] = useState<Array<{ number: number, label: string, isLocked: boolean, startsAt: string, endsAt: string }>>([]);
+    // Jornadas (Añadimos 'id' para no tener que buscarla luego)
+    const [rounds, setRounds] = useState<Array<{ id: string, number: number, label: string, isLocked: boolean, startsAt: string, endsAt: string }>>([]);
     const [myRealScores, setMyRealScores] = useState<Record<number, number>>({});
     const [ranking, setRanking] = useState<any[]>([]);
 
@@ -58,7 +58,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
             setBudget(teamPayload.team.budget);
             setTeamName(teamPayload.team.name);
 
-            // Limpieza de alineación (evitar jugadores fantasmas)
+            // Limpieza de alineación
             const activeIds = teamPayload.activePlayerIds;
             const loadedLineup = teamPayload.lineupPlayerIds || [];
             const cleanLineup = loadedLineup.filter((id: string) => activeIds.includes(id));
@@ -93,28 +93,51 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
             const rankPayload = await rankRes.json();
             if (rankPayload.success) setRanking(rankPayload.ranking);
 
-            // 4. Cargar jornadas y bloqueos
+            // 4. Cargar jornadas, AGRUPANDO POR NÚMERO (El gran arreglo)
             const { data: dbRounds } = await supabase
                 .from("rounds")
-                .select("round_number, starts_at, ends_at")
+                .select("id, round_number, starts_at, ends_at")
                 .eq("season_id", teamPayload.season_id)
                 .order("round_number");
 
             const now = new Date();
-            const formattedRounds = (dbRounds || []).map(r => {
-                const isLocked = now >= new Date(r.starts_at);
-                return {
-                    number: r.round_number,
-                    label: r.round_number <= 22 ? `Jornada ${r.round_number}` : r.round_number === 23 ? "Cuartos" : r.round_number === 24 ? "Semis" : "Final",
-                    isLocked,
-                    startsAt: r.starts_at,
-                    endsAt: r.ends_at
-                };
+            const uniqueRoundsMap = new Map<number, any>();
+
+            // Agrupamos para que "Jornada 1" del Grupo A, B y C sea una sola
+            (dbRounds || []).forEach(r => {
+                if (!uniqueRoundsMap.has(r.round_number)) {
+                    uniqueRoundsMap.set(r.round_number, { ...r });
+                } else {
+                    const existing = uniqueRoundsMap.get(r.round_number);
+                    // Si hay varios grupos, usamos la fecha de inicio más temprana para bloquear
+                    if (r.starts_at && (!existing.starts_at || new Date(r.starts_at) < new Date(existing.starts_at))) {
+                        existing.starts_at = r.starts_at;
+                    }
+                    // Y la fecha de fin más tardía
+                    if (r.ends_at && (!existing.ends_at || new Date(r.ends_at) > new Date(existing.ends_at))) {
+                        existing.ends_at = r.ends_at;
+                    }
+                }
             });
+
+            const formattedRounds = Array.from(uniqueRoundsMap.values())
+                .sort((a, b) => a.round_number - b.round_number)
+                .map(r => {
+                    // Si la fecha no existe, NO bloqueamos la jornada
+                    const isLocked = r.starts_at ? now >= new Date(r.starts_at) : false;
+                    return {
+                        id: r.id,
+                        number: r.round_number,
+                        label: r.round_number <= 22 ? `Jornada ${r.round_number}` : r.round_number === 23 ? "Cuartos" : r.round_number === 24 ? "Semis" : "Final",
+                        isLocked,
+                        startsAt: r.starts_at,
+                        endsAt: r.ends_at
+                    };
+                });
+
             setRounds(formattedRounds);
 
             if (formattedRounds.length > 0) {
-                // Seleccionar la primera jornada no bloqueada o la primera por defecto
                 const firstOpen = formattedRounds.find(r => !r.isLocked);
                 setSelectedRound(firstOpen ? firstOpen.number : formattedRounds[0].number);
             }
@@ -128,7 +151,6 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
 
     useEffect(() => { loadData(); }, [leagueId]);
 
-    // Limpiar mensajes después de 3 segundos
     useEffect(() => {
         if (successMsg) {
             const timer = setTimeout(() => setSuccessMsg(null), 3000);
@@ -136,7 +158,6 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
         }
     }, [successMsg]);
 
-    // Lógica de Alineación
     const toggleLineup = (playerId: string) => {
         if (lineupIds.includes(playerId)) {
             setLineupIds(lineupIds.filter(id => id !== playerId));
@@ -156,6 +177,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
             setError("La jornada está bloqueada. No puedes modificar la alineación.");
             return;
         }
+        if (!roundObj) return setError("Jornada no válida.");
 
         const validation = validateLineup(lineupIds, rosterPlayers);
         if (!validation.valid) {
@@ -167,11 +189,10 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
         setError(null);
         setSuccessMsg(null);
 
-        const { data: roundData } = await supabase.from("rounds").select("id").eq("season_id", seasonUuid).eq("round_number", selectedRound).single();
-
+        // Usamos el ID que ya tenemos guardado en el estado, evitando el fallo del .single()
         const { error: rpcError } = await supabase.rpc("save_lineup", {
             p_fantasy_team_id: teamId,
-            p_round_id: roundData?.id,
+            p_round_id: roundObj.id,
             p_player_ids: lineupIds
         });
 
@@ -179,7 +200,6 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
             setError(rpcError.message);
         } else {
             setSuccessMsg("Alineación guardada correctamente.");
-            // Recargamos el ranking por si acaso
             const rankRes = await fetch(`/api/league-ranking?league_id=${leagueId}`);
             const rankPayload = await rankRes.json();
             if (rankPayload.success) setRanking(rankPayload.ranking);
@@ -187,24 +207,23 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
         setActionLoading(false);
     };
 
-    // Lógica de Mercado
     const handleTransfer = async (playerId: string, type: "BUY" | "SELL") => {
         const roundObj = rounds.find(r => r.number === selectedRound);
         if (roundObj?.isLocked) {
             setError("La jornada está bloqueada. No puedes comprar/vender jugadores.");
             return;
         }
+        if (!roundObj) return setError("Jornada no válida.");
 
         setActionLoading(true);
         setError(null);
         setSuccessMsg(null);
 
-        const { data: roundData } = await supabase.from("rounds").select("id").eq("season_id", seasonUuid).eq("round_number", selectedRound).single();
-
+        // Usamos el ID directo
         const { error: rpcError } = await supabase.rpc("transfer_player", {
             p_fantasy_team_id: teamId,
             p_player_id: playerId,
-            p_round_id: roundData?.id,
+            p_round_id: roundObj.id,
             p_type: type,
         });
 
@@ -212,7 +231,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
             setError(rpcError.message);
         } else {
             setSuccessMsg(type === "BUY" ? "Jugador fichado correctamente." : "Jugador vendido correctamente.");
-            await loadData(); // Recargamos todo para actualizar presupuesto y plantilla
+            await loadData();
         }
         setActionLoading(false);
     };
@@ -228,7 +247,6 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
 
     return (
         <div className="max-w-6xl mx-auto space-y-6">
-            {/* CABECERA */}
             <header className="bg-slate-900 text-white rounded-xl p-6 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 className="text-3xl font-bold">{teamName}</h1>
@@ -246,11 +264,9 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                 </div>
             </header>
 
-            {/* MENSAJES DE ERROR / ÉXITO */}
             {error && <div className="bg-red-100 text-red-700 p-4 rounded-lg shadow-sm font-semibold">⚠️ {error}</div>}
             {successMsg && <div className="bg-emerald-100 text-emerald-700 p-4 rounded-lg shadow-sm font-semibold">✅ {successMsg}</div>}
 
-            {/* SELECTOR DE JORNADA */}
             <div className="flex flex-col md:flex-row items-start md:items-center gap-4 bg-white p-4 rounded-lg shadow-sm border border-slate-200">
                 <label className="font-semibold text-slate-700">Jornada a gestionar:</label>
                 <select
@@ -267,14 +283,12 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                 )}
             </div>
 
-            {/* PESTAÑAS */}
             <div className="flex gap-2 border-b border-slate-200 overflow-x-auto">
                 <button onClick={() => setActiveTab("lineup")} className={`px-4 py-2 font-semibold whitespace-nowrap ${activeTab === "lineup" ? "border-b-2 border-violet-600 text-violet-600" : "text-slate-500"}`}>Mi Alineación</button>
                 <button onClick={() => setActiveTab("market")} className={`px-4 py-2 font-semibold whitespace-nowrap ${activeTab === "market" ? "border-b-2 border-violet-600 text-violet-600" : "text-slate-500"}`}>Mercado</button>
                 <button onClick={() => setActiveTab("ranking")} className={`px-4 py-2 font-semibold whitespace-nowrap ${activeTab === "ranking" ? "border-b-2 border-violet-600 text-violet-600" : "text-slate-500"}`}>Clasificación</button>
             </div>
 
-            {/* CONTENIDO: ALINEACIÓN */}
             {activeTab === "lineup" && (
                 <div className="grid md:grid-cols-2 gap-6">
                     <div className="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
@@ -331,7 +345,6 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                 </div>
             )}
 
-            {/* CONTENIDO: MERCADO */}
             {activeTab === "market" && (
                 <div className="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
                     <h3 className="font-bold text-lg mb-4 text-slate-800">Mercado de Fichajes</h3>
@@ -361,7 +374,6 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                 </div>
             )}
 
-            {/* CONTENIDO: CLASIFICACIÓN */}
             {activeTab === "ranking" && (
                 <div className="space-y-6">
                     <div className="bg-white p-5 rounded-lg shadow-sm border border-slate-200">

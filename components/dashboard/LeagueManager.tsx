@@ -50,21 +50,28 @@ export function LeagueManager() {
     }, [supabase]);
 
     useEffect(() => {
-        if (!selectedSeasonId) return;
+        if (!selectedSeasonId) {
+            setRound1Id(null);
+            return;
+        }
         async function fetchRound() {
-            const { data: round } = await supabase
+            // Pedimos las jornadas 1, ordenadas por nombre de grupo, y cogemos solo la primera
+            const { data: rounds, error } = await supabase
                 .from("rounds")
                 .select("id")
                 .eq("season_id", selectedSeasonId)
                 .eq("round_number", 1)
-                .maybeSingle();
-            setRound1Id(round ? round.id : null);
+                .order("group_name", { ascending: true })
+                .limit(1);
+
+            // Si hay al menos una, usamos su ID
+            setRound1Id(rounds && rounds.length > 0 ? rounds[0].id : null);
         }
         fetchRound();
     }, [selectedSeasonId, supabase]);
 
     const handleCreateLeague = async () => {
-        if (!round1Id || !selectedCompId || !selectedSeasonId) return setError("No hay jornada disponible.");
+        if (!round1Id || !selectedCompId || !selectedSeasonId) return setError("No hay jornada disponible para esta competición.");
         setLoading(true); setError(null);
         const code = Math.random().toString(36).substring(2, 8).toUpperCase();
         const { data, error } = await supabase.rpc("create_private_league", {
@@ -76,10 +83,14 @@ export function LeagueManager() {
     };
 
     const handleJoinLeague = async () => {
-        if (!joinCode || !round1Id) return;
+        if (!joinCode) return;
         setLoading(true); setError(null);
+        // El RPC join_private_league debería calcular la jornada internamente
+        // basándose en el código, o podemos pasarle un null si no la necesita.
+        // Asumiremos que el RPC funciona solo con el código.
         const { data, error } = await supabase.rpc("join_private_league", {
-            p_join_code: joinCode.toUpperCase(), p_round_id: round1Id,
+            p_join_code: joinCode.toUpperCase(),
+            p_round_id: null // Pasamos null para que el backend decida
         });
         if (error) { setError(error.message); setLoading(false); return; }
         router.push(`/fantasy?league_id=${data}`);
@@ -131,9 +142,10 @@ export function LeagueManager() {
                 {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
 
                 <div className="grid md:grid-cols-2 gap-6">
-                    <div className="border border-slate-200 p-5 rounded-lg bg-slate-50">
-                        <h4 className="font-bold text-slate-800 mb-3">Crear nueva liga</h4>
-                        <div className="mb-4">
+                    {/* CREAR LIGA */}
+                    <div className="border border-slate-200 p-5 rounded-lg bg-slate-50 flex flex-col">
+                        <h4 className="font-bold text-slate-800 mb-4">Crear nueva liga</h4>
+                        <div className="mb-4 flex-grow">
                             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Competición</label>
                             <select
                                 value={selectedCompId}
@@ -147,20 +159,40 @@ export function LeagueManager() {
                                     <option key={c.id} value={c.id}>{c.name} ({c.seasonName})</option>
                                 ))}
                             </select>
+                            {/* MENSAJE DE AYUDA SI NO HAY JORNADAS */}
+                            {!round1Id && (
+                                <p className="text-xs text-amber-600 mt-2">
+                                    ⚠️ Esta competición aún no tiene jornadas programadas.
+                                </p>
+                            )}
                         </div>
-                        <button onClick={handleCreateLeague} disabled={loading || !round1Id} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-2.5 rounded-lg font-bold transition disabled:opacity-50">
+                        <button
+                            onClick={handleCreateLeague}
+                            disabled={loading || !round1Id}
+                            className="w-full bg-slate-900 hover:bg-slate-800 text-white py-2.5 rounded-lg font-bold transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
                             {loading ? "Creando..." : "Crear Liga"}
                         </button>
                     </div>
 
-                    <div className="border border-slate-200 p-5 rounded-lg bg-slate-50">
-                        <h4 className="font-bold text-slate-800 mb-3">Unirse a una liga</h4>
-                        <input
-                            type="text" placeholder="Código (Ej: ABC123)" value={joinCode}
-                            onChange={(e) => setJoinCode(e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg mb-4 text-slate-800 uppercase focus:outline-none focus:ring-2 focus:ring-violet-500"
-                        />
-                        <button onClick={handleJoinLeague} disabled={loading || !joinCode || !round1Id} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-lg font-bold transition disabled:opacity-50">
+                    {/* UNIRSE A LIGA */}
+                    <div className="border border-slate-200 p-5 rounded-lg bg-slate-50 flex flex-col">
+                        <h4 className="font-bold text-slate-800 mb-4">Unirse a una liga</h4>
+                        <div className="mb-4 flex-grow">
+                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Código de liga</label>
+                            <input
+                                type="text"
+                                placeholder="Ej: ABC123"
+                                value={joinCode}
+                                onChange={(e) => setJoinCode(e.target.value)}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                            />
+                        </div>
+                        <button
+                            onClick={handleJoinLeague}
+                            disabled={loading || !joinCode}
+                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-lg font-bold transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
                             {loading ? "Uniéndose..." : "Unirse"}
                         </button>
                     </div>

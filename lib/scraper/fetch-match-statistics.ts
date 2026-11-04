@@ -87,6 +87,9 @@ export interface MatchStats {
     homeTeam: string;
     awayTeam: string;
 
+    officialRound: number | null;
+    officialGroup: string | null;
+
     homeScore: number | null;
     awayScore: number | null;
 
@@ -107,15 +110,6 @@ export class MatchScraperError extends Error {
 
 /**
  * Convierte un texto numérico a number.
- *
- * Ejemplos:
- *
- * "23"    -> 23
- * "-2"    -> -2
- * "58 %"  -> 58
- * "-"     -> null
- * "."     -> null
- * ""      -> null
  */
 function parseStatValue(value: string): StatValue {
     const normalized = value
@@ -145,12 +139,6 @@ function parseStatValue(value: string): StatValue {
 
 /**
  * Convierte una celda de formación.
- *
- * Ejemplos:
- *
- * "5" -> 5
- * "*" -> "*"
- * ""  -> null
  */
 function parseFormationValue(
     value: string
@@ -260,15 +248,6 @@ function getRowCells(
 /**
  * Comprueba si una tabla es una tabla de estadísticas
  * de jugadores.
- *
- * Buscamos las cabeceras características:
- *
- * Formación Inicial
- * Puntos
- * Saque
- * Recepción
- * Ataque
- * Bloqueo
  */
 function isPlayerStatsTable(
     $: cheerio.CheerioAPI,
@@ -291,9 +270,6 @@ function isPlayerStatsTable(
 
 /**
  * Busca el nombre del equipo asociado a una tabla.
- *
- * Dependiendo de la estructura concreta del HTML, el nombre
- * puede estar en un encabezado anterior.
  */
 function extractTeamName(
     $: cheerio.CheerioAPI,
@@ -321,10 +297,6 @@ function extractTeamName(
         }
     }
 
-    /*
-     * Primera opción:
-     * buscar encabezados anteriores.
-     */
     const previousHeadings = $(table)
         .prevAll("h1, h2, h3, h4, h5, h6")
         .toArray();
@@ -344,10 +316,6 @@ function extractTeamName(
         }
     }
 
-    /*
-     * Segunda opción:
-     * buscar texto en elementos anteriores.
-     */
     const previousElements = $(table)
         .prevAll()
         .toArray();
@@ -373,32 +341,6 @@ function extractTeamName(
 
 /**
  * Extrae un jugador de una fila.
- *
- * La estructura que vemos en la tabla es:
- *
- * dorsal
- * nombre
- * formación 1
- * formación 2
- * formación 3
- * formación 4
- * formación 5
- * puntos Tot
- * puntos BP
- * puntos G-P
- * saque Tot
- * saque Err
- * saque Punto directo
- * recepción Tot
- * recepción Err
- * recepción Pos%
- * recepción Exc.%
- * ataque Tot
- * ataque Err
- * ataque Blo
- * ataque Exc.
- * ataque Exc.%
- * bloqueo Puntos
  */
 function parsePlayerRow(
     $: cheerio.CheerioAPI,
@@ -406,25 +348,12 @@ function parsePlayerRow(
 ): PlayerStats | null {
     const cells = getRowCells($, row);
 
-    /*
-     * Necesitamos:
-     *
-     * 2 columnas identificativas
-     * +
-     * 21 columnas de estadísticas
-     *
-     * = 23 columnas como mínimo.
-     */
     if (cells.length < 23) {
         return null;
     }
 
     const number = Number(cells[0]);
 
-    /*
-     * Las filas de totales, cabeceras, etc.
-     * no tienen dorsal numérico.
-     */
     if (!Number.isInteger(number) || number <= 0) {
         return null;
     }
@@ -434,20 +363,6 @@ function parsePlayerRow(
     if (!name) {
         return null;
     }
-
-    /*
-     * Índices:
-     *
-     * 0  dorsal
-     * 1  nombre
-     *
-     * 2-6   formación
-     * 7-9   puntos
-     * 10-12 saque
-     * 13-16 recepción
-     * 17-21 ataque
-     * 22    bloqueo
-     */
 
     return {
         number,
@@ -521,14 +436,6 @@ function extractPlayersFromTable(
 /**
  * Extrae los dos equipos de la sección principal
  * de estadísticas del partido.
- *
- * Importante:
- *
- * La página también contiene tablas para SET 1,
- * SET 2, etc.
- *
- * Por eso aquí nos quedamos con las primeras tablas
- * que aparecen antes de las estadísticas por sets.
  */
 function extractTeamStats(
     html: string
@@ -547,9 +454,6 @@ function extractTeamStats(
             table
         );
 
-        /*
-         * Una tabla válida debe contener jugadores.
-         */
         if (players.length === 0) {
             return;
         }
@@ -565,14 +469,6 @@ function extractTeamStats(
         });
     });
 
-    /*
-     * La página contiene también las mismas estadísticas
-     * para cada SET.
-     *
-     * De momento solo queremos las estadísticas globales
-     * del partido, por lo que nos quedamos con los dos
-     * primeros equipos.
-     */
     return teams.slice(0, 2);
 }
 
@@ -584,6 +480,8 @@ function extractMatchInfo(
 ): {
     homeTeam: string;
     awayTeam: string;
+    officialRound: number | null;
+    officialGroup: string | null;
     homeScore: number | null;
     awayScore: number | null;
     sets: {
@@ -598,26 +496,19 @@ function extractMatchInfo(
         .replace(/\s+/g, " ")
         .trim();
 
-    /*
-     * Ejemplo:
-     *
-     * Cisneros La Laguna
-     * 0
-     * VS
-     * 3
-     * Conectabalear CV Manacor
-     */
+    // Extraer Jornada y Grupo del encabezado del partido
+    const jornadaMatch = bodyText.match(/Jornada\s*(\d+)/i);
+    const officialRound = jornadaMatch ? parseInt(jornadaMatch[1], 10) : null;
+
+    const grupoMatch =
+        bodyText.match(/Grupo\s*([A-Z0-9]+)/i) ||
+        bodyText.match(/(Liga Regular)/i);
+    const officialGroup = grupoMatch ? grupoMatch[1].trim() : null;
+
     const scoreMatch = bodyText.match(
         /([^\s]+(?:\s+[^\s]+){0,10})\s+([0-3])\s+VS\s+([0-3])\s+([^\s]+(?:\s+[^\s]+){0,10})/
     );
 
-    /*
-     * De momento utilizamos la información estructurada
-     * de las tablas para las estadísticas.
-     *
-     * Los equipos se pueden obtener de los equipos
-     * extraídos posteriormente.
-     */
     const homeScore = scoreMatch
         ? Number(scoreMatch[2])
         : null;
@@ -626,13 +517,6 @@ function extractMatchInfo(
         ? Number(scoreMatch[3])
         : null;
 
-    /*
-     * Marcadores de los sets.
-     *
-     * Ejemplo:
-     *
-     * 19/25 25/27 24/26
-     */
     const setMatch = bodyText.match(
         /\b\d{1,2}\/\d{1,2}(?:\s+\d{1,2}\/\d{1,2})+\b/
     );
@@ -654,6 +538,8 @@ function extractMatchInfo(
     return {
         homeTeam: "",
         awayTeam: "",
+        officialRound, // <-- Añadido aquí
+        officialGroup, // <-- Añadido aquí
         homeScore,
         awayScore,
         sets,
@@ -695,6 +581,9 @@ export async function scrapeMatch(
 
         homeTeam: teams[0].name,
         awayTeam: teams[1].name,
+
+        officialRound: matchInfo.officialRound, // <-- Añadido aquí
+        officialGroup: matchInfo.officialGroup, // <-- Añadido aquí
 
         homeScore: matchInfo.homeScore,
         awayScore: matchInfo.awayScore,

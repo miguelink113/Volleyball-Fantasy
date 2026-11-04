@@ -377,11 +377,36 @@ async function main() {
         throw new Error("El scraper no devolvió partidos. Abortando.");
     }
 
-    // Agrupar por Grupo + Jornada
+    // ─────────────────────────────────────────────
+    // PRE-PASO: Descargar stats en caché para leer la jornada oficial
+    // ─────────────────────────────────────────────
+    console.log("→ Descargando estadísticas de partidos (pre-paso para fechas reales)...");
+    const statsCache = new Map<string, Awaited<ReturnType<typeof scrapeMatch>> | null>();
+
+    for (const m of matches) {
+        try {
+            const stats = await scrapeMatch(
+                m.matchId,
+                m.competitionId,
+                m.categoryId,
+                m.seasonId
+            );
+            statsCache.set(m.matchId, stats);
+        } catch (err) {
+            statsCache.set(m.matchId, null); // Guardamos null si falla
+        }
+    }
+
+    // Agrupar por Grupo + Jornada OFICIAL
     const roundMap = new Map<string, ScrapedMatch[]>();
     for (const m of matches) {
-        const groupKey = m.groupName || "General";
-        const key = `${groupKey}|${m.round}`;
+        const stats = statsCache.get(m.matchId);
+
+        // Priorizamos la jornada oficial de la página de stats. Si falla, usamos la del listado.
+        const effectiveRound = stats?.officialRound ?? m.round;
+        const effectiveGroup = stats?.officialGroup ?? m.groupName ?? "General";
+
+        const key = `${effectiveGroup}|${effectiveRound}`;
         const list = roundMap.get(key) ?? [];
         list.push(m);
         roundMap.set(key, list);
@@ -478,7 +503,6 @@ async function main() {
             const teamId = resolvedByName.get(rawName);
             if (teamId) {
                 const rosterName = teamNameById.get(teamId) || "?";
-                // Preferimos mostrar containment si es el caso, si no similarity
                 const containmentScore = calculateContainment(rawName, rosterName);
                 const similarityScore = calculateSimilarity(rawName, rosterName);
                 const score = Math.max(containmentScore, similarityScore);
@@ -522,42 +546,28 @@ async function main() {
             );
 
             // Asignar el grupo a los equipos si no lo tienen ya
-            if (scraped.groupName) {
+            if (groupName) {
                 await supabase
                     .from("teams")
-                    .update({ group_name: scraped.groupName })
+                    .update({ group_name: groupName })
                     .eq("id", homeTeam.teamId)
                     .is("group_name", null);
                 await supabase
                     .from("teams")
-                    .update({ group_name: scraped.groupName })
+                    .update({ group_name: groupName })
                     .eq("id", awayTeam.teamId)
                     .is("group_name", null);
             }
 
-            // Stats
-            let statsData: Awaited<ReturnType<typeof scrapeMatch>> | null = null;
-            try {
-                statsData = await scrapeMatch(
-                    scraped.matchId,
-                    scraped.competitionId,
-                    scraped.categoryId,
-                    scraped.seasonId
-                );
-            } catch (err) {
-                console.warn(
-                    `  ⚠ Partido ${scraped.matchId} sin stats: ${
-                        err instanceof Error ? err.message : err
-                    }`
-                );
-            }
+            // Usar del CACHÉ (ya no descargamos dos veces)
+            const statsData = statsCache.get(scraped.matchId) ?? null;
 
             const matchRow = {
                 competition_id: competitionId,
                 season_id: seasonId,
                 round_id: roundId,
                 rfevb_match_id: scraped.matchId,
-                group_name: scraped.groupName,
+                group_name: groupName, // Usamos el grupo oficial
                 match_date: scraped.matchDate?.toISOString() ?? null,
                 home_team_id: homeTeam.teamId,
                 away_team_id: awayTeam.teamId,

@@ -23,6 +23,11 @@
 - No uses `any` en TypeScript. Usa `unknown` y estrecha el tipo, o define interfaces.
 - Añade docstrings (JSDoc) a las funciones complejas explicando parámetros y retornos.
 
+## Convenciones de código
+- Las funciones del scraper en `lib/scraper/` deben usar el prefijo `fetch*` (por ejemplo, `fetchCompetitionRoster` y `fetchMatches`).
+- Las funciones de los repositorios en `lib/repositories/` deben usar el prefijo `get*` (por ejemplo, `getStandings`).
+- Los componentes en `components/` deben usar nombres en PascalCase.
+
 ## Uso de Skills Disponibles
 Tienes skills instaladas en `.github/skills/`. Úsalas cuando sea relevante:
 - `ponytail`: Para refactorizaciones, nuevas features y evitar código inflado.

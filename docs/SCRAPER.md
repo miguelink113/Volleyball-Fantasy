@@ -485,7 +485,7 @@ Invoke-RestMethod `
 También se puede ejecutar el scraper sin pasar por HTTP:
 
 ```bash
-npx tsx -e "import { scrapeCompetitionRoster } from './lib/scraper/fetch-competition-roster.ts'; scrapeCompetitionRoster(152).then((roster) => console.log(JSON.stringify({ teams: roster.teams.length, players: roster.players.length }, null, 2))).catch((error) => { console.error(error); process.exit(1); });"
+npx tsx -e "import { fetchCompetitionRoster } from './lib/scraper/fetch-competition-roster.ts'; fetchCompetitionRoster(152).then((roster) => console.log(JSON.stringify({ teams: roster.teams.length, players: roster.players.length }, null, 2))).catch((error) => { console.error(error); process.exit(1); });"
 ```
 
 La web externa de RFEVB debe estar disponible. Los identificadores internos

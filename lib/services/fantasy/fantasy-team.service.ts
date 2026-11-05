@@ -115,20 +115,6 @@ export function createDailyFantasyRoster(
     };
 }
 
-export function validateRosterSize(playerIds: string[]) {
-    if (playerIds.length > MAX_TEAM_SIZE) {
-        return {
-            valid: false,
-            errors: [`La plantilla no puede superar los ${MAX_TEAM_SIZE} jugadores.`],
-        };
-    }
-
-    return {
-        valid: true,
-        errors: [],
-    };
-}
-
 export function getPlayerMap(players: FantasyDemoPlayer[]) {
     return new Map(players.map((player) => [player.id, player]));
 }
@@ -198,22 +184,4 @@ export function validateLineup(
         missing,
         errors,
     };
-}
-
-export function getLineupSummary(
-    lineupPlayerIds: string[],
-    players: FantasyDemoPlayer[]
-) {
-    return validateLineup(lineupPlayerIds, players);
-}
-
-export function calculateLineupScoreForRound(
-    lineupPlayerIds: string[],
-    round: number,
-    allScores: Record<string, Record<number, number>>
-) {
-    return lineupPlayerIds.reduce((total, playerId) => {
-        const score = allScores[playerId]?.[round] ?? 0;
-        return total + score;
-    }, 0);
 }

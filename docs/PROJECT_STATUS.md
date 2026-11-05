@@ -6,7 +6,7 @@ Las fases 1 a 11 están **completadas y verificadas** mediante ejecuciones repro
 
 Durante la Fase 11, se completó la ingesta de la temporada 2026/27. Se ha implementado un avanzado `TeamAliasResolver` (con containment y asignación greedy) que ha resuelto casi la totalidad de los nombres dispares entre actas y rosters (incluyendo casos complejos como "Melilla"), evitando omisiones de partidos. Además, la UI se ha adaptado para agrupar jornadas de competiciones multi-grupo. Finalmente, la aplicación ha sido desplegada en producción en Vercel con Supabase Auth configurado.
 
-Actualmente el proyecto se encuentra en la **Fase 12**, centrada en añadir nuevas funcionalidades (mercado dinámico, página de resultados) y un rediseño visual (Desktop-First).
+Actualmente el proyecto se encuentra en la **Fase 12**, centrada en añadir nuevas funcionalidades (mercado dinámico, página de resultados) y un rediseño visual (Desktop-First). Recientemente se ha completado el sistema de clasificaciones oficiales.
 
 | Entidad | Registros (25/26) | Registros (26/27) |
 | --- | ---: | ---: |
@@ -15,7 +15,7 @@ Actualmente el proyecto se encuentra en la **Fase 12**, centrada en añadir nuev
 | Partidos | 1.045 | 277 |
 | Estadísticas de jugador | 25.262 | 5.527 |
 
-La tabla `player_market_values` contiene valores sembrados para todos los jugadores en todas las jornadas.
+La tabla `player_market_values` contiene valores sembrados para todos los jugadores en todas las jornadas. La tabla `team_standings` contiene las clasificaciones reales de las 4 competiciones.
 
 ## Estado de las fases
 
@@ -53,6 +53,7 @@ La tabla `player_market_values` contiene valores sembrados para todos los jugado
 - Restricciones de límite de plantilla (14) y bloqueo estricto temporal por jornada (`now() >= starts_at`).
 - RPC `save_lineup` que valida pertenencia de jugadores, composición exacta (1/1/2/2/1) y bloqueo por jornada.
 - Soporte multi-grupo con la columna `group_name` en `teams`, `rounds` y `matches`.
+- Tabla `team_standings` para persistir la clasificación real de los equipos.
 
 ### Ingesta y catálogo
 - Scripts de ingesta idempotentes.
@@ -65,18 +66,20 @@ La tabla `player_market_values` contiene valores sembrados para todos los jugado
 - Servicio `scoring-persistence.service.ts` que calcula y persiste `player_match_scores`, `player_round_scores` y `fantasy_scores`.
 - Script `calculate-scores.ts` para ejecutar el cálculo de forma masiva buscando dinámicamente temporadas activas (`is_current = true`).
 - API `/api/league-ranking` y `/api/league-scores` para consultar los datos reales sin recálculo.
+- **Standings RFEVB:** Extracción de 18 métricas (sets, coeficientes, sanción, desglose) e ingesta en `team_standings`. API `/api/standings` y UI (`/results`) consumiendo el endpoint.
 - Test `test-scoring-persistence.ts` que verifica la idempotencia y el aislamiento entre ligas.
 
 ### Frontend y Despliegue
 - `/dashboard`: Gestión de ligas dinámica. Unificación visual de "Crear" y "Unirse". Arreglado el bug que impedía crear ligas en competiciones multi-grupo.
 - `/fantasy`: Agrupación inteligente de jornadas por número (evita duplicados de "Jornada 1" en Superliga 2). Candado de bloqueo calculado a partir de la fecha del primer partido de la jornada.
+- `/results`: Nueva vista que integra la tabla de clasificaciones (con pestañas para múltiples grupos).
 - **Despliegue en Vercel:** CI/CD configurado desde GitHub. Entorno de producción funcionando.
 - CI configurado en GitHub Actions (TypeScript, tests y build).
 
 ## Deuda técnica conocida
 
 - **Valores de mercado dinámicos:** Actualmente estáticos. Falta implementar la fórmula de fluctuación según rendimiento.
-- **Página de resultados:** No existe una vista de partidos por jornada.
+- **Página de resultados (Partidos):** La vista de clasificaciones (`/results`) está lista. Queda pendiente implementar la lista de partidos por jornada en esa misma pantalla.
 - **Rediseño UI:** Pendiente implementar el diseño Desktop-First (modo oscuro, tarjetas, etc.).
 - **Bloqueo en ligas multi-grupo:** Actualmente, si el Grupo A juega el viernes y el Grupo B el domingo, el candado se activa el viernes para todos. Se debe decidir si es el comportamiento deseado.
 - **Cruce de jugadores:** Quedan estadísticas de jugadores sin emparejar en las actas (principalmente "Unknown Player" de RFEVB o fichajes que no están en el roster oficial).

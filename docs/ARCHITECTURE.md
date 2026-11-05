@@ -49,7 +49,7 @@ scripts/ingest/
 lib/services/ingestion/
 ```
 
-El scraper extrae equipos, jugadores, partidos y estadísticas de RFEVB. Los scripts administrativos coordinan la ingesta y persisten los resultados en Supabase.
+El scraper extrae equipos, jugadores, partidos, estadísticas y clasificaciones de RFEVB. Los scripts administrativos coordinan la ingesta y persisten los resultados en Supabase.
 
 **Soporte multi-grupo:** Competiciones como la Superliga 2 se dividen en grupos (A, B, C). El scraper analiza el DOM para detectar los grupos y asocia cada jornada y partido a su grupo correspondiente, evitando colisiones de `round_number`.
 
@@ -74,6 +74,7 @@ Las entidades persistidas incluyen:
 - Equipos y jugadores.
 - Jornadas y partidos.
 - Estadísticas de jugador por partido.
+- Clasificaciones por equipo y temporada (`team_standings`).
 - Valores de mercado por jugador y jornada.
 - Ligas, membresías y equipos fantasy.
 - Plantillas, alineaciones, puntuaciones y transacciones.
@@ -99,6 +100,7 @@ La capa incluye repositorios para:
 - Jornadas.
 - Partidos.
 - Estadísticas de jugador por partido.
+- Clasificaciones (`standings`).
 - Valores de mercado.
 
 Los repositorios convierten los registros de persistencia a entidades de dominio con propiedades camelCase. Las capas superiores no necesitan depender directamente de los nombres de columnas SQL ni de los DTO del scraper.
@@ -122,6 +124,7 @@ Incluye:
 - Equipo y jugador.
 - Jornada y partido.
 - Estadísticas de jugador.
+- Clasificación real de equipos.
 - Mercado fantasy.
 - Plantilla y alineación.
 - Sistema de puntuación.
@@ -139,6 +142,14 @@ GET /api/competition-roster?competition=152
 ```
 
 Consulta el catálogo persistido a través de los repositorios y devuelve los equipos y jugadores de la competición solicitada.
+
+#### Clasificaciones de competición
+
+```text
+GET /api/standings?seasonId=<uuid>
+```
+
+Consulta la tabla `team_standings` y devuelve la clasificación real de los equipos, segmentada por grupo si la competición lo requiere.
 
 #### Puntuaciones de jornadas
 
@@ -164,7 +175,7 @@ La interfaz utiliza pestañas y es 100% dinámica. Lee exclusivamente las tempor
 
 Las puntuaciones de todas las jornadas se cargan en una sola petición para reducir las solicitudes sucesivas y evitar parpadeos durante la actualización de la interfaz.
 
-**Evolución futura (Fase 12):** Se planea la inclusión de una vista de resultados de partidos por jornada y un rediseño visual completo (Desktop-First).
+**Fase 12:** Se ha implementado la vista de clasificaciones (`/results`). Queda pendiente la inclusión de los resultados de partidos por jornada y el rediseño visual completo (Desktop-First).
 
 ## Flujo de datos de producto
 
@@ -259,3 +270,4 @@ Las fases 1 a 11 están completadas y verificadas:
 - La clasificación privada y los puntos por jornada se leen de forma rápida desde la base de datos.
 - La UI (Login, Dashboard, Fantasy) ha sido refactorizada para operar 100% de forma dinámica, manejar correctamente los estados y bloqueos, y agrupar jornadas de múltiples grupos.
 - La aplicación está desplegada en producción (Vercel) con Supabase Auth.
+- La ingesta y visualización de clasificaciones oficiales (`team_standings`) está implementada.

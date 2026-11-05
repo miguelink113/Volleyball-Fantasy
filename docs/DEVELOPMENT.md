@@ -1,6 +1,6 @@
 # Desarrollo local
 
-**Revisión de documentación:** 2026-11-04
+**Revisión de documentación:** 2026-11-05
 
 ## Requisitos
 
@@ -20,10 +20,10 @@ Abre `http://localhost:3000`. No versionar secretos ni la URI PostgreSQL. `lib/s
 ## Flujo de desarrollo
 
 1. **Extracción:** `lib/scraper/` consulta RFEVB.
-2. **Ingesta:** scripts de `scripts/ingest/` persisten el roster, partidos, estadísticas y valores de mercado.
+2. **Ingesta:** scripts de `scripts/ingest/` persisten el roster, partidos, estadísticas, clasificaciones y valores de mercado.
 3. **Cálculo de puntos:** `npm run calculate:scores` procesa dinámicamente todas las temporadas activas y actualiza las tablas de puntuaciones.
 4. **Lectura de producto:** los repositorios encapsulan consultas de Supabase.
-5. **Aplicación:** las APIs de datos persistidos exponen roster, scoring y ranking; el dashboard y `/fantasy` consumen algunos datos y operaciones mediante RPC.
+5. **Aplicación:** las APIs de datos persistidos exponen roster, scoring, ranking y clasificaciones; el dashboard, `/fantasy` y `/results` consumen estos datos.
 
 ## Estrategia de Ramas y Despliegue (Vercel)
 
@@ -38,22 +38,24 @@ app/
   api/                     Rutas de extracción y de producto
   dashboard/               Dashboard y gestión de ligas
   fantasy/                 Equipo, mercado y puntuación
+  results/                 Vista de resultados y clasificaciones
 components/
-  dashboard/                Operaciones de ligas
-  fantasy/                  Gestor fantasy
-  auth/                     Componentes de autenticación
+  dashboard/               Operaciones de ligas
+  fantasy/                 Gestor fantasy
+  results/                 Componentes de resultados y standings
+  auth/                    Componentes de autenticación
 domain/                    Contratos de dominio y scoring
 lib/
-  repositories/             Lecturas tipadas de Supabase
-  scraper/                  Extracción RFEVB
-  services/                 Servicios de fantasy, perfil e ingesta
-  supabase/                 Clientes de Supabase
+  repositories/            Lecturas tipadas de Supabase
+  scraper/                 Extracción RFEVB
+  services/                Servicios de fantasy, perfil e ingesta
+  supabase/                Clientes de Supabase
 scripts/
-  ingest/                   Ingestas administrativas
-  tests/                    Scripts de pruebas y verificaciones
-  tools/                    Herramientas de diagnóstico
-docs/                       Documentación
-supabase/migrations/         Migraciones SQL
+  ingest/                  Ingestas administrativas
+  tests/                   Scripts de pruebas y verificaciones
+  tools/                   Herramientas de diagnóstico
+docs/                      Documentación
+supabase/migrations/       Migraciones SQL
 ```
 
 ## Ingesta
@@ -76,6 +78,12 @@ npx tsx scripts/ingest/ingest-matches.ts --competition=167 --season=203
 ```bash
 npx tsx scripts/ingest/ingest-market-values.ts --competition=167 --season=203 --price=10
 ```
+
+### Clasificaciones reales
+```bash
+npx tsx --env-file=.env.local scripts/ingest/ingest-standings.ts <competition_id> <season_id> 167 203
+```
+*Extrae la tabla de clasificación de DataProject (soporta 1 o 3 grupos) y la persiste en `team_standings`.*
 
 ### Cálculo y persistencia de puntuaciones
 ```bash
@@ -101,14 +109,15 @@ GET /api/fantasy-team?league_id=<uuid-de-liga>
 
 Consulta equipo, jugadores activos y la primera alineación encontrada.
 
-### Ranking y puntuaciones reales
+### Ranking, puntuaciones y clasificaciones reales
 
 ```text
+GET /api/standings?seasonId=<uuid-de-temporada>
 GET /api/league-ranking?league_id=<uuid-de-liga>
 GET /api/league-scores?league_id=<uuid-de-liga>
 ```
 
-Lecturas instantáneas de las tablas de resultados persistidos.
+*`/api/standings` devuelve la clasificación oficial de la RFEVB (puntos, sets, coeficientes) por grupos.*
 
 ## Tests declarados en `package.json`
 
@@ -132,7 +141,7 @@ npm run build
 ## Limitaciones conocidas que afectan al desarrollo
 
 - **Valores de mercado dinámicos:** Actualmente los precios son estáticos. Pendiente implementar la fórmula en la Fase 12.
-- **Página de resultados:** Pendiente crear la vista de partidos en la Fase 12.
+- **Página de resultados:** Clasificaciones implementadas. Pendiente crear la vista de partidos (columna izquierda) en la Fase 12.
 - **Bloqueo en ligas multi-grupo:** El candado de la jornada fantasy se calcula tomando la fecha del primer partido del grupo más madrugador. Si un grupo juega los viernes y otro los domingos, el bloqueo afecta a ambos el viernes. Pendiente definir la estrategia final.
 - **Cruce de jugadores:** Quedan algunas estadísticas de jugadores sin emparejar en las actas (fichajes de última hora o "Unknown Player" de RFEVB).
 - La ingesta desde RFEVB y el cálculo de puntuaciones se ejecutan manualmente; el despliegue en producción requerirá tareas programadas (cron) en la Fase 13.

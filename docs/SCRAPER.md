@@ -1,10 +1,10 @@
 # Scraper RFEVB
 
-**Revisión de documentación:** 2026-11-04
+**Revisión de documentación:** 2026-11-05
 
 Scraper desarrollado con **Next.js + TypeScript + Cheerio** para obtener el
-catálogo de competiciones de voleibol, sus equipos, jugadores, partidos y
-estadísticas desde RFEVB.
+catálogo de competiciones de voleibol, sus equipos, jugadores, partidos,
+estadísticas y clasificaciones desde RFEVB.
 
 La extracción es un adaptador externo. Su responsabilidad termina en descargar
 HTML, extraer campos, normalizar valores básicos y conservar los identificadores
@@ -18,11 +18,11 @@ RFEVB en directo; los endpoints de producto de roster y puntuaciones leen Supaba
 | --- | --- |
 | `lib/scraper/` | Descargar e interpretar la web de RFEVB. |
 | `app/api/matches`, `match-statistics`, `competition-statistics` | Validar parámetros HTTP e invocar el scraper en directo. |
-| `app/api/competition-roster`, `fantasy-round-scores`, `fantasy-team` | APIs de producto que leen datos persistidos de Supabase (las dos primeras usan cliente administrativo server-only). |
+| `app/api/competition-roster`, `fantasy-round-scores`, `fantasy-team`, `standings` | APIs de producto que leen datos persistidos de Supabase (las dos primeras usan cliente administrativo server-only). |
 | `domain/` | Definir interfaces de `Competition`, `Team`, `Player`, `Match` y estadísticas. |
 | `lib/services/fantasy/` | Reglas de validación y helpers fantasy; el helper de mercado diario es legado y no alimenta el roster actual de `FantasyTeamBuilder`. |
 | `components/fantasy/` | Mostrar el mercado, el equipo y la alineación. |
-| Supabase | Persistencia del catálogo, jornadas, partidos, estadísticas, precios y datos fantasy mediante ingesta/repositorios/RPC. El scraper no escribe directamente. |
+| Supabase | Persistencia del catálogo, jornadas, partidos, estadísticas, clasificaciones, precios y datos fantasy mediante ingesta/repositorios/RPC. El scraper no escribe directamente. |
 
 ## Endpoints
 
@@ -344,6 +344,12 @@ Se ha verificado mediante inspección directa del HTML (Oct 2026) que DataProjec
 
 Esta lógica permite que un solo equipo absorba múltiples nombres del acta en la misma jornada (por ejemplo, si RFEVB publica "Club Voleibol Melilla" y "Melilla Ciudad del Deporte" en la misma jornada). Gracias a esto, la temporada 2026/27 se ha ingerido con una tasa de éxito del 99%, omitiendo únicamente partidos con jugadores anonimizados ("Unknown Player") o estadísticas ausentes.
 
+### Clasificaciones (Standings)
+
+Para las tablas de clasificación, DataProject renderiza hasta 18 columnas (Equipo, Puntos de Clasificación, Partidos Jugados/Ganados/Perdidos, Sets, Tanteo, Distribución 3-0/3-1..., Coeficientes y Sanciones). Además, las competiciones como la Superliga 2 dividen la tabla en varios grupos (A, B, C).
+
+`fetch-competition-standings.ts` recorre las tablas del DOM, extrae todas las métricas y detecta los grupos de forma automática para que el ingest (`ingest-standings.ts`) las asocie correctamente a sus respectivas temporadas y equipos.
+
 ## Ejecutar el scraper
 
 Instalar dependencias:
@@ -378,6 +384,7 @@ lib/
     ├── fetch-matches.ts
     ├── fetch-match-statistics.ts
     ├── fetch-competition-statistics.ts
+    ├── fetch-competition-standings.ts  <-- NUEVO
     └── fetch-competition-roster.ts
 ```
 
@@ -386,15 +393,16 @@ lib/
   `matchDate: Date | null`. **También extrae el `groupName`** analizando el DOM para saber a qué grupo pertenece la jornada.
 * `fetch-match-statistics.ts`: obtiene las estadísticas de un partido. Extrae también la jornada oficial y el grupo oficial (`officialRound`, `officialGroup`).
 * `fetch-competition-statistics.ts`: combina partidos y estadísticas.
+* `fetch-competition-standings.ts`: extrae la tabla de clasificación real de DataProject (Equipo, Puntos, Partidos, Sets, Tanteo, Coeficientes y Sanciones). Detecta automáticamente si hay múltiples grupos (Grupo A, B, C).
 * `fetch-competition-roster.ts`: obtiene equipos y jugadores de una
   competición y los adapta a `Team` y `Player`.
 - `lib/services/fantasy/fantasy-round-score.service.ts`: relaciona las
   estadísticas de una jornada con el roster y agrega la puntuación de
   `ScoringSystemV1`.
 
-Los datos scrapeados se persisten mediante `scripts/ingest/ingest-roster.ts` (catálogo), `scripts/ingest/ingest-matches.ts` (jornadas, partidos y estadísticas) y `scripts/ingest/ingest-market-values.ts` (precios). La ingesta se ejecuta manualmente.
+Los datos scrapeados se persisten mediante `scripts/ingest/ingest-roster.ts` (catálogo), `scripts/ingest/ingest-matches.ts` (jornadas, partidos y estadísticas), `scripts/ingest/ingest-standings.ts` (clasificaciones) y `scripts/ingest/ingest-market-values.ts` (precios). La ingesta se ejecuta manualmente.
 
-No todas las rutas HTTP pasan por el scraper: `/api/matches`, `/api/match-statistics` y `/api/competition-statistics` siguen leyendo RFEVB en directo; `/api/competition-roster` y `/api/fantasy-round-scores` consultan el catálogo persistido en Supabase. La sección siguiente detalla estas APIs de producto.
+No todas las rutas HTTP pasan por el scraper: `/api/matches`, `/api/match-statistics` y `/api/competition-statistics` siguen leyendo RFEVB en directo; `/api/competition-roster`, `/api/fantasy-round-scores` y `/api/standings` consultan el catálogo persistido en Supabase. La sección siguiente detalla estas APIs de producto.
 
 ## Mostrar puntuaciones de un partido
 
@@ -489,6 +497,8 @@ estables se construyen con el identificador oficial (`rfevb:team:<id>` y
 La pantalla `/fantasy` solicita `GET /api/competition-roster` y convierte los jugadores y equipos devueltos en los modelos que muestra `FantasyTeamBuilder`. La ruta obtiene la competición por su ID RFEVB, busca la temporada marcada `is_current=true` y añade el precio leído de `player_market_values` para la primera jornada disponible. Si el precio de un jugador no existe, aplica un fallback.
 
 La UI también carga el equipo de la liga mediante `/api/fantasy-team?league_id=...`; las compras y ventas llaman a la RPC `transfer_player`, y el guardado de la alineación semanal llama a la RPC `save_lineup`. Ambas operaciones están protegidas por bloqueos temporales en la base de datos.
+
+La pantalla `/results` solicita `GET /api/standings?seasonId=...` para mostrar la clasificación real de la competición seleccionada.
 
 **Nota sobre flujo dinámico y multi-grupo:** Todo el flujo es dinámico y se adapta a la temporada que esté marcada como activa en la base de datos. En competiciones con múltiples grupos, el frontend unifica las jornadas visualmente mediante `round_number`.
 

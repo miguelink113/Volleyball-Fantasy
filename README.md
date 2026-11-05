@@ -28,12 +28,13 @@ Las competiciones base son Superliga Masculina, Superliga Femenina, Superliga 2 
 - `GET /api/fantasy-round-scores` calcula bajo demanda puntuaciones por jornada (con desglose) a partir de partidos y estadísticas persistidos.
 - Dashboard dinámico con gestión de ligas y validaciones corregidas.
 - Pantalla fantasy con pestañas (Alineación, Mercado, Clasificación), validación de límites estrictos en backend y bloqueos temporales.
+- **Clasificaciones (Standings):** Scraper de DataProject, ingesta en `team_standings`, API (`/api/standings`) y UI integrada en la nueva ruta `/results`.
 - **Despliegue:** Frontend y API alojados en Vercel. CI/CD automático.
 
 ### Incompleto o pendiente de confirmar (Fase 12 y 13)
 
 - **Valores de mercado dinámicos:** Fórmula basada en rendimiento.
-- **Página de resultados:** Vista de partidos por jornada.
+- **Página de resultados (Partidos):** La clasificación ya está implementada, falta la vista de partidos por jornada a la izquierda.
 - **Rediseño UI:** Implementación del diseño Desktop-First (modo oscuro).
 - Definir estrategia de bloqueo temporal en jornadas multi-grupo.
 - Tareas programadas (Cron) para automatizar ingesta y cálculo de puntos (Fase 13).
@@ -44,9 +45,9 @@ Las competiciones base son Superliga Masculina, Superliga Femenina, Superliga 2 
 - **Dominio:** `domain/` contiene tipos y `ScoringSystemV1`.
 - **Persistencia:** Supabase almacena el catálogo y las tablas de fantasy.
 - **Repositorios:** `lib/repositories/` encapsula lecturas tipadas.
-- **API de datos persistidos:** `app/api/competition-roster/`, `app/api/fantasy-round-scores/`, `app/api/fantasy-team/` y `app/api/league-ranking/`.
+- **API de datos persistidos:** `app/api/competition-roster/`, `app/api/fantasy-round-scores/`, `app/api/fantasy-team/`, `app/api/league-ranking/` y `app/api/standings/`.
 - **Endpoints de extracción:** `/api/matches`, `/api/match-statistics` y `/api/competition-statistics` siguen consultando RFEVB en directo.
-- **Frontend:** `/dashboard` gestiona las ligas; `/fantasy` presenta plantilla, mercado, puntos y acciones de transferencia de forma 100% dinámica.
+- **Frontend:** `/dashboard` gestiona las ligas; `/fantasy` presenta plantilla, mercado, puntos y acciones de transferencia; `/results` muestra la clasificación real.
 
 ## Inicio rápido
 
@@ -83,9 +84,10 @@ Calcula bajo demanda las puntuaciones usando datos persistidos. `round` es opcio
 ```text
 GET /api/fantasy-team?league_id=<uuid-de-liga>
 GET /api/league-ranking?league_id=<uuid-de-liga>
+GET /api/standings?seasonId=<uuid-de-temporada>
 ```
 
-Devuelve el equipo visible para el usuario y la clasificación privada de la liga.
+Devuelve el equipo visible para el usuario, la clasificación privada de la liga y la clasificación oficial de los equipos reales, respectivamente.
 
 Para más detalles, consulta `docs/PROJECT_STATUS.md`, `docs/ARCHITECTURE.md`, `docs/SCRAPER.md`, `docs/SCORING.md` y `docs/DEVELOPMENT.md`.
 
@@ -111,10 +113,12 @@ npm run test:lockout
 npm run calculate:scores
 npm run test:match-parser -- 1 1
 npm run show:match-scores -- 1 1
+# Ingesta de clasificaciones
+npx tsx --env-file=.env.local scripts/ingest/ingest-standings.ts <competition_id> <season_id> <dp_id> <dp_pid>
 ```
 
 ## Próximas prioridades
 
-1. Implementar valores de mercado dinámicos y página de resultados (Fase 12).
+1. Implementar valores de mercado dinámicos y la vista de partidos en la página de resultados (Fase 12).
 2. Rediseño de la interfaz a Desktop-First (Fase 12).
 3. Automatización de scripts mediante cron jobs (Fase 13).

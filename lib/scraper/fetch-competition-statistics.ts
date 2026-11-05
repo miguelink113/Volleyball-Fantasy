@@ -1,10 +1,10 @@
 import {
-    scrapeMatches,
+    fetchMatches,
     type Match,
 } from "@/lib/scraper/fetch-matches";
 
 import {
-    scrapeMatch,
+    fetchMatchStatistics,
     MatchScraperError,
     type MatchStats,
 } from "@/lib/scraper/fetch-match-statistics";
@@ -18,13 +18,13 @@ export interface MatchWithStats {
  * Obtiene todos los partidos de una competición
  * junto con las estadísticas de cada partido.
  */
-export async function scrapeCompetition(
+export async function fetchCompetitionStatistics(
     competitionId: number,
     seasonId: number,
     roundNumber?: number
 ): Promise<MatchWithStats[]> {
     // 1. Primero obtenemos la lista de partidos.
-    const matches = await scrapeMatches(
+    const matches = await fetchMatches(
         competitionId,
         seasonId,
         roundNumber
@@ -46,7 +46,7 @@ export async function scrapeCompetition(
         let stats: MatchStats;
 
         try {
-            stats = await scrapeMatch(
+            stats = await fetchMatchStatistics(
                 match.matchId,
                 match.competitionId,
                 match.categoryId,

@@ -6,10 +6,10 @@ config({ path: resolve(process.cwd(), ".env.local") });
 import { createAdminClient } from "@/lib/supabase/admin.server";
 
 import {
-    scrapeMatches,
+    fetchMatches,
     type Match as ScrapedMatch,
 } from "@/lib/scraper/fetch-matches";
-import { scrapeMatch } from "@/lib/scraper/fetch-match-statistics";
+import { fetchMatchStatistics } from "@/lib/scraper/fetch-match-statistics";
 import {
     mapScrapedMatch,
     type MatchMappingContext,
@@ -368,7 +368,7 @@ async function main() {
     );
 
     console.log("→ Descargando partidos desde RFEVB…");
-    const matches = await scrapeMatches(
+    const matches = await fetchMatches(
         Number(args.competitionRfevbId),
         Number(args.seasonRfevbId),
         args.round
@@ -381,11 +381,11 @@ async function main() {
     // PRE-PASO: Descargar stats en caché para leer la jornada oficial
     // ─────────────────────────────────────────────
     console.log("→ Descargando estadísticas de partidos (pre-paso para fechas reales)...");
-    const statsCache = new Map<string, Awaited<ReturnType<typeof scrapeMatch>> | null>();
+    const statsCache = new Map<string, Awaited<ReturnType<typeof fetchMatchStatistics>> | null>();
 
     for (const m of matches) {
         try {
-            const stats = await scrapeMatch(
+            const stats = await fetchMatchStatistics(
                 m.matchId,
                 m.competitionId,
                 m.categoryId,

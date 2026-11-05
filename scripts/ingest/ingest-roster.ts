@@ -4,7 +4,7 @@ config({ path: resolve(process.cwd(), ".env.local") });
 
 import { createAdminClient } from "@/lib/supabase/admin.server";
 
-import { scrapeCompetitionRoster } from "@/lib/scraper/fetch-competition-roster";
+import { fetchCompetitionRoster } from "@/lib/scraper/fetch-competition-roster";
 import { mapTeam } from "@/lib/services/ingestion/map.team";
 import { mapPlayer } from "@/lib/services/ingestion/map.player";
 import { TeamAliasResolver } from "@/lib/services/ingestion/team-alias-resolver";
@@ -156,7 +156,7 @@ async function main() {
 
     // --- Scrape roster ---
     console.log("→ Descargando roster desde RFEVB…");
-    const roster = await scrapeCompetitionRoster(
+    const roster = await fetchCompetitionRoster(
         Number(args.competitionRfevbId)
     );
     console.log(

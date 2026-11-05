@@ -550,7 +550,7 @@ function extractMatchInfo(
  * Función principal para obtener las estadísticas
  * de un partido concreto.
  */
-export async function scrapeMatch(
+export async function fetchMatchStatistics(
     matchId: string,
     competitionId: string,
     categoryId: string,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { scrapeMatches } from "@/lib/scraper/fetch-matches";
+import { fetchMatches } from "@/lib/scraper/fetch-matches";
 
 export async function GET(request: NextRequest) {
     try {
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        const matches = await scrapeMatches(
+        const matches = await fetchMatches(
             competitionId,
             seasonId,
             roundNumber

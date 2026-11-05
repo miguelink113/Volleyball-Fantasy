@@ -3,8 +3,8 @@ import { resolve, dirname } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 config({ path: resolve(process.cwd(), ".env.local") });
 
-import { scrapeCompetitionRoster } from "@/lib/scraper/fetch-competition-roster";
-import { scrapeMatches } from "@/lib/scraper/fetch-matches";
+import { fetchCompetitionRoster } from "@/lib/scraper/fetch-competition-roster";
+import { fetchMatches } from "@/lib/scraper/fetch-matches";
 import {
     normalizeTeamAlias,
     TeamAliasResolver,
@@ -60,10 +60,10 @@ async function diagnoseCompetition(
     const { competitionId, seasonId, label } = config;
     console.log(`\n═══ ${label} (ID=${competitionId}, PID=${seasonId}) ═══`);
 
-    const roster = await scrapeCompetitionRoster(competitionId);
+    const roster = await fetchCompetitionRoster(competitionId);
     console.log(`  roster: ${roster.teams.length} equipos`);
 
-    const matches = await scrapeMatches(competitionId, seasonId);
+    const matches = await fetchMatches(competitionId, seasonId);
     console.log(`  partidos: ${matches.length}`);
 
     const actaNamesSet = new Set<string>();

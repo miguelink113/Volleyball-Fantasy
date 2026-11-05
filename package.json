@@ -6,6 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "audit:dead-code": "knip",
+    "audit:circular": "madge --circular --extensions ts,tsx app components lib domain scripts",
     "diagnose:team-aliases": "tsx scripts/tools/diagnose-team-aliases.ts",
     "test:domain": "tsx scripts/tests/test-domain.ts",
     "test:match-parser": "tsx scripts/tools/inspect-match-parser.ts",
@@ -25,6 +27,7 @@
     "ingest:roster": "tsx scripts/ingest/ingest-roster.ts",
     "ingest:market-values": "tsx scripts/ingest/ingest-market-values.ts",
     "ingest:matches": "tsx scripts/ingest/ingest-matches.ts",
+    "ingest:standings": "tsx scripts/ingest/ingest-standings.ts",
     "calculate:scores": "tsx scripts/ingest/calculate-scores.ts"
   },
   "dependencies": {
@@ -42,7 +45,6 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "depcheck": "^1.4.7",
     "eslint": "^9",
     "eslint-config-next": "16.3.1",
     "knip": "^6.44.1",
@@ -50,7 +52,6 @@
     "pg": "^8.23.0",
     "supabase": "^2.122.0",
     "tailwindcss": "^4",
-    "ts-prune": "^0.10.3",
     "tsx": "^4.23.12",
     "typescript": "^5"
   }

@@ -42,7 +42,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# scratch, repomix y auditorías
 repomix*
 next-steps.md
-
-deslop
+deslop/

@@ -1,0 +1,35 @@
+name: Weekly Ingest & Points Calculation
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+      timezone: "Europe/Madrid"
+  workflow_dispatch:
+
+jobs:
+  ingest-and-calculate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Trigger Ingest Endpoint
+        run: |
+          curl --fail --silent --show-error \
+            -X GET \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/ingest"
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ secrets.APP_URL }}

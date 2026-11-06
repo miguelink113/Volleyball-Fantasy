@@ -3,14 +3,9 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import {Copy, LogOut, AlertCircle, X} from "lucide-react";
+import { Copy, LogOut, AlertCircle } from "lucide-react";
 
-interface LeagueManagerProps {
-    isCreateLeagueOpen: boolean;
-    onCloseCreateLeague: () => void;
-}
-
-export function LeagueManager({ isCreateLeagueOpen, onCloseCreateLeague }: LeagueManagerProps) {
+export function LeagueManager() {
     const router = useRouter();
     const supabase = createClient();
 
@@ -153,86 +148,67 @@ export function LeagueManager({ isCreateLeagueOpen, onCloseCreateLeague }: Leagu
                 </div>
             )}
 
-            {isCreateLeagueOpen && (
-                <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="league-modal-title"
-                >
-                    <div className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
+            <section className="rounded-xl border border-slate-200 bg-slate-50 p-6">
+                <div className="mb-6">
+                    <h2 className="text-xl font-semibold text-slate-900">Crear o unirse a una liga</h2>
+                    <p className="mt-1 text-sm text-slate-500">Crea una liga privada o únete con un código.</p>
+                </div>
+                {error && (
+                    <div className="mb-5 flex items-center gap-2 rounded-md bg-red-50 p-3 text-sm text-red-700">
+                        <AlertCircle className="h-4 w-4" />
+                        {error}
+                    </div>
+                )}
+                <div className="grid gap-6 md:grid-cols-2">
+                    <div className="rounded-lg border border-slate-200 bg-white p-5">
+                        <h3 className="mb-4 font-semibold text-slate-900">Crear nueva liga</h3>
+                        <label className="mb-1 block text-sm font-medium text-slate-700">Competición</label>
+                        <select
+                            value={selectedCompId}
+                            onChange={(e) => {
+                                const comp = competitions.find(c => c.id === e.target.value);
+                                if (comp) { setSelectedCompId(comp.id); setSelectedSeasonId(comp.seasonId); }
+                            }}
+                            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                        >
+                            {competitions.map((c: any) => (
+                                <option key={c.id} value={c.id}>{c.name} ({c.seasonName})</option>
+                            ))}
+                        </select>
+                        {!round1Id && (
+                            <p className="mt-2 text-xs text-amber-600">Esta competición aún no tiene jornadas programadas.</p>
+                        )}
                         <button
                             type="button"
-                            onClick={onCloseCreateLeague}
-                            aria-label="Cerrar modal"
-                            className="absolute right-4 top-4 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-900"
+                            onClick={handleCreateLeague}
+                            disabled={loading || !round1Id}
+                            className="mt-5 w-full rounded-md bg-slate-900 py-2.5 font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            <X className="h-5 w-5" />
+                            {loading ? "Creando..." : "Crear Liga"}
                         </button>
-                        <div className="mb-6 pr-8">
-                            <h2 id="league-modal-title" className="text-lg font-semibold text-slate-900">Nueva liga</h2>
-                            <p className="mt-1 text-sm text-slate-500">Crea una liga o únete con un código.</p>
-                        </div>
-                        {error && (
-                            <div className="mb-4 flex items-center gap-2 rounded-md bg-red-50 p-3 text-sm text-red-700">
-                                <AlertCircle className="h-4 w-4" />
-                                {error}
-                            </div>
-                        )}
-                        <div className="space-y-5">
-                            <div>
-                                <h3 className="mb-3 font-semibold text-slate-900">Crear nueva liga</h3>
-                                <label className="mb-1 block text-sm font-medium text-slate-700">Competición</label>
-                                <select
-                                    value={selectedCompId}
-                                    onChange={(e) => {
-                                        const comp = competitions.find(c => c.id === e.target.value);
-                                        if (comp) { setSelectedCompId(comp.id); setSelectedSeasonId(comp.seasonId); }
-                                    }}
-                                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                                >
-                                    {competitions.map((c: any) => (
-                                        <option key={c.id} value={c.id}>{c.name} ({c.seasonName})</option>
-                                    ))}
-                                </select>
-                                {!round1Id && (
-                                    <p className="mt-2 text-xs text-amber-600">
-                                        Esta competición aún no tiene jornadas programadas.
-                                    </p>
-                                )}
-                                <button
-                                    type="button"
-                                    onClick={handleCreateLeague}
-                                    disabled={loading || !round1Id}
-                                    className="mt-4 w-full rounded-md bg-slate-900 py-2.5 font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    {loading ? "Creando..." : "Crear Liga"}
-                                </button>
-                            </div>
+                    </div>
 
-                            <div className="border-t border-slate-200 pt-5">
-                                <h3 className="mb-3 font-semibold text-slate-900">Unirse a una liga</h3>
-                                <label className="mb-1 block text-sm font-medium text-slate-700">Código de liga</label>
-                                <input
-                                    type="text"
-                                    placeholder="Ej: ABC123"
-                                    value={joinCode}
-                                    onChange={(e) => setJoinCode(e.target.value)}
-                                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2.5 text-sm uppercase text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={handleJoinLeague}
-                                    disabled={loading || !joinCode}
-                                    className="mt-4 w-full rounded-md bg-slate-900 py-2.5 font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    {loading ? "Uniéndose..." : "Unirse"}
-                                </button>
-                            </div>
-                        </div>
+                    <div className="rounded-lg border border-slate-200 bg-white p-5">
+                        <h3 className="mb-4 font-semibold text-slate-900">Unirse a una liga</h3>
+                        <label className="mb-1 block text-sm font-medium text-slate-700">Código de liga</label>
+                        <input
+                            type="text"
+                            placeholder="Ej: ABC123"
+                            value={joinCode}
+                            onChange={(e) => setJoinCode(e.target.value)}
+                            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2.5 text-sm uppercase text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                        />
+                        <button
+                            type="button"
+                            onClick={handleJoinLeague}
+                            disabled={loading || !joinCode}
+                            className="mt-5 w-full rounded-md bg-slate-900 py-2.5 font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {loading ? "Uniéndose..." : "Unirse"}
+                        </button>
                     </div>
                 </div>
-            )}
+            </section>
 
         </div>
     );

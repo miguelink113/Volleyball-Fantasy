@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { validateLineup, type FantasyDemoPlayer } from "@/lib/services/fantasy/fantasy-team.service";
 import type { PlayerPosition } from "@/domain/player/player.types";
+import { Copy, UserPlus } from "lucide-react";
 
 function displayPosition(position: PlayerPosition): string {
     return position === "unknown" ? "DESCONOCIDO" : position;
@@ -35,6 +36,8 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
     const [lineupIds, setLineupIds] = useState<string[]>([]);
     const [budget, setBudget] = useState<number>(0);
     const [teamName, setTeamName] = useState<string>("");
+    const [leagueCode, setLeagueCode] = useState<string>("");
+    const [showInvite, setShowInvite] = useState(false);
 
     // Jornadas (Añadimos 'id' para no tener que buscarla luego)
     const [rounds, setRounds] = useState<Array<{ id: string, number: number, label: string, isLocked: boolean, startsAt: string, endsAt: string }>>([]);
@@ -49,6 +52,13 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
             const teamRes = await fetch(`/api/fantasy-team?league_id=${leagueId}`);
             const teamPayload = await teamRes.json();
             if (!teamRes.ok || !teamPayload.success) throw new Error(teamPayload.error || "Error cargando equipo");
+
+            const { data: league } = await supabase
+                .from("private_leagues")
+                .select("join_code")
+                .eq("id", leagueId)
+                .single();
+            setLeagueCode(league?.join_code ?? "");
 
             setTeamId(teamPayload.team.id);
             setSeasonUuid(teamPayload.season_id);
@@ -247,12 +257,40 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
 
     return (
         <div className="max-w-6xl mx-auto space-y-6">
-            <header className="bg-slate-900 text-white rounded-xl p-6 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <header className="relative flex flex-col items-start justify-between gap-4 rounded-xl bg-slate-900 p-6 text-white shadow-lg md:flex-row md:items-center">
                 <div>
                     <h1 className="text-3xl font-bold">{teamName}</h1>
                     <p className="text-slate-400 mt-1">{seasonName}</p>
                 </div>
-                <div className="flex gap-6 text-left md:text-right">
+                <div className="flex flex-wrap items-center gap-6 text-left md:text-right">
+                    <div className="relative">
+                        <button
+                            type="button"
+                            onClick={() => setShowInvite((current) => !current)}
+                            aria-expanded={showInvite}
+                            className="flex items-center gap-2 rounded-md border border-slate-700 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+                        >
+                            <UserPlus className="h-4 w-4" />
+                            Invitar amigos
+                        </button>
+                        {showInvite && (
+                            <div className="absolute right-0 top-full z-10 mt-2 w-64 rounded-lg border border-slate-200 bg-white p-4 text-left text-slate-900 shadow-xl">
+                                <p className="text-sm font-semibold">Código de liga</p>
+                                <div className="mt-2 flex items-center justify-between gap-2 rounded-md bg-slate-50 px-3 py-2">
+                                    <span className="font-mono text-sm text-slate-700">{leagueCode || "Cargando..."}</span>
+                                    <button
+                                        type="button"
+                                        aria-label="Copiar código de liga"
+                                        disabled={!leagueCode}
+                                        onClick={() => navigator.clipboard.writeText(leagueCode)}
+                                        className="text-slate-500 transition-colors hover:text-slate-900 disabled:opacity-50"
+                                    >
+                                        <Copy className="h-4 w-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                     <div>
                         <p className="text-sm text-slate-400">Presupuesto</p>
                         <p className="text-2xl font-bold text-emerald-400">{budget.toFixed(1)}M</p>
@@ -264,8 +302,8 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                 </div>
             </header>
 
-            {error && <div className="bg-red-100 text-red-700 p-4 rounded-lg shadow-sm font-semibold">⚠️ {error}</div>}
-            {successMsg && <div className="bg-emerald-100 text-emerald-700 p-4 rounded-lg shadow-sm font-semibold">✅ {successMsg}</div>}
+            {error && <div className="rounded-lg bg-red-100 p-4 font-semibold text-red-700 shadow-sm">{error}</div>}
+            {successMsg && <div className="rounded-lg bg-emerald-100 p-4 font-semibold text-emerald-700 shadow-sm">{successMsg}</div>}
 
             <div className="flex flex-col md:flex-row items-start md:items-center gap-4 bg-white p-4 rounded-lg shadow-sm border border-slate-200">
                 <label className="font-semibold text-slate-700">Jornada a gestionar:</label>
@@ -274,7 +312,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                     onChange={(e) => setSelectedRound(Number(e.target.value))}
                     className="border p-2 rounded-md font-medium w-full md:w-auto"
                 >
-                    {rounds.map(r => <option key={r.number} value={r.number}>{r.label} {r.isLocked ? "🔒" : ""}</option>)}
+                    {rounds.map(r => <option key={r.number} value={r.number}>{r.label}{r.isLocked ? " (Bloqueada)" : ""}</option>)}
                 </select>
                 {currentRoundObj?.isLocked && (
                     <span className="text-amber-600 text-sm font-bold bg-amber-50 px-3 py-1 rounded">

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { validateLineup, type FantasyDemoPlayer } from "@/lib/services/fantasy/fantasy-team.service";
 import type { PlayerPosition } from "@/domain/player/player.types";
-import { Copy, UserPlus } from "lucide-react";
+import { Copy, UserPlus, Search } from "lucide-react";
 
 function displayPosition(position: PlayerPosition): string {
     return position === "unknown" ? "DESCONOCIDO" : position;
@@ -39,7 +39,12 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
     const [leagueCode, setLeagueCode] = useState<string>("");
     const [showInvite, setShowInvite] = useState(false);
 
-    // Jornadas (Añadimos 'id' para no tener que buscarla luego)
+    // NUEVOS ESTADOS PARA EL MERCADO
+    const [searchQuery, setSearchQuery] = useState("");
+    const [filterPosition, setFilterPosition] = useState<string>("ALL");
+    const [filterTeam, setFilterTeam] = useState<string>("ALL");
+
+    // Jornadas
     const [rounds, setRounds] = useState<Array<{ id: string, number: number, label: string, isLocked: boolean, startsAt: string, endsAt: string }>>([]);
     const [myRealScores, setMyRealScores] = useState<Record<number, number>>({});
     const [ranking, setRanking] = useState<any[]>([]);
@@ -103,7 +108,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
             const rankPayload = await rankRes.json();
             if (rankPayload.success) setRanking(rankPayload.ranking);
 
-            // 4. Cargar jornadas, AGRUPANDO POR NÚMERO (El gran arreglo)
+            // 4. Cargar jornadas, AGRUPANDO POR NÚMERO
             const { data: dbRounds } = await supabase
                 .from("rounds")
                 .select("id, round_number, starts_at, ends_at")
@@ -113,17 +118,14 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
             const now = new Date();
             const uniqueRoundsMap = new Map<number, any>();
 
-            // Agrupamos para que "Jornada 1" del Grupo A, B y C sea una sola
             (dbRounds || []).forEach(r => {
                 if (!uniqueRoundsMap.has(r.round_number)) {
                     uniqueRoundsMap.set(r.round_number, { ...r });
                 } else {
                     const existing = uniqueRoundsMap.get(r.round_number);
-                    // Si hay varios grupos, usamos la fecha de inicio más temprana para bloquear
                     if (r.starts_at && (!existing.starts_at || new Date(r.starts_at) < new Date(existing.starts_at))) {
                         existing.starts_at = r.starts_at;
                     }
-                    // Y la fecha de fin más tardía
                     if (r.ends_at && (!existing.ends_at || new Date(r.ends_at) > new Date(existing.ends_at))) {
                         existing.ends_at = r.ends_at;
                     }
@@ -133,7 +135,6 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
             const formattedRounds = Array.from(uniqueRoundsMap.values())
                 .sort((a, b) => a.round_number - b.round_number)
                 .map(r => {
-                    // Si la fecha no existe, NO bloqueamos la jornada
                     const isLocked = r.starts_at ? now >= new Date(r.starts_at) : false;
                     return {
                         id: r.id,
@@ -199,7 +200,6 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
         setError(null);
         setSuccessMsg(null);
 
-        // Usamos el ID que ya tenemos guardado en el estado, evitando el fallo del .single()
         const { error: rpcError } = await supabase.rpc("save_lineup", {
             p_fantasy_team_id: teamId,
             p_round_id: roundObj.id,
@@ -229,7 +229,6 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
         setError(null);
         setSuccessMsg(null);
 
-        // Usamos el ID directo
         const { error: rpcError } = await supabase.rpc("transfer_player", {
             p_fantasy_team_id: teamId,
             p_player_id: playerId,
@@ -252,6 +251,21 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
     const lineupPlayers = useMemo(() => lineupIds.flatMap(id => playerMap.get(id) ? [playerMap.get(id)!] : []), [lineupIds, playerMap]);
     const lineupValidation = useMemo(() => validateLineup(lineupIds, rosterPlayers), [lineupIds, rosterPlayers]);
     const currentRoundObj = rounds.find(r => r.number === selectedRound);
+
+    // NUEVOS MEMOS PARA EL MERCADO
+    const uniqueTeams = useMemo(() => {
+        const teams = new Set(catalogPlayers.map(p => p.club));
+        return Array.from(teams).sort();
+    }, [catalogPlayers]);
+
+    const filteredPlayers = useMemo(() => {
+        return catalogPlayers.filter(p => {
+            const matchesName = p.name.toLowerCase().includes(searchQuery.toLowerCase());
+            const matchesPosition = filterPosition === "ALL" || p.position === filterPosition;
+            const matchesTeam = filterTeam === "ALL" || p.club === filterTeam;
+            return matchesName && matchesPosition && matchesTeam;
+        });
+    }, [catalogPlayers, searchQuery, filterPosition, filterTeam]);
 
     if (loading) return <div className="p-10 text-center animate-pulse text-slate-500">Cargando Fantasy...</div>;
 
@@ -385,9 +399,48 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
 
             {activeTab === "market" && (
                 <div className="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
-                    <h3 className="font-bold text-lg mb-4 text-slate-800">Mercado de Fichajes</h3>
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                        <h3 className="font-bold text-lg text-slate-800">Mercado de Fichajes</h3>
+
+                        {/* BARRA DE FILTROS */}
+                        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                            <div className="relative w-full sm:w-64">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Buscar jugador..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                                />
+                            </div>
+                            <select
+                                value={filterPosition}
+                                onChange={(e) => setFilterPosition(e.target.value)}
+                                className="w-full sm:w-auto border border-slate-200 p-2 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                            >
+                                <option value="ALL">Todas las posiciones</option>
+                                <option value="setter">Colocador</option>
+                                <option value="opposite">Opuesto</option>
+                                <option value="outside">Receptor</option>
+                                <option value="middle">Central</option>
+                                <option value="libero">Líbero</option>
+                            </select>
+                            <select
+                                value={filterTeam}
+                                onChange={(e) => setFilterTeam(e.target.value)}
+                                className="w-full sm:w-auto border border-slate-200 p-2 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                            >
+                                <option value="ALL">Todos los equipos</option>
+                                {uniqueTeams.map(team => (
+                                    <option key={team} value={team}>{team}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
                     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {catalogPlayers.map(p => {
+                        {filteredPlayers.map(p => {
                             const isOwned = rosterIds.includes(p.id);
                             return (
                                 <div key={p.id} className="border p-3 rounded flex justify-between items-center bg-white">
@@ -408,6 +461,12 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                                 </div>
                             );
                         })}
+
+                        {filteredPlayers.length === 0 && (
+                            <div className="col-span-full text-center py-8 text-slate-500 text-sm">
+                                No se han encontrado jugadores con esos filtros.
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

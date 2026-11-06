@@ -404,7 +404,7 @@ async function main() {
 
         // Priorizamos la jornada oficial de la página de stats. Si falla, usamos la del listado.
         const effectiveRound = stats?.officialRound ?? m.round;
-        const effectiveGroup = stats?.officialGroup ?? m.groupName ?? "General";
+        const effectiveGroup = m.groupName ?? stats?.officialGroup ?? "General";
 
         const key = `${effectiveGroup}|${effectiveRound}`;
         const list = roundMap.get(key) ?? [];
@@ -432,6 +432,7 @@ async function main() {
     let totalSkippedNoStats = 0;
     let totalSkippedNoPlayer = 0;
     let totalSkippedDuplicatePlayer = 0;
+    let totalSkippedDuplicateTeam = 0; // <-- NUEVO CONTADOR
     let totalRoundsSkippedNoDates = 0;
 
     const expectedPersistedMatchIds = new Set<string>();
@@ -521,6 +522,9 @@ async function main() {
             }
         }
 
+        // 🛡️ ESCUDO ANTI-DUPLICADOS: Set para registrar los equipos que ya han jugado en esta jornada
+        const teamsInThisRound = new Set<string>();
+
         for (const scraped of roundMatches) {
             const homeTeamId = resolvedByName.get(scraped.homeTeam) ?? null;
             const awayTeamId = resolvedByName.get(scraped.awayTeam) ?? null;
@@ -533,6 +537,17 @@ async function main() {
                 totalSkippedNoTeam++;
                 continue;
             }
+
+            // 🛡️ COMPROBACIÓN DEL ESCUDO
+            if (teamsInThisRound.has(homeTeamId) || teamsInThisRound.has(awayTeamId)) {
+                console.warn(
+                    `  ⚠ Conflicto: "${scraped.homeTeam}" o "${scraped.awayTeam}" ya tiene un partido en la Jornada ${roundNumber} (${groupName || "General"}). Partido omitido.`
+                );
+                totalSkippedDuplicateTeam++;
+                continue;
+            }
+            teamsInThisRound.add(homeTeamId);
+            teamsInThisRound.add(awayTeamId);
 
             const homeTeam = await loadResolvedTeam(
                 supabase,
@@ -780,6 +795,8 @@ async function main() {
     console.log(
         `Stats con jugador duplicado:      ${totalSkippedDuplicatePlayer}`
     );
+    // AÑADIDO AL RESUMEN
+    console.log(`Partidos omitidos por duplicado:  ${totalSkippedDuplicateTeam}`);
 
     if (missing.length > 0) {
         const preview = missing.slice(0, 5).join(", ");

@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createAdminClient } from "@/lib/supabase/admin.server";
 import { CompetitionSelector } from '@/components/results/CompetitionSelector';
 import { StandingsTable } from '@/components/results/StandingsTable';
 import { RoundSelector } from '@/components/results/RoundSelector';
@@ -12,10 +12,7 @@ export default async function ResultsPage({
     searchParams: Promise<{ seasonId?: string; round?: string }>;
 }) {
     const sp = await searchParams;
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SECRET_KEY!,
-    );
+    const supabase = createAdminClient();
 
     // 1. Competiciones con temporada activa
     const { data: seasons } = await supabase

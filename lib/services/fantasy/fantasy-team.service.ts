@@ -83,17 +83,37 @@ function getRequiredPositionIds(
 
 export function createDailyFantasyRoster(
     players: FantasyDemoPlayer[],
-    dateKey: string
+    dateKey = new Date().toISOString().split("T")[0]
 ): DailyFantasyRoster {
-    const shuffledPlayers = seededShuffle(players, dateKey);
-    const requiredIds = getRequiredPositionIds(shuffledPlayers, dateKey);
-    const marketPlayers = [
-        ...requiredIds
-            .map((id) => shuffledPlayers.find((player) => player.id === id))
-            .filter((player): player is FantasyDemoPlayer => Boolean(player)),
-        ...shuffledPlayers.filter((player) => !requiredIds.includes(player.id)),
-    ]
-        .slice(0, DAILY_MARKET_SIZE)
+    const seededRandom = (seed: string) => {
+        let hash = hashSeed(seed);
+        return () => {
+            hash = Math.imul(hash ^ (hash >>> 16), 2246822507);
+            hash = Math.imul(hash ^ (hash >>> 13), 3266482507);
+            return ((hash ^= hash >>> 16) >>> 0) / 4294967296;
+        };
+    };
+
+    const marketQuota: Record<Exclude<PlayerPosition, "unknown">, number> = {
+        setter: 2,
+        opposite: 2,
+        outside: 4,
+        middle: 4,
+        libero: 2,
+    };
+
+    const marketPlayers = Object.entries(marketQuota).flatMap(
+        ([position, count]) => {
+            const random = seededRandom(`${dateKey}:${position}`);
+            const shuffled = players
+                .filter((player) => player.position === position)
+                .map((player) => ({ player, sortKey: random() }))
+                .sort((left, right) => left.sortKey - right.sortKey)
+                .map(({ player }) => player);
+
+            return shuffled.slice(0, count);
+        }
+    )
         .map((player) => ({
             ...player,
             price: player.price,

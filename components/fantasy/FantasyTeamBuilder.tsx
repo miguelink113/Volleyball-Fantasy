@@ -2,7 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { validateLineup, type FantasyDemoPlayer } from "@/lib/services/fantasy/fantasy-team.service";
+import {
+    createDailyFantasyRoster,
+    validateLineup,
+    type FantasyDemoPlayer,
+} from "@/lib/services/fantasy/fantasy-team.service";
 import type { PlayerPosition } from "@/domain/player/player.types";
 import { PlayerStatsModal } from "./PlayerStatsModal";
 import { Copy, UserPlus, Search, Lock, CheckCircle2, AlertCircle } from "lucide-react";
@@ -321,45 +325,10 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
     const lineupValidation = useMemo(() => validateLineup(lineupIds, rosterPlayers), [lineupIds, rosterPlayers]);
 
     // Lógica de mercado diario
-    const marketPlayers = useMemo(() => {
-        if (catalogPlayers.length === 0) return [];
-
-        const todaySeed = new Date().toISOString().split('T')[0];
-        const seededRandom = (seed: string) => {
-            let h = 0xdeadbeef;
-            for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 2654435761);
-            return () => {
-                h = Math.imul(h ^ (h >>> 16), 2246822507);
-                h = Math.imul(h ^ (h >>> 13), 3266489909);
-                return ((h ^= h >>> 16) >>> 0) / 4294967296;
-            };
-        };
-
-        const marketQuota: Record<string, number> = {
-            setter: 2,
-            opposite: 2,
-            outside: 4,
-            middle: 4,
-            libero: 2
-        };
-
-        const dailyMarket: FantasyDemoPlayer[] = [];
-
-        Object.entries(marketQuota).forEach(([pos, count]) => {
-            const posPlayers = catalogPlayers.filter((p: FantasyDemoPlayer) => p.position === pos);
-            const random = seededRandom(todaySeed + pos);
-
-            const shuffled = [...posPlayers];
-            for (let i = shuffled.length - 1; i > 0; i--) {
-                const j = Math.floor(random() * (i + 1));
-                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-            }
-
-            dailyMarket.push(...shuffled.slice(0, count));
-        });
-
-        return dailyMarket;
-    }, [catalogPlayers]);
+    const marketPlayers = useMemo(
+        () => createDailyFantasyRoster(catalogPlayers).players,
+        [catalogPlayers]
+    );
 
     // Cargar puntos TOTALES de la temporada
     useEffect(() => {

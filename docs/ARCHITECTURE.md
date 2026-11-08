@@ -157,7 +157,7 @@ Consulta la tabla `team_standings` y devuelve la clasificación real de los equi
 GET /api/fantasy-round-scores
 ```
 
-Consulta las estadísticas persistidas y calcula las puntuaciones de todas las jornadas utilizando `ScoringSystemV1`. El frontend recibe los resultados en una sola petición.
+Consulta las estadísticas persistidas y calcula las puntuaciones de todas las jornadas utilizando `ScoringSystemV1`. Si se le pasa `playerId`, devuelve el historial completo de ese jugador con su desglose de estadísticas. Si no se le pasa `round`, suma los puntos totales de la temporada.
 
 Las rutas migradas no dependen de lecturas en vivo de RFEVB. Los datos externos se incorporan a través de los procesos de ingesta.
 
@@ -175,7 +175,9 @@ La interfaz utiliza pestañas y es 100% dinámica. Lee exclusivamente las tempor
 
 Las puntuaciones de todas las jornadas se cargan en una sola petición para reducir las solicitudes sucesivas y evitar parpadeos durante la actualización de la interfaz.
 
-**Fase 12:** Se ha implementado la vista de clasificaciones (`/results`). Queda pendiente la inclusión de los resultados de partidos por jornada y el rediseño visual completo (Desktop-First).
+**Mercado Rotativo:** El frontend calcula un mercado diario de 14 jugadores (basado en la fecha actual) para fomentar la conexión diaria de los usuarios. Los usuarios pueden ver el valor y los puntos totales de cada jugador y abrir un modal con su rendimiento jornada a jornada.
+
+**Alineaciones:** El usuario edita la alineación una vez y el sistema la guarda en todas las jornadas futuras no bloqueadas mediante la RPC `save_lineup`. Si no hay jornadas futuras, se guarda un borrador en `localStorage`.
 
 ## Flujo de datos de producto
 

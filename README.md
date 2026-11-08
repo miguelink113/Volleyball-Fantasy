@@ -2,7 +2,7 @@
 
 Aplicación web de fantasy de voleibol construida con Next.js, TypeScript y Supabase. El repositorio combina la extracción de datos de RFEVB, un dominio tipado, persistencia del catálogo y una interfaz con autenticación, ligas privadas y gestión del equipo fantasy.
 
-> **Estado de esta revisión:** Las fases 1 a 11 están **completadas y verificadas**. La ingesta de la temporada 26/27 está finalizada con soporte para múltiples grupos y un algoritmo avanzado de resolución de alias. La aplicación se encuentra **desplegada en producción en Vercel**. Actualmente nos encontramos trabajando en la Fase 12 (rediseño UI y nuevas funcionalidades).
+> **Estado de esta revisión:** Las fases 1 a 11 están **completadas y verificadas**. La aplicación se encuentra **desplegada en producción en Vercel**. Actualmente nos encontramos en la Fase 12, con el rediseño visual base, la vista de resultados, el mercado diario rotativo y el análisis de jugadores ya integrados.
 
 ## Estado actual
 
@@ -29,13 +29,16 @@ Las competiciones base son Superliga Masculina, Superliga Femenina, Superliga 2 
 - Dashboard dinámico con gestión de ligas y validaciones corregidas.
 - Pantalla fantasy con pestañas (Alineación, Mercado, Clasificación), validación de límites estrictos en backend y bloqueos temporales.
 - **Clasificaciones (Standings):** Scraper de DataProject, ingesta en `team_standings`, API (`/api/standings`) y UI integrada en la nueva ruta `/results`.
+- **Resultados (`/results`):** Lista de partidos por jornada con separación por grupos.
+- **Mercado Diario:** Rotación automática de 14 jugadores cada día para incentivar la conexión.
+- **Estadísticas de Jugador:** Modal detallado con desglose de puntos fantasy y stats reales por jornada.
+- **Alineaciones:** Guardado masivo para todas las jornadas futuras. Las pasadas son solo de lectura.
 - **Despliegue:** Frontend y API alojados en Vercel. CI/CD automático.
 
 ### Incompleto o pendiente de confirmar (Fase 12 y 13)
 
 - **Valores de mercado dinámicos:** Fórmula basada en rendimiento.
-- **Página de resultados (Partidos):** La clasificación ya está implementada, falta la vista de partidos por jornada a la izquierda.
-- **Rediseño UI:** Implementación del diseño Desktop-First (modo oscuro).
+- **Rediseño UI:** Implementación completa del diseño Desktop-First para la vista de Fantasy (modo oscuro, tarjetas, etc.).
 - Definir estrategia de bloqueo temporal en jornadas multi-grupo.
 - Tareas programadas (Cron) para automatizar ingesta y cálculo de puntos (Fase 13).
 
@@ -47,7 +50,7 @@ Las competiciones base son Superliga Masculina, Superliga Femenina, Superliga 2 
 - **Repositorios:** `lib/repositories/` encapsula lecturas tipadas.
 - **API de datos persistidos:** `app/api/competition-roster/`, `app/api/fantasy-round-scores/`, `app/api/fantasy-team/`, `app/api/league-ranking/` y `app/api/standings/`.
 - **Endpoints de extracción:** `/api/matches`, `/api/match-statistics` y `/api/competition-statistics` siguen consultando RFEVB en directo.
-- **Frontend:** `/dashboard` gestiona las ligas; `/fantasy` presenta plantilla, mercado, puntos y acciones de transferencia; `/results` muestra la clasificación real.
+- **Frontend:** `/dashboard` gestiona las ligas; `/fantasy` presenta plantilla, mercado, puntos y acciones de transferencia; `/results` muestra la clasificación real y los partidos.
 
 ## Inicio rápido
 
@@ -119,6 +122,5 @@ npx tsx --env-file=.env.local scripts/ingest/ingest-standings.ts <competition_id
 
 ## Próximas prioridades
 
-1. Implementar valores de mercado dinámicos y la vista de partidos en la página de resultados (Fase 12).
-2. Rediseño de la interfaz a Desktop-First (Fase 12).
-3. Automatización de scripts mediante cron jobs (Fase 13).
+1. Implementar valores de mercado dinámicos y unificar el rediseño de la vista de Fantasy (Fase 12).
+2. Automatización de scripts mediante cron jobs (Fase 13).

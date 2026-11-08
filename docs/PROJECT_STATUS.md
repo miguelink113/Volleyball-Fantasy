@@ -6,7 +6,7 @@ Las fases 1 a 11 están **completadas y verificadas** mediante ejecuciones repro
 
 Durante la Fase 11, se completó la ingesta de la temporada 2026/27. Se ha implementado un avanzado `TeamAliasResolver` (con containment y asignación greedy) que ha resuelto casi la totalidad de los nombres dispares entre actas y rosters (incluyendo casos complejos como "Melilla"), evitando omisiones de partidos. Además, la UI se ha adaptado para agrupar jornadas de competiciones multi-grupo. Finalmente, la aplicación ha sido desplegada en producción en Vercel con Supabase Auth configurado.
 
-Actualmente el proyecto se encuentra en la **Fase 12**, centrada en añadir nuevas funcionalidades (mercado dinámico, página de resultados) y un rediseño visual (Desktop-First). Recientemente se ha completado el sistema de clasificaciones oficiales.
+Actualmente el proyecto se encuentra en la **Fase 12**. Se han completado el rediseño de navegación (Sidebar/Dashboard), la vista de resultados (`/results`), el mercado diario rotativo (14 jugadores), el modal de estadísticas por jugador y la gestión masiva de alineaciones para jornadas futuras. Falta implementar los valores de mercado dinámicos y unificar el rediseño visual de la vista de Fantasy.
 
 | Entidad | Registros (25/26) | Registros (26/27) |
 | --- | ---: | ---: |
@@ -33,7 +33,7 @@ La tabla `player_market_values` contiene valores sembrados para todos los jugado
 | 9. Scoring persistente | ✅ Completada | Script de persistencia, APIs y tests de idempotencia/aislamiento. |
 | 10. UI persistente | ✅ Completada | Refactorización visual terminada, navegación dinámica y test de bloqueo `test:lockout` superado. |
 | 11. Integración 26/27 | ✅ Completada | Ingesta de 4 competiciones exitosa. Resolver de equipos v2 implementado. UI adaptada a multi-grupo. Desplegado en Vercel. |
-| 12. Rediseño y Features | ⏳ En progreso | Mercado dinámico, página de resultados, rediseño UI Desktop-First. |
+| 12. Rediseño y Features | ⏳ En progreso | Mercado dinámico pendiente. Resultados, mercado rotativo, modal de stats y alineaciones masivas completados. |
 | 13. Automatización | ⏳ Pendiente | Cron jobs, migraciones controladas. |
 
 ## Implementado
@@ -75,12 +75,15 @@ La tabla `player_market_values` contiene valores sembrados para todos los jugado
 - `/results`: Nueva vista que integra la tabla de clasificaciones (con pestañas para múltiples grupos).
 - **Despliegue en Vercel:** CI/CD configurado desde GitHub. Entorno de producción funcionando.
 - CI configurado en GitHub Actions (TypeScript, tests y build).
+- **Mercado Diario:** Rotación de 14 jugadores usando semilla de fecha.
+- **Modal de Estadísticas:** `PlayerStatsModal.tsx` para consultar puntos y stats reales por jornada.
+- **Alineaciones Futuras:** Guardado masivo en todas las rondas no bloqueadas mediante `Promise.all`.
+- **Vista de Resultados:** Lista de partidos por jornada y agrupada por `group_name`.
 
 ## Deuda técnica conocida
 
 - **Valores de mercado dinámicos:** Actualmente estáticos. Falta implementar la fórmula de fluctuación según rendimiento.
-- **Página de resultados (Partidos):** La vista de clasificaciones (`/results`) está lista. Queda pendiente implementar la lista de partidos por jornada en esa misma pantalla.
-- **Rediseño UI:** Pendiente implementar el diseño Desktop-First (modo oscuro, tarjetas, etc.).
+- **Rediseño UI Fantasy:** Las pestañas de alineación, mercado y clasificación mantienen el estilo de color antiguo. Pendiente unificar.
 - **Bloqueo en ligas multi-grupo:** Actualmente, si el Grupo A juega el viernes y el Grupo B el domingo, el candado se activa el viernes para todos. Se debe decidir si es el comportamiento deseado.
 - **Cruce de jugadores:** Quedan estadísticas de jugadores sin emparejar en las actas (principalmente "Unknown Player" de RFEVB o fichajes que no están en el roster oficial).
 - **Automatización:** La ingesta y el cálculo de puntuaciones se ejecutan manualmente; el despliegue requerirá tareas programadas (cron).

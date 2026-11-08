@@ -141,7 +141,8 @@ npm run build
 ## Limitaciones conocidas que afectan al desarrollo
 
 - **Valores de mercado dinámicos:** Actualmente los precios son estáticos. Pendiente implementar la fórmula en la Fase 12.
-- **Página de resultados:** Clasificaciones implementadas. Pendiente crear la vista de partidos (columna izquierda) en la Fase 12.
+- **Rediseño UI Fantasy:** Falta unificar el estilo visual de las pestañas de Fantasy con el Sidebar y el Dashboard.
+- **Mercado cerrado:** Si no hay jornadas futuras en la base de datos, los fichajes se bloquean temporalmente hasta que la ingesta cree una nueva ronda.
 - **Bloqueo en ligas multi-grupo:** El candado de la jornada fantasy se calcula tomando la fecha del primer partido del grupo más madrugador. Si un grupo juega los viernes y otro los domingos, el bloqueo afecta a ambos el viernes. Pendiente definir la estrategia final.
 - **Cruce de jugadores:** Quedan algunas estadísticas de jugadores sin emparejar en las actas (fichajes de última hora o "Unknown Player" de RFEVB).
 - La ingesta desde RFEVB y el cálculo de puntuaciones se ejecutan manualmente; el despliegue en producción requerirá tareas programadas (cron) en la Fase 13.

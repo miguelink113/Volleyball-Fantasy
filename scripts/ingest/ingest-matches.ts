@@ -209,6 +209,52 @@ function findRosterPlayer(
     return null;
 }
 
+// ─────────────────────── group normalization ───────────────────────
+
+/**
+ * Normaliza el nombre del grupo. DataProject a veces usa nombres de patrocinadores
+ * ("Alcudia", "Egido") en las pestañas en lugar del nombre real del grupo
+ * ("Superliga 2 - Grupo A"). Si detectamos eso, buscamos el grupo real del equipo
+ * en la tabla `teams` (que sí está correctamente asignado por la ingesta de roster).
+ */
+function normalizeGroupName(
+    rawGroupName: string | null | undefined,
+    homeTeamName: string,
+    awayTeamName: string,
+    teamsWithGroup: { name: string; group_name: string | null }[]
+): string {
+    const raw = rawGroupName?.trim();
+    if (!raw) return "General";
+
+    // Si el nombre contiene palabras clave de grupo válido, lo aceptamos tal cual.
+    if (/superliga|grupo|liga\s+regular/i.test(raw)) {
+        return raw;
+    }
+
+    // Si no, intentamos deducir el grupo desde el roster de equipos.
+    const homeNorm = normalizePersonName(homeTeamName);
+    const awayNorm = normalizePersonName(awayTeamName);
+
+    for (const t of teamsWithGroup) {
+        if (!t.group_name) continue;
+        const teamNorm = normalizePersonName(t.name);
+
+        // Coincidencia parcial por inclusión (en cualquier dirección)
+        const matchesHome =
+            homeNorm.length > 3 &&
+            (homeNorm.includes(teamNorm) || teamNorm.includes(homeNorm));
+        const matchesAway =
+            awayNorm.length > 3 &&
+            (awayNorm.includes(teamNorm) || teamNorm.includes(awayNorm));
+
+        if (matchesHome || matchesAway) {
+            return t.group_name;
+        }
+    }
+
+    return "General";
+}
+
 // ─────────────────────── upserts ───────────────────────
 
 async function resolveCatalogIds(
@@ -347,13 +393,13 @@ async function main() {
         );
     }
 
-    // Cargamos todos los equipos de la temporada
+    // Cargamos todos los equipos de la temporada CON su group_name
     const { data: teamsData } = await supabase
         .from("teams")
-        .select("id, name")
+        .select("id, name, group_name")
         .eq("season_id", seasonId);
 
-    const teamsList = (teamsData || []) as { id: string; name: string }[];
+    const teamsList = (teamsData || []) as { id: string; name: string; group_name: string | null }[];
     const teamNameById = new Map<string, string>();
     for (const t of teamsList) teamNameById.set(t.id, t.name);
 
@@ -393,18 +439,25 @@ async function main() {
             );
             statsCache.set(m.matchId, stats);
         } catch (err) {
-            statsCache.set(m.matchId, null); // Guardamos null si falla
+            statsCache.set(m.matchId, null);
         }
     }
 
     // Agrupar por Grupo + Jornada OFICIAL
+    // 🔧 CAMBIO: Usamos normalizeGroupName para evitar que "Alcudia" o "Egido"
+    // se traten como grupos distintos. Si el groupName no parece válido,
+    // usamos el group_name oficial del equipo desde la tabla `teams`.
     const roundMap = new Map<string, ScrapedMatch[]>();
     for (const m of matches) {
         const stats = statsCache.get(m.matchId);
 
-        // Priorizamos la jornada oficial de la página de stats. Si falla, usamos la del listado.
         const effectiveRound = stats?.officialRound ?? m.round;
-        const effectiveGroup = m.groupName ?? stats?.officialGroup ?? "General";
+        const effectiveGroup = normalizeGroupName(
+            m.groupName ?? stats?.officialGroup,
+            m.homeTeam,
+            m.awayTeam,
+            teamsList
+        );
 
         const key = `${effectiveGroup}|${effectiveRound}`;
         const list = roundMap.get(key) ?? [];
@@ -432,12 +485,11 @@ async function main() {
     let totalSkippedNoStats = 0;
     let totalSkippedNoPlayer = 0;
     let totalSkippedDuplicatePlayer = 0;
-    let totalSkippedDuplicateTeam = 0; // <-- NUEVO CONTADOR
+    let totalSkippedDuplicateTeam = 0;
     let totalRoundsSkippedNoDates = 0;
 
     const expectedPersistedMatchIds = new Set<string>();
 
-    // Mapa para el diagnóstico: actaName -> { rosterName, similarity, status }
     const matchResolutions = new Map<
         string,
         {
@@ -486,18 +538,14 @@ async function main() {
             endsAt,
         });
 
-        // ────────────────────────────────────────────────
-        // NUEVA RESOLUCIÓN POR JORNADA (exactos → containment)
-        // ────────────────────────────────────────────────
         const actNames = roundMatches.flatMap((m) => [m.homeTeam, m.awayTeam]);
 
         const resolvedByName = resolver.resolveJornada(
             actNames,
             teamsList.map((t) => ({ teamId: t.id, name: t.name })),
-            50 // umbral mínimo de containment
+            50
         );
 
-        // DIAGNÓSTICO
         for (const rawName of new Set(actNames)) {
             if (matchResolutions.has(rawName)) continue;
 
@@ -522,7 +570,6 @@ async function main() {
             }
         }
 
-        // 🛡️ ESCUDO ANTI-DUPLICADOS: Set para registrar los equipos que ya han jugado en esta jornada
         const teamsInThisRound = new Set<string>();
 
         for (const scraped of roundMatches) {
@@ -538,7 +585,6 @@ async function main() {
                 continue;
             }
 
-            // 🛡️ COMPROBACIÓN DEL ESCUDO
             if (teamsInThisRound.has(homeTeamId) || teamsInThisRound.has(awayTeamId)) {
                 console.warn(
                     `  ⚠ Conflicto: "${scraped.homeTeam}" o "${scraped.awayTeam}" ya tiene un partido en la Jornada ${roundNumber} (${groupName || "General"}). Partido omitido.`
@@ -560,7 +606,6 @@ async function main() {
                 awayTeamId
             );
 
-            // Asignar el grupo a los equipos si no lo tienen ya
             if (groupName) {
                 await supabase
                     .from("teams")
@@ -574,7 +619,6 @@ async function main() {
                     .is("group_name", null);
             }
 
-            // Usar del CACHÉ (ya no descargamos dos veces)
             const statsData = statsCache.get(scraped.matchId) ?? null;
 
             const matchRow = {
@@ -582,7 +626,7 @@ async function main() {
                 season_id: seasonId,
                 round_id: roundId,
                 rfevb_match_id: scraped.matchId,
-                group_name: groupName, // Usamos el grupo oficial
+                group_name: groupName,
                 match_date: scraped.matchDate?.toISOString() ?? null,
                 home_team_id: homeTeam.teamId,
                 away_team_id: awayTeam.teamId,
@@ -795,7 +839,6 @@ async function main() {
     console.log(
         `Stats con jugador duplicado:      ${totalSkippedDuplicatePlayer}`
     );
-    // AÑADIDO AL RESUMEN
     console.log(`Partidos omitidos por duplicado:  ${totalSkippedDuplicateTeam}`);
 
     if (missing.length > 0) {
@@ -806,7 +849,6 @@ async function main() {
         );
     }
 
-    // ═══ TABLA DE DIAGNÓSTICO: EMPAREJAMIENTO DE EQUIPOS ═══
     console.log("\n\n═══ Diagnóstico de Emparejamiento de Equipos ═══\n");
 
     const sortedResolutions = Array.from(matchResolutions.entries()).sort(
@@ -857,7 +899,6 @@ async function main() {
     console.log(`Total nombres en actas: ${matchResolutions.size}`);
     console.log(`Resueltos: ${okCount} | No resueltos: ${koCount}`);
 
-    // ¿Hay equipos del roster que NO aparecen en ninguna acta?
     const seenRosterNames = new Set<string>();
     for (const info of matchResolutions.values()) {
         if (info.status === "OK" && info.rosterName !== "—") {
@@ -876,8 +917,6 @@ async function main() {
             console.log(`  - ${t.name}`);
         }
     }
-
-    // ═══════════════════════════════════════════════════════
 
     console.log("\n✅ Ingesta de partidos completada y verificada.");
 }

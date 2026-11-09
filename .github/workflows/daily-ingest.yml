@@ -1,0 +1,71 @@
+name: Daily Ingest & Calculation
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+      timezone: "Europe/Madrid"
+  workflow_dispatch:
+
+jobs:
+  check-and-ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+
+      - name: Check for new matches
+        id: check
+        run: npm run check:new-matches
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+
+      - name: Ingest matches (4 competitions)
+        if: steps.check.outputs.has_new == 'true'
+        run: |
+          npx tsx scripts/ingest/ingest-matches.ts --competition=164 --season=199
+          npx tsx scripts/ingest/ingest-matches.ts --competition=166 --season=202
+          npx tsx scripts/ingest/ingest-matches.ts --competition=165 --season=201
+          npx tsx scripts/ingest/ingest-matches.ts --competition=167 --season=203
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+
+      - name: Ingest standings (4 competitions)
+        if: steps.check.outputs.has_new == 'true'
+        run: |
+          npx tsx --env-file=.env.local scripts/ingest/ingest-standings.ts 49fd3bb1-a3e5-4fa0-9fb5-11fd9c3a6301 acdfe9fc-c865-496c-ac4e-2c9a61422944 164 199
+          npx tsx --env-file=.env.local scripts/ingest/ingest-standings.ts 654f6238-735f-4ff5-9ee0-9a53717ca6fe 941ab516-10f1-4c60-9802-dc7d5d3acb1f 166 202
+          npx tsx --env-file=.env.local scripts/ingest/ingest-standings.ts c6a4b963-8be7-47ff-95f9-d3fa17805b2c ea5223b7-8a95-4041-b271-eca2a7d631d5 165 201
+          npx tsx --env-file=.env.local scripts/ingest/ingest-standings.ts ff63d7c6-ae78-4431-9637-4dd277736847 278bec95-a974-453c-93b3-54c7b48664bd 167 203
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        continue-on-error: true
+
+      - name: Calculate scores
+        run: npm run calculate:scores
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+
+      - name: Calculate market values
+        run: npm run calculate:market
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "${{ steps.check.outputs.has_new }}" == "true" ]; then
+            echo "✅ Ingesta ejecutada (había partidos nuevos)"
+          else
+            echo "⏸️ Sin cambios. Solo se recalcularon scores y mercado."
+          fi

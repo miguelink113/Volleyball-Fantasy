@@ -6,6 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "audit:dead-code": "knip",
+    "audit:circular": "madge --circular --extensions ts,tsx app components lib domain scripts",
     "diagnose:team-aliases": "tsx scripts/tools/diagnose-team-aliases.ts",
     "test:domain": "tsx scripts/tests/test-domain.ts",
     "test:match-parser": "tsx scripts/tools/inspect-match-parser.ts",
@@ -25,18 +27,20 @@
     "ingest:roster": "tsx scripts/ingest/ingest-roster.ts",
     "ingest:market-values": "tsx scripts/ingest/ingest-market-values.ts",
     "ingest:matches": "tsx scripts/ingest/ingest-matches.ts",
-    "calculate:scores": "tsx scripts/ingest/calculate-scores.ts"
+    "ingest:standings": "tsx scripts/ingest/ingest-standings.ts",
+    "calculate:scores": "tsx scripts/ingest/calculate-scores.ts",
+    "check:new-matches": "tsx scripts/ingest/check-new-matches.ts",
+    "calculate:market": "tsx scripts/ingest/calculate-market-values.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.3",
     "cheerio": "^1.2.0",
     "dotenv": "^17.4.2",
-    "lucide-react": "^1.53.0",
+    "lucide-react": "^1.70.0",
     "next": "16.4.0-canary.39",
     "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "recharts": "^3.10.1"
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -46,6 +50,8 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.1",
+    "knip": "^6.44.1",
+    "madge": "^8.0.0",
     "pg": "^8.23.0",
     "supabase": "^2.122.0",
     "tailwindcss": "^4",

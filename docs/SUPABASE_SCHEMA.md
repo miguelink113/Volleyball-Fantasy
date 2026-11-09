@@ -5,13 +5,13 @@ Las migraciones del proyecto definen el esquema del catálogo y de fantasy. El a
 ## Capas de datos
 
 - **Identidad:** `profiles` contiene un `username` único asociado a `auth.users`.
-- **Datos deportivos:** `competitions`, `seasons`, `teams`, `players`, `rounds`, `matches` y `match_player_stats`.
+- **Datos deportivos:** `competitions`, `seasons`, `teams`, `players`, `rounds`, `matches`, `match_player_stats` y `team_standings`.
 - **Resolución de nombres:** `team_source_aliases` relaciona alias de fuentes (`roster` o `matches`) con el equipo oficial de la temporada. La clave natural documentada es `(season_id, normalized_alias)`.
 - **Mercado:** `player_market_values` guarda valores de jugador por jornada, con precio y periodo de validez.
 - **Fantasy privado:** `private_leagues`, `private_league_members`, `fantasy_teams`, `fantasy_team_players`, `lineups`, `lineup_players` y `transactions`.
 - **Resultados:** `player_match_scores` y `player_round_scores` representan puntuaciones de jugador versionadas; `fantasy_scores` representa el resultado de un equipo por jornada y versión.
 
-El modelo relaciona el catálogo por competición y temporada para evitar cruces accidentales entre temporadas. **Soporte multi-grupo:** Las tablas `teams`, `rounds` y `matches` incluyen la columna `group_name` para separar competiciones con grupos (ej. Superliga 2). La restricción única en `rounds` es `(season_id, round_number, group_name)`.
+El modelo relaciona el catálogo por competición y temporada para evitar cruces accidentales entre temporadas. **Soporte multi-grupo:** Las tablas `teams`, `rounds`, `matches` y `team_standings` incluyen la columna `group_name` para separar competiciones con grupos (ej. Superliga 2). La restricción única en `rounds` es `(season_id, round_number, group_name)`.
 
 ## Restricciones documentadas y comprobadas estructuralmente
 
@@ -22,7 +22,8 @@ El test de esquema comprueba tablas, columnas, algunos tipos y nullabilidad, rel
 - integridad entre equipos fantasy, ligas, alineaciones, jornadas y jugadores;
 - índice/restricción para evitar la propiedad activa duplicada de un jugador dentro de una liga;
 - RLS activado en las 20 tablas de aplicación;
-- funciones `create_private_league`, `join_private_league`, `leave_private_league`, `transfer_player` y `save_lineup` con privilegios de ejecución esperados.
+- funciones `create_private_league`, `join_private_league`, `leave_private_league`, `transfer_player` y `save_lineup` con privilegios de ejecución esperados;
+- `team_standings` incluye una restricción `UNIQUE(season_id, team_id)` para garantizar un único registro de clasificación por equipo por temporada.
 
 El test es una comprobación estructural. No demuestra por sí solo que las funciones creen las filas correctas, apliquen el presupuesto, gestionen saldos, sean atómicas o manejen adecuadamente condiciones de carrera.
 
@@ -43,6 +44,7 @@ Aunque la llamada parte del cliente de Supabase, las validaciones de seguridad y
 **Mantenimiento de Temporadas:** Para evitar que el Dashboard muestre temporadas de años anteriores, el script `ingest-roster` desmarca automáticamente la bandera `is_current` de las temporadas antiguas de esa competición al ingerir una nueva. Además, actualiza el nombre de la competición si se le pasa el parámetro `--competition-name`.
 
 Las puntuaciones (tablas `player_match_scores`, `player_round_scores` y `fantasy_scores`) se escriben desde el script administrativo `scripts/ingest/calculate-scores.ts`, que es idempotente y está testeado.
+Las clasificaciones (tabla `team_standings`) se escriben desde el script `scripts/ingest/ingest-standings.ts`, también idempotente.
 
 ## Seguridad y roles
 

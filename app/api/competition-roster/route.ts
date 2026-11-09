@@ -19,7 +19,6 @@ export async function GET(request: NextRequest) {
         const supabase = createAdminClient();
         const competitionRfevbId = String(competitionId);
 
-        // 1. Obtener el UUID de la competición
         const { data: competitionData, error: compError } = await supabase
             .from("competitions")
             .select("id")
@@ -34,7 +33,6 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // 2. Obtener la temporada actual
         const { data: seasonData, error: seasonError } = await supabase
             .from("seasons")
             .select("id")
@@ -50,28 +48,44 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // 3. Obtener la primera jornada (para sacar los precios iniciales)
-        const { data: roundData, error: roundError } = await supabase
+        // 3. Obtener la última jornada que tenga precios calculados.
+        //    Como hay múltiples grupos por jornada (A, B, C), necesitamos
+        //    agregar precios de TODAS las rondas de esa jornada.
+        const { data: latestRound } = await supabase
             .from("rounds")
-            .select("id")
+            .select("round_number")
             .eq("season_id", seasonData.id)
-            .order("round_number", { ascending: true })
+            .order("round_number", { ascending: false })
             .limit(1)
             .maybeSingle();
 
-        if (roundError) throw roundError;
+        let marketPrices = new Map<string, number>();
 
-        // 4. Leer equipos, jugadores y precios en paralelo
-        const [teams, players, marketPrices] = await Promise.all([
+        if (latestRound) {
+            const { data: targetRounds } = await supabase
+                .from("rounds")
+                .select("id")
+                .eq("season_id", seasonData.id)
+                .eq("round_number", latestRound.round_number);
+
+            for (const round of targetRounds || []) {
+                const roundPrices = await getMarketValuesByRoundId(supabase, round.id);
+                for (const [playerId, price] of roundPrices) {
+                    marketPrices.set(playerId, price);
+                }
+            }
+        }
+
+        // 4. Leer equipos y jugadores en paralelo
+        const [teams, players] = await Promise.all([
             getTeamsBySeasonId(supabase, seasonData.id),
             getPlayersBySeasonId(supabase, seasonData.id),
-            roundData ? getMarketValuesByRoundId(supabase, roundData.id) : Promise.resolve(new Map<string, number>()),
         ]);
 
-        // 5. Inyectar el precio real a cada jugador
+        // 5. Inyectar precio real (fallback 1M, no 10M)
         const playersWithPrices = players.map((p) => ({
             ...p,
-            price: marketPrices.get(p.id) ?? 9, // 9M por defecto si falta
+            price: marketPrices.get(p.id) ?? 1,
         }));
 
         return NextResponse.json({

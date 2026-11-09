@@ -49,7 +49,7 @@ scripts/ingest/
 lib/services/ingestion/
 ```
 
-El scraper extrae equipos, jugadores, partidos y estadísticas de RFEVB. Los scripts administrativos coordinan la ingesta y persisten los resultados en Supabase.
+El scraper extrae equipos, jugadores, partidos, estadísticas y clasificaciones de RFEVB. Los scripts administrativos coordinan la ingesta y persisten los resultados en Supabase.
 
 **Soporte multi-grupo:** Competiciones como la Superliga 2 se dividen en grupos (A, B, C). El scraper analiza el DOM para detectar los grupos y asocia cada jornada y partido a su grupo correspondiente, evitando colisiones de `round_number`.
 
@@ -61,6 +61,10 @@ La capa de ingesta:
 - Cruza los jugadores de las actas con los jugadores del roster.
 - Realiza upserts idempotentes.
 - Registra warnings cuando no es posible resolver un registro de forma unívoca.
+
+**Normalización de grupos:** DataProject a veces usa el nombre de un patrocinador ("Alcudia", "Egido", "Herce", "Renovak") en la pestaña de la jornada en lugar del nombre real del grupo. La función `normalizeGroupName` en `ingest-matches.ts` detecta estos casos (si el nombre no contiene "Superliga", "Grupo" o "Liga Regular") y reasigna el partido al grupo canónico del equipo según `teams.group_name`. Esto previene la creación de rondas fantasma y los partidos duplicados.
+
+**Escudo anti-duplicados:** Antes de insertar un partido, el script comprueba si el equipo local o el visitante ya tiene un partido en esa misma jornada. Si es así, el segundo se omite con un warning. Esto evita duplicados causados por partidos aplazados o adelantados que DataProject lista en varias pestañas.
 
 El cliente administrativo se encuentra en `lib/supabase/admin.server.ts` y debe ejecutarse exclusivamente en el servidor.
 
@@ -74,6 +78,7 @@ Las entidades persistidas incluyen:
 - Equipos y jugadores.
 - Jornadas y partidos.
 - Estadísticas de jugador por partido.
+- Clasificaciones por equipo y temporada (`team_standings`).
 - Valores de mercado por jugador y jornada.
 - Ligas, membresías y equipos fantasy.
 - Plantillas, alineaciones, puntuaciones y transacciones.
@@ -99,6 +104,7 @@ La capa incluye repositorios para:
 - Jornadas.
 - Partidos.
 - Estadísticas de jugador por partido.
+- Clasificaciones (`standings`).
 - Valores de mercado.
 
 Los repositorios convierten los registros de persistencia a entidades de dominio con propiedades camelCase. Las capas superiores no necesitan depender directamente de los nombres de columnas SQL ni de los DTO del scraper.
@@ -122,6 +128,7 @@ Incluye:
 - Equipo y jugador.
 - Jornada y partido.
 - Estadísticas de jugador.
+- Clasificación real de equipos.
 - Mercado fantasy.
 - Plantilla y alineación.
 - Sistema de puntuación.
@@ -140,13 +147,21 @@ GET /api/competition-roster?competition=152
 
 Consulta el catálogo persistido a través de los repositorios y devuelve los equipos y jugadores de la competición solicitada.
 
+#### Clasificaciones de competición
+
+```text
+GET /api/standings?seasonId=<uuid>
+```
+
+Consulta la tabla `team_standings` y devuelve la clasificación real de los equipos, segmentada por grupo si la competición lo requiere.
+
 #### Puntuaciones de jornadas
 
 ```text
 GET /api/fantasy-round-scores
 ```
 
-Consulta las estadísticas persistidas y calcula las puntuaciones de todas las jornadas utilizando `ScoringSystemV1`. El frontend recibe los resultados en una sola petición.
+Consulta las estadísticas persistidas y calcula las puntuaciones de todas las jornadas utilizando `ScoringSystemV1`. Si se le pasa `playerId`, devuelve el historial completo de ese jugador con su desglose de estadísticas. Si no se le pasa `round`, suma los puntos totales de la temporada.
 
 Las rutas migradas no dependen de lecturas en vivo de RFEVB. Los datos externos se incorporan a través de los procesos de ingesta.
 
@@ -164,7 +179,9 @@ La interfaz utiliza pestañas y es 100% dinámica. Lee exclusivamente las tempor
 
 Las puntuaciones de todas las jornadas se cargan en una sola petición para reducir las solicitudes sucesivas y evitar parpadeos durante la actualización de la interfaz.
 
-**Evolución futura (Fase 12):** Se planea la inclusión de una vista de resultados de partidos por jornada y un rediseño visual completo (Desktop-First).
+**Mercado Rotativo:** El frontend calcula un mercado diario de 14 jugadores (basado en la fecha actual) para fomentar la conexión diaria de los usuarios. La lógica vive en `createDailyFantasyRoster` del servicio `fantasy-team.service.ts`. Los usuarios pueden ver el valor y los puntos totales de cada jugador y abrir un modal con su rendimiento jornada a jornada.
+
+**Alineaciones:** El usuario edita la alineación una vez y el sistema la guarda en todas las jornadas futuras no bloqueadas mediante la RPC `save_lineup` (guardado masivo con `Promise.all`). Si no hay jornadas futuras publicadas por DataProject, el frontend guarda un borrador en `localStorage` con la clave `draft_lineup_<teamId>`. La UI muestra feedback visual claro: botón verde "¡Guardado!" si se persiste en BD, botón ámbar "Borrador guardado" si se guarda localmente. Cuando la siguiente ingesta cree la jornada, el borrador se aplicará automáticamente al guardar de nuevo.
 
 ## Flujo de datos de producto
 
@@ -240,6 +257,8 @@ Los límites temporales se calculan en la zona Europe/Madrid y se convierten a U
 
 Las entidades de jornada exponen `startsAt` y `endsAt`. El bloqueo de alineaciones y transferencias es estricto en el backend: las operaciones (RPC) se bloquean instantáneamente si `now() >= starts_at`, independientemente del estado de la UI.
 
+**Jornadas futuras no publicadas:** DataProject publica el calendario de cada jornada de forma progresiva. Cuando una jornada aún no existe en la BD, el frontend la trata como "no programada": bloquea fichajes y guarda la alineación como borrador local. Decisión de diseño: no se inventan fechas falsas para evitar ensuciar la BD con datos incorrectos.
+
 ## Seguridad
 
 - Las claves secretas de Supabase permanecen en el servidor.
@@ -259,3 +278,12 @@ Las fases 1 a 11 están completadas y verificadas:
 - La clasificación privada y los puntos por jornada se leen de forma rápida desde la base de datos.
 - La UI (Login, Dashboard, Fantasy) ha sido refactorizada para operar 100% de forma dinámica, manejar correctamente los estados y bloqueos, y agrupar jornadas de múltiples grupos.
 - La aplicación está desplegada en producción (Vercel) con Supabase Auth.
+- La ingesta y visualización de clasificaciones oficiales (`team_standings`) está implementada.
+
+Fase 12 en progreso:
+- Navegación global (Sidebar/Dashboard) y vista de resultados (`/results`) con partidos y clasificación agrupados por grupo.
+- Mercado diario rotativo de 14 jugadores con cuotas por posición (2/2/4/4/2) y helper puro en `lib/utils/round-label.ts` para etiquetas de jornadas.
+- Modal de estadísticas por jugador (`PlayerStatsModal`) con desglose fantasy y stats reales por jornada.
+- Gestión masiva de alineaciones con borrador local (`localStorage`) cuando no hay jornadas futuras.
+- Limpieza profunda de la BD con re-ingesta completa de las 4 competiciones (266 partidos limpios, sin rondas fantasma).
+- Ingesta blindada: `normalizeGroupName` + escudo anti-duplicados en `ingest-matches.ts`.

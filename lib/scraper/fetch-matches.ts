@@ -21,7 +21,7 @@ export interface Match {
     url: string;
 }
 
-export class ScraperError extends Error {
+class ScraperError extends Error {
     constructor(message: string) {
         super(message);
         this.name = "ScraperError";
@@ -291,7 +291,7 @@ function extractMatchLinks(html: string): Match[] {
     return matches;
 }
 
-export async function scrapeMatches(
+export async function fetchMatches(
     competitionId: number,
     seasonId: number,
     roundNumber?: number

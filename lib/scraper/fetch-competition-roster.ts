@@ -27,7 +27,7 @@ export interface CompetitionRoster {
     players: ScrapedCompetitionPlayer[];
 }
 
-export class CompetitionRosterScraperError extends Error {
+class CompetitionRosterScraperError extends Error {
     constructor(message: string) {
         super(message);
         this.name = "CompetitionRosterScraperError";
@@ -317,7 +317,7 @@ function extractPlayersFromTeamDetails(
     return players;
 }
 
-async function fetchCompetitionTeams(
+async function fetchCompetitionTeamsFromSearch(
     competitionId: number
 ): Promise<ScrapedCompetitionTeam[]> {
     const competitionIdValue = String(competitionId);
@@ -325,16 +325,16 @@ async function fetchCompetitionTeams(
     return extractTeams(await fetchHtml(url), competitionIdValue);
 }
 
-export async function scrapeCompetitionTeams(
+async function fetchCompetitionTeams(
     competitionId: number
 ): Promise<ScrapedCompetitionTeam[]> {
-    const teams = await fetchCompetitionTeams(competitionId);
+    const teams = await fetchCompetitionTeamsFromSearch(competitionId);
 
     console.log(`Equipos encontrados: ${teams.length}`);
     return teams;
 }
 
-export async function scrapeCompetitionPlayers(
+async function fetchCompetitionPlayers(
     competitionId: number,
     competitionTeams?: ScrapedCompetitionTeam[]
 ): Promise<ScrapedCompetitionPlayer[]> {
@@ -375,11 +375,11 @@ export async function scrapeCompetitionPlayers(
     return players;
 }
 
-export async function scrapeCompetitionRoster(
+export async function fetchCompetitionRoster(
     competitionId: number
 ): Promise<CompetitionRoster> {
-    const teams = await scrapeCompetitionTeams(competitionId);
-    const players = await scrapeCompetitionPlayers(competitionId, teams);
+    const teams = await fetchCompetitionTeams(competitionId);
+    const players = await fetchCompetitionPlayers(competitionId, teams);
 
     return {
         competitionId: String(competitionId),

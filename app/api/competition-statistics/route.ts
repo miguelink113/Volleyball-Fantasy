@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { scrapeCompetition } from "@/lib/scraper/fetch-competition-statistics";
+import { fetchCompetitionStatistics } from "@/lib/scraper/fetch-competition-statistics";
 
 export async function GET(request: NextRequest) {
     try {
@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
         }
 
         const results =
-            await scrapeCompetition(
+            await fetchCompetitionStatistics(
                 competitionId,
                 seasonId,
                 roundNumber

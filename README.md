@@ -2,7 +2,7 @@
 
 Aplicación web de fantasy de voleibol construida con Next.js, TypeScript y Supabase. El repositorio combina la extracción de datos de RFEVB, un dominio tipado, persistencia del catálogo y una interfaz con autenticación, ligas privadas y gestión del equipo fantasy.
 
-> **Estado de esta revisión:** Las fases 1 a 11 están **completadas y verificadas**. La ingesta de la temporada 26/27 está finalizada con soporte para múltiples grupos y un algoritmo avanzado de resolución de alias. La aplicación se encuentra **desplegada en producción en Vercel**. Actualmente nos encontramos trabajando en la Fase 12 (rediseño UI y nuevas funcionalidades).
+> **Estado de esta revisión:** Las fases 1 a 11 están **completadas y verificadas**. La aplicación se encuentra **desplegada en producción en Vercel**. Actualmente en la Fase 12, con el rediseño visual base, la vista de resultados, el mercado diario rotativo y el análisis de jugadores ya integrados.
 
 ## Estado actual
 
@@ -12,30 +12,34 @@ Aplicación web de fantasy de voleibol construida con Next.js, TypeScript y Supa
 | --- | ---: | ---: |
 | Equipos | 94 | 96 |
 | Jugadores | 1.449 | 1.388 |
-| Partidos | 1.045 | 277 |
-| Estadísticas de jugador | 25.262 | 5.527 |
+| Partidos | 1.045 | 266 |
+| Estadísticas de jugador | 25.262 | 6.368 |
 
-Las competiciones base son Superliga Masculina, Superliga Femenina, Superliga 2 Masculina y Superliga 2 Femenina. El script de mercado permite sembrar un precio fijo para cada jugador y jornada.
+Las competiciones base son Superliga Masculina, Superliga Femenina, Liga Iberdrola y Superliga 2 Masculina. El script de mercado permite sembrar un precio fijo para cada jugador y jornada.
 
 ### Funcionalidad implementada en el código
 
 - Autenticación y perfil con Supabase Auth (configurado para producción).
 - Ingesta administrativa del roster, jornadas, partidos y estadísticas desde RFEVB.
 - **Soporte multi-grupo:** Capacidad de procesar competiciones divididas en grupos. La UI unifica las jornadas para el usuario.
-- **TeamAliasResolver v2:** Resolución automática de equipos con containment y asignación greedy (evita omisiones por nombres dispares).
+- **TeamAliasResolver v2:** Resolución automática de equipos con containment y asignación greedy.
+- **Normalización de grupos:** El scraper detecta nombres de patrocinadores ("Alcudia", "Egido") y los reasigna al grupo canónico del equipo, evitando rondas fantasma y partidos duplicados.
 - Repositorios de lectura para equipos, jugadores, jornadas, partidos, estadísticas y valores de mercado.
 - `GET /api/competition-roster` lee el catálogo y los precios persistidos en Supabase basándose en la temporada `is_current = true`.
 - `GET /api/fantasy-round-scores` calcula bajo demanda puntuaciones por jornada (con desglose) a partir de partidos y estadísticas persistidos.
 - Dashboard dinámico con gestión de ligas y validaciones corregidas.
 - Pantalla fantasy con pestañas (Alineación, Mercado, Clasificación), validación de límites estrictos en backend y bloqueos temporales.
+- **Resultados (`/results`):** Lista de partidos por jornada con separación por grupos y clasificación real.
+- **Mercado Diario:** Rotación automática de 14 jugadores cada día para incentivar la conexión.
+- **Estadísticas de Jugador:** Modal detallado con desglose de puntos fantasy y stats reales por jornada.
+- **Alineaciones:** Guardado masivo para todas las jornadas futuras. Si no hay jornadas futuras publicadas por DataProject, se guarda un borrador en `localStorage` que se aplicará automáticamente cuando se publique la siguiente jornada.
 - **Despliegue:** Frontend y API alojados en Vercel. CI/CD automático.
 
 ### Incompleto o pendiente de confirmar (Fase 12 y 13)
 
 - **Valores de mercado dinámicos:** Fórmula basada en rendimiento.
-- **Página de resultados:** Vista de partidos por jornada.
-- **Rediseño UI:** Implementación del diseño Desktop-First (modo oscuro).
-- Definir estrategia de bloqueo temporal en jornadas multi-grupo.
+- **Rediseño UI:** Implementación completa del diseño Desktop-First para la vista de Fantasy.
+- **Jornadas futuras:** DataProject publica el calendario de las jornadas progresivamente. La UI maneja la ausencia con borradores locales.
 - Tareas programadas (Cron) para automatizar ingesta y cálculo de puntos (Fase 13).
 
 ## Arquitectura
@@ -44,9 +48,10 @@ Las competiciones base son Superliga Masculina, Superliga Femenina, Superliga 2 
 - **Dominio:** `domain/` contiene tipos y `ScoringSystemV1`.
 - **Persistencia:** Supabase almacena el catálogo y las tablas de fantasy.
 - **Repositorios:** `lib/repositories/` encapsula lecturas tipadas.
-- **API de datos persistidos:** `app/api/competition-roster/`, `app/api/fantasy-round-scores/`, `app/api/fantasy-team/` y `app/api/league-ranking/`.
+- **Utils:** `lib/utils/` contiene helpers puros (ej. `round-label.ts`).
+- **API de datos persistidos:** `app/api/competition-roster/`, `app/api/fantasy-round-scores/`, `app/api/fantasy-team/`, `app/api/league-ranking/` y `app/api/standings/`.
 - **Endpoints de extracción:** `/api/matches`, `/api/match-statistics` y `/api/competition-statistics` siguen consultando RFEVB en directo.
-- **Frontend:** `/dashboard` gestiona las ligas; `/fantasy` presenta plantilla, mercado, puntos y acciones de transferencia de forma 100% dinámica.
+- **Frontend:** `/dashboard` gestiona las ligas; `/fantasy` presenta plantilla, mercado, puntos y acciones de transferencia; `/results` muestra la clasificación real y los partidos.
 
 ## Inicio rápido
 
@@ -83,9 +88,10 @@ Calcula bajo demanda las puntuaciones usando datos persistidos. `round` es opcio
 ```text
 GET /api/fantasy-team?league_id=<uuid-de-liga>
 GET /api/league-ranking?league_id=<uuid-de-liga>
+GET /api/standings?seasonId=<uuid-de-temporada>
 ```
 
-Devuelve el equipo visible para el usuario y la clasificación privada de la liga.
+Devuelve el equipo visible para el usuario, la clasificación privada de la liga y la clasificación oficial de los equipos reales, respectivamente.
 
 Para más detalles, consulta `docs/PROJECT_STATUS.md`, `docs/ARCHITECTURE.md`, `docs/SCRAPER.md`, `docs/SCORING.md` y `docs/DEVELOPMENT.md`.
 
@@ -111,10 +117,11 @@ npm run test:lockout
 npm run calculate:scores
 npm run test:match-parser -- 1 1
 npm run show:match-scores -- 1 1
+# Ingesta de clasificaciones
+npx tsx --env-file=.env.local scripts/ingest/ingest-standings.ts <competition_id> <season_id> <dp_id> <dp_pid>
 ```
 
 ## Próximas prioridades
 
-1. Implementar valores de mercado dinámicos y página de resultados (Fase 12).
-2. Rediseño de la interfaz a Desktop-First (Fase 12).
-3. Automatización de scripts mediante cron jobs (Fase 13).
+1. Implementar valores de mercado dinámicos y unificar el rediseño de la vista de Fantasy (Fase 12).
+2. Automatización de scripts mediante cron jobs (Fase 13).

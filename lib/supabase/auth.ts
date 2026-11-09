@@ -36,38 +36,3 @@ export async function getUserProfile() {
     data,
   };
 }
-
-/**
- * Actualiza el perfil de un usuario.
- */
-export async function updateUserProfile(
-    userId: string,
-    updates: {
-      username?: string;
-      email?: string;
-    }
-) {
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-      .from("profiles")
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", userId)
-      .select()
-      .single();
-
-  if (error) {
-    return {
-      error: error.message,
-      data: null,
-    };
-  }
-
-  return {
-    error: null,
-    data,
-  };
-}

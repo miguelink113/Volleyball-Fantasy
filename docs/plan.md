@@ -87,8 +87,9 @@ Probar con varios usuarios el ciclo completo:
 ## Fase 12 — Refinamiento de Producto y Rediseño UI (ACTUAL)
 
 ### Funcionalidades nuevas
-- **Valores de mercado dinámicos:** Implementar una fórmula que modifique el valor de los jugadores en función de su rendimiento (puntuaciones) a lo largo de las jornadas.
-- **Página de resultados:** Crear una vista para consultar los resultados de los partidos de las diferentes jornadas, mostrando sets y estadísticas destacadas.
+- [ ] **Valores de mercado dinámicos:** Implementar una fórmula que modifique el valor de los jugadores en función de su rendimiento (puntuaciones) a lo largo de las jornadas.
+- [x] **Clasificaciones:** Scraper de DataProject, migración de `team_standings` y UI integrada en `/results`.
+- [ ] **Partidos en `/results`:** Vista de resultados de los partidos por jornada (columna izquierda).
 
 ### Refinamiento (Deuda técnica y UI)
 - **Rediseño visual (Desktop-First):** Adaptar la interfaz actual a un diseño moderno con modo oscuro (basado en los mockups proporcionados). Optimizado para PC, con navegación lateral y tarjetas de jugador detalladas.

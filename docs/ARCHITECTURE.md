@@ -62,6 +62,10 @@ La capa de ingesta:
 - Realiza upserts idempotentes.
 - Registra warnings cuando no es posible resolver un registro de forma unívoca.
 
+**Normalización de grupos:** DataProject a veces usa el nombre de un patrocinador ("Alcudia", "Egido", "Herce", "Renovak") en la pestaña de la jornada en lugar del nombre real del grupo. La función `normalizeGroupName` en `ingest-matches.ts` detecta estos casos (si el nombre no contiene "Superliga", "Grupo" o "Liga Regular") y reasigna el partido al grupo canónico del equipo según `teams.group_name`. Esto previene la creación de rondas fantasma y los partidos duplicados.
+
+**Escudo anti-duplicados:** Antes de insertar un partido, el script comprueba si el equipo local o el visitante ya tiene un partido en esa misma jornada. Si es así, el segundo se omite con un warning. Esto evita duplicados causados por partidos aplazados o adelantados que DataProject lista en varias pestañas.
+
 El cliente administrativo se encuentra en `lib/supabase/admin.server.ts` y debe ejecutarse exclusivamente en el servidor.
 
 ### 2. Persistencia
@@ -175,9 +179,9 @@ La interfaz utiliza pestañas y es 100% dinámica. Lee exclusivamente las tempor
 
 Las puntuaciones de todas las jornadas se cargan en una sola petición para reducir las solicitudes sucesivas y evitar parpadeos durante la actualización de la interfaz.
 
-**Mercado Rotativo:** El frontend calcula un mercado diario de 14 jugadores (basado en la fecha actual) para fomentar la conexión diaria de los usuarios. Los usuarios pueden ver el valor y los puntos totales de cada jugador y abrir un modal con su rendimiento jornada a jornada.
+**Mercado Rotativo:** El frontend calcula un mercado diario de 14 jugadores (basado en la fecha actual) para fomentar la conexión diaria de los usuarios. La lógica vive en `createDailyFantasyRoster` del servicio `fantasy-team.service.ts`. Los usuarios pueden ver el valor y los puntos totales de cada jugador y abrir un modal con su rendimiento jornada a jornada.
 
-**Alineaciones:** El usuario edita la alineación una vez y el sistema la guarda en todas las jornadas futuras no bloqueadas mediante la RPC `save_lineup`. Si no hay jornadas futuras, se guarda un borrador en `localStorage`.
+**Alineaciones:** El usuario edita la alineación una vez y el sistema la guarda en todas las jornadas futuras no bloqueadas mediante la RPC `save_lineup` (guardado masivo con `Promise.all`). Si no hay jornadas futuras publicadas por DataProject, el frontend guarda un borrador en `localStorage` con la clave `draft_lineup_<teamId>`. La UI muestra feedback visual claro: botón verde "¡Guardado!" si se persiste en BD, botón ámbar "Borrador guardado" si se guarda localmente. Cuando la siguiente ingesta cree la jornada, el borrador se aplicará automáticamente al guardar de nuevo.
 
 ## Flujo de datos de producto
 
@@ -253,6 +257,8 @@ Los límites temporales se calculan en la zona Europe/Madrid y se convierten a U
 
 Las entidades de jornada exponen `startsAt` y `endsAt`. El bloqueo de alineaciones y transferencias es estricto en el backend: las operaciones (RPC) se bloquean instantáneamente si `now() >= starts_at`, independientemente del estado de la UI.
 
+**Jornadas futuras no publicadas:** DataProject publica el calendario de cada jornada de forma progresiva. Cuando una jornada aún no existe en la BD, el frontend la trata como "no programada": bloquea fichajes y guarda la alineación como borrador local. Decisión de diseño: no se inventan fechas falsas para evitar ensuciar la BD con datos incorrectos.
+
 ## Seguridad
 
 - Las claves secretas de Supabase permanecen en el servidor.
@@ -273,3 +279,11 @@ Las fases 1 a 11 están completadas y verificadas:
 - La UI (Login, Dashboard, Fantasy) ha sido refactorizada para operar 100% de forma dinámica, manejar correctamente los estados y bloqueos, y agrupar jornadas de múltiples grupos.
 - La aplicación está desplegada en producción (Vercel) con Supabase Auth.
 - La ingesta y visualización de clasificaciones oficiales (`team_standings`) está implementada.
+
+Fase 12 en progreso:
+- Navegación global (Sidebar/Dashboard) y vista de resultados (`/results`) con partidos y clasificación agrupados por grupo.
+- Mercado diario rotativo de 14 jugadores con cuotas por posición (2/2/4/4/2) y helper puro en `lib/utils/round-label.ts` para etiquetas de jornadas.
+- Modal de estadísticas por jugador (`PlayerStatsModal`) con desglose fantasy y stats reales por jornada.
+- Gestión masiva de alineaciones con borrador local (`localStorage`) cuando no hay jornadas futuras.
+- Limpieza profunda de la BD con re-ingesta completa de las 4 competiciones (266 partidos limpios, sin rondas fantasma).
+- Ingesta blindada: `normalizeGroupName` + escudo anti-duplicados en `ingest-matches.ts`.

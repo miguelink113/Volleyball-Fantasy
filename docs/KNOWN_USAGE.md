@@ -5,7 +5,11 @@ Este documento es la **fuente de la verdad** para el deslop. Si una herramienta 
 ## 1. Framework y Entry Points (Next.js)
 Next.js importa estos archivos dinámicamente, por lo que `ts-prune` los marca como no usados. Son el corazón de la app:
 - `app/page.tsx`, `app/layout.tsx`, `app/globals.css`
-- `app/dashboard/page.tsx`, `app/fantasy/page.tsx`, `app/login/page.tsx`, `app/results/page.tsx`
+- `app/login/page.tsx`
+- `app/(app)/dashboard/page.tsx`
+- `app/(app)/fantasy/page.tsx`
+- `app/(app)/results/page.tsx`
+- `app/(app)/layout.tsx` (layout con Sidebar)
 - `proxy.ts` (Middleware de Supabase para refrescar sesiones)
 - `next.config.ts`, `tsconfig.json`, `postcss.config.mjs`, `eslint.config.mjs`
 - **Todos los archivos `route.ts` dentro de `app/api/`**. Son endpoints HTTP expuestos, aunque ningún archivo TypeScript los importe explícitamente.

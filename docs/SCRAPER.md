@@ -75,6 +75,7 @@ La respuesta contiene los partidos encontrados:
 
 **Soporte multi-grupo:** Si la competición tiene grupos (como la Superliga 2 Masculina y Femenina), el scraper detecta dinámicamente las pestañas de la web (usando los elementos `span.rtsTxt` de Telerik) y asocia cada contenedor de partidos (`div.TabContent_Border`) a su grupo correspondiente. Esto permite reiniciar la numeración de jornadas para cada grupo (Jornada 1 del Grupo A vs Jornada 1 del Grupo B) y evita que los equipos de distintos grupos se mezclen en la ingesta.
 
+> **Aviso de normalización (Fase 12):** DataProject a veces usa el nombre de un patrocinador ("Alcudia", "Egido", "Herce", "Renovak") en la pestaña de la jornada en lugar del nombre real del grupo. El script de ingesta detecta esto (si el nombre no contiene "Superliga", "Grupo" o "Liga Regular") y reasigna el partido al grupo oficial del equipo según la tabla `teams`. Esto previene la creación de rondas fantasma y evita que el mismo equipo juegue dos veces en la misma jornada.
 ---
 
 ### 2. Obtener las estadísticas de un partido

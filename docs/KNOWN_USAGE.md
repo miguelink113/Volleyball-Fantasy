@@ -23,7 +23,9 @@ Son archivos ejecutados manualmente desde la terminal o por tareas programadas (
 - `scripts/ingest/calculate-scores.ts`
 - `scripts/tests/**/*` (Todos los scripts de test, se ejecutan con `npm run test:*`)
 - `scripts/tools/**/*` (Herramientas de diagnóstico manual)
-
+- `scripts/ingest/check-new-matches.ts` (Usado por el workflow de GitHub Actions)
+- `scripts/ingest/calculate-market-values.ts` (Ejecutado tras cada ingesta)
+- 
 ## 3. Falsos Positivos de Knip (Código Vivo Reciente)
 Knip a veces no detecta el uso interno entre servicios o el uso desde scripts CLI.
 - `lib/scraper/fetch-competition-standings.ts` (Usado por `ingest-standings.ts` y `/api/standings/route.ts`).

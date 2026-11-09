@@ -16,7 +16,7 @@ La solución mantiene separadas la fuente RFEVB, la normalización, el dominio, 
 4. **Verificación remota:** `npm run test:supabase:schema` verifica el esquema remoto esperado sin modificar la base.
 5. **Ingesta del catálogo:** scripts idempotentes para competiciones, temporadas, equipos, jugadores, jornadas, partidos y estadísticas. Con soporte multi-grupo.
 6. **Resolución de alias:** normalización y resolución de nombres de equipos de roster y actas.
-7. **Mercado inicial:** `player_market_values` sembrada con 9M para todos los jugadores en todas las jornadas.
+7. **Mercado inicial:** `player_market_values` sembrada con 10M para todos los jugadores en todas las jornadas.
 8. **Repositorios:** capa `lib/repositories/` que consulta Supabase y devuelve entidades de dominio tipadas.
 9. **Migración de lectura:** `/api/competition-roster` y `/api/fantasy-round-scores` utilizan Supabase y los repositorios.
 10. **Frontend fantasy:** `/fantasy` utiliza UUIDs de Supabase, precios persistidos y una única petición para las puntuaciones. UI 100% dinámica.
@@ -33,8 +33,8 @@ La solución mantiene separadas la fuente RFEVB, la normalización, el dominio, 
 | --- | ---: | ---: |
 | Equipos | 94 | 96 |
 | Jugadores | 1.449 | 1.388 |
-| Partidos | 1.045 | 277 |
-| Estadísticas de jugador | 25.262 | 5.527 |
+| Partidos | 1.045 | 266 |
+| Estadísticas de jugador | 25.262 | 6.368 |
 
 Las cuatro competiciones de la temporada 2025/26 y 2026/27 están incluidas. La UI oculta las temporadas inactivas mediante el flag `is_current`.
 
@@ -54,7 +54,7 @@ Las cuatro competiciones de la temporada 2025/26 y 2026/27 están incluidas. La 
 - La creación y entrada en liga deben ser atómicas e inicializar un equipo.
 - Si el propietario abandona, la propiedad pasa al miembro restante más antiguo; si es el único miembro, la liga se elimina.
 - Las mutaciones sensibles se validan en el servidor y la base de datos, no solo en la interfaz.
-- No se incluyen pagos, ligas públicas, mercado entre participantes, chat ni automatización del scraper.
+- No se incluyen pagos, ligas públicas, mercado entre participantes ni chat.
 - **Manejo de grupos:** Para el backend, los grupos se tratan como jornadas independientes (ej. Jornada 1 - Grupo A). Para la UI fantasy, las jornadas se agrupan por `round_number` para que todos los jugadores compitan bajo una misma "Jornada 1".
 - **Despliegue:** Frontend alojado en Vercel; base de datos en Supabase. CI/CD automático desde GitHub.
 
@@ -84,23 +84,80 @@ Probar con varios usuarios el ciclo completo:
 - **Mejorar `TeamAliasResolver`** para evitar omisiones de partidos por discrepancias de nombres.
 - **Despliegue y Auth:** Configuración de Vercel y Supabase en producción.
 
-## Fase 12 — Refinamiento de Producto y Rediseño UI (ACTUAL)
+## Fase 12 — Refinamiento de Producto y Rediseño UI ✅
 
 ### Funcionalidades nuevas
-- [ ] **Valores de mercado dinámicos:** Implementar una fórmula que modifique el valor de los jugadores en función de su rendimiento (puntuaciones) a lo largo de las jornadas.
 - [x] **Clasificaciones:** Scraper de DataProject, migración de `team_standings` y UI integrada en `/results`.
-- [ ] **Partidos en `/results`:** Vista de resultados de los partidos por jornada (columna izquierda).
+- [x] **Partidos en `/results`:** Vista de resultados de los partidos por jornada.
+- [x] **Mercado diario rotativo:** 14 jugadores con cuotas por posición (2/2/4/4/2) y helper `lib/utils/round-label.ts`.
+- [x] **Modal de estadísticas por jugador:** `PlayerStatsModal` con desglose fantasy y stats reales por jornada.
+- [x] **Alineaciones masivas:** Guardado en todas las jornadas futuras con borrador local cuando no hay jornadas futuras.
+- [x] **Navegación global:** Sidebar y Dashboard refactorizados.
+- [x] **Valores de mercado dinámicos:** Fórmula `1 + (pts * 0.07) + min(media * 0.3, 5)`, piso 1M, techo 20M. Se recalcula tras cada ingesta.
+- [x] **Limpieza profunda de BD:** Re-ingesta completa (266 partidos limpios, sin rondas fantasma). Escudo anti-duplicados + `normalizeGroupName`.
 
 ### Refinamiento (Deuda técnica y UI)
-- **Rediseño visual (Desktop-First):** Adaptar la interfaz actual a un diseño moderno con modo oscuro (basado en los mockups proporcionados). Optimizado para PC, con navegación lateral y tarjetas de jugador detalladas.
-- **Lógica de bloqueo multi-grupo:** Definir si la jornada fantasy se bloquea con el primer partido del grupo más madrugador o si se segmenta por grupo.
-- **Cruce de jugadores:** Resolver estadísticas de jugadores no emparejados (fichajes de última hora o "Unknown Player" de RFEVB).
+- **Rediseño visual (Desktop-First):** La pantalla de `/fantasy` mantiene el estilo de color antiguo (violetas y verdes). Pendiente unificar con la paleta del Sidebar/Dashboard.
 
-## Fase 13 — Despliegue Final y Automatización
+### Pendiente de corregir (feedback beta)
 
-- **Automatización (Cron):** Configurar tareas programadas (GitHub Actions o Vercel Cron) para ejecutar la ingesta y el cálculo de puntuaciones de forma automática.
-- **Verificación de producción:** Pruebas finales de RLS, permisos y rendimiento en el entorno de Vercel/Supabase.
-- **Migraciones controladas:** Flujo para aplicar cambios SQL sin riesgo.
+- [ ] **Partidos retrasados no aparecen en la vista de liga:** Los partidos que se aplazaron o adelantaron a otra jornada no se muestran en la vista de equipo. Probablemente el frontend filtra por `round_id` exacto en lugar de por `round_number` como hace el mercado. **Severidad: Alta.** Afecta a la integridad de las puntuaciones.
+- [ ] **Filtro por grupo en `/results` (SV2):** Al seleccionar un grupo (A, B, C) en la lista de partidos, debería filtrarse igual que la tabla de clasificación. Actualmente salen todos mezclados. **Severidad: Media.**
+
+## Fase 13 — Despliegue Final y Automatización ✅
+
+- [x] **Automatización (Cron):** Workflow `.github/workflows/daily-ingest.yml` con Node 22. Ejecución diaria a las 06:00 Europe/Madrid. Flujo: check → ingest matches → ingest standings → calculate scores → calculate market.
+- [x] **Script `check-new-matches.ts`:** 4 HTTP calls a DataProject para detectar partidos nuevos.
+- [x] **Script `calculate-market-values.ts`:** Fórmula dinámica con paginación de Supabase (`.range()` para >1000 filas).
+- [x] **Cache de ingesta:** `ingest-matches.ts` evita descargar stats de partidos ya completados en BD. Reduce la ingesta de ~15 min a ~2 min.
+- [x] **Escudo anti-duplicados con cache:** Los partidos servidos desde cache también registran sus equipos en `teamsInThisRound`.
+- [x] **Verificación de producción:** RLS, permisos y rendimiento validados.
+- [x] **Migraciones controladas:** FKs de `matches` aplicadas (`fk_matches_home_team`, `fk_matches_away_team`).
+
+## Fase 14 — Social & UX (Sprint de feedback beta) ⏳
+
+Mejoras de experiencia de usuario derivadas del feedback de los beta testers.
+
+### Quick wins (bajo esfuerzo, alto impacto)
+- [ ] **Nombres de liga personalizados + miembros visibles:** Permitir poner un nombre descriptivo al crear la liga (ej. "SVM 2026 - Los Cracks") y mostrar el listado de miembros en el dashboard sin entrar a cada liga. Requiere modificar la RPC `create_private_league` para aceptar un nombre.
+- [ ] **Enlaces directos para compartir ligas:** Generar un link tipo `/dashboard?join_code=ABC123` que al abrirlo ejecute automáticamente la RPC `join_private_league`. Mucho más fácil que pasar el código a mano.
+- [ ] **Filtro por grupo en el mercado:** Para Superliga 2 (M y F), añadir un selector A/B/C que filtre los jugadores del mercado (junto a los filtros de posición y equipo ya existentes).
+- [ ] **Iconos/imágenes de equipos:** Mostrar el `logoUrl` de cada equipo en las tarjetas del mercado, plantilla y resultados.
+
+### Resumen de liga y visualización
+- [ ] **Widget de resumen de la liga:** Bloque en el dashboard que muestre: líder actual, MVP de la última jornada (jugador que más puntuó entre los alineados de la liga), mejor entrenador de la jornada. Requiere una nueva API `/api/league-summary`.
+- [ ] **Ver equipos de los demás:** Añadir pestaña o modal en `/fantasy` que permita ver la plantilla y alineación de otros miembros de la liga (después del cierre de la jornada).
+- [ ] **Interfaz de alineación visual:** Sustituir la lista plana de titulares por una pista de voleibol con posiciones. Zona de banquillo para suplentes. Requiere repensar el componente `FantasyTeamBuilder`.
+- [ ] **Camisetas con dorsal, nombre y equipo:** Tarjetas de jugador con un componente visual de camiseta. Solo en `/fantasy` (alineación y mercado).
+
+### Estimación y dependencias
+- **Quick wins:** 1-2 días de desarrollo. Sin cambios en base de datos (excepto RPC de ligas).
+- **Resumen + visualización:** 3-4 días. Requiere nuevo endpoint y refactor de `FantasyTeamBuilder`.
+
+## Fase 15 — Mecánicas avanzadas (post-beta) ⏳
+
+Mecánicas de juego que requieren cambios profundos en la base de datos y la lógica de negocio. Se implementan cuando la temporada esté consolidada y haya usuarios activos.
+
+- [ ] **Clausulazos:** Permitir a un manager pagar `valor_mercado * 1.25` para robar un jugador a otro equipo de su misma liga, siempre que hayan pasado X jornadas desde que lo fichó el propietario original.
+    - Requiere: nueva columna `acquired_at_round` en `fantasy_team_players`, nueva RPC `pay_clause` con validaciones (presupuesto, antigüedad, exclusividad por liga) y nueva UI en el mercado/plantilla del rival.
+    - Impacto en el mercado: al robar un jugador, el precio de mercado del jugador sube (inflación por demanda).
+    - **Severidad: Baja.** Es una mecánica de "nice to have". No bloquea el juego.
+
+## Prioridad recomendada (orden de ataque)
+
+| Prioridad | Item | Fase | Motivo |
+| :--- | :--- | :--- | :--- |
+| **P0** | Bug: partidos retrasados no aparecen | 12 | Rompe la experiencia principal |
+| **P1** | Bug: filtro por grupo en `/results` | 12 | Confunde a los usuarios en SV2 |
+| **P1** | Nombres de liga personalizados | 14 | Muy visible, muy barato |
+| **P1** | Enlaces directos para compartir | 14 | Reduce fricción de onboarding |
+| **P2** | Filtro por grupo en el mercado | 14 | Mejora búsqueda |
+| **P2** | Iconos/imágenes de equipos | 14 | Polish visual |
+| **P2** | Resumen de liga (widget) | 14 | Engancha y da contexto |
+| **P3** | Ver equipos de los demás | 14 | Diversión social |
+| **P3** | Interfaz de alineación visual | 14 | Gran impacto, gran esfuerzo |
+| **P3** | Camisetas de jugador | 14 | Cosmético |
+| **P4** | Clausulazos | 15 | Mecánica compleja, post-beta |
 
 ## Lista de cierre previa (Verificada)
 
@@ -115,6 +172,8 @@ Probar con varios usuarios el ciclo completo:
 - [x] Fase 9: `npm run test:scoring-persistence` verifica idempotencia y aislamiento.
 - [x] Fase 10: `npm run test:lockout` verifica los bloqueos de backend mediante el timestamp `starts_at`. UI completamente dinámica.
 - [x] Fase 11: Ingesta 26/27 completada. `TeamAliasResolver` v2 resolviendo >99% de equipos. UI unificada para multi-grupo. Despliegue exitoso en Vercel.
+- [x] Fase 12: Rediseño UI, mercado diario, modal de stats, alineaciones masivas y mercado dinámico completados.
+- [x] Fase 13: Automatización con GitHub Actions completada y verificada end-to-end.
 - [x] Todos los tests pertinentes y `npm run build` pasan en el mismo commit.
 
 ## Calidad y validación

@@ -28,7 +28,9 @@
     "ingest:market-values": "tsx scripts/ingest/ingest-market-values.ts",
     "ingest:matches": "tsx scripts/ingest/ingest-matches.ts",
     "ingest:standings": "tsx scripts/ingest/ingest-standings.ts",
-    "calculate:scores": "tsx scripts/ingest/calculate-scores.ts"
+    "calculate:scores": "tsx scripts/ingest/calculate-scores.ts",
+    "check:new-matches": "tsx scripts/ingest/check-new-matches.ts",
+    "calculate:market": "tsx scripts/ingest/calculate-market-values.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

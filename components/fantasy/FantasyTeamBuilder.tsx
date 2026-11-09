@@ -16,7 +16,6 @@ type SaveStatus = "idle" | "saving" | "saved" | "draft";
 export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
     const supabase = createClient();
 
-    // Estados de carga y error
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -24,10 +23,8 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
     const [selectedPlayer, setSelectedPlayer] = useState<FantasyDemoPlayer | null>(null);
     const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
 
-    // Pestaña activa
     const [activeTab, setActiveTab] = useState<"lineup" | "market" | "ranking">("lineup");
 
-    // Contexto
     const [teamId, setTeamId] = useState<string>("");
     const [seasonUuid, setSeasonUuid] = useState<string>("");
     const [competitionRfevbId, setCompetitionRfevbId] = useState<number | null>(null);
@@ -35,7 +32,6 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
     const [seasonName, setSeasonName] = useState<string>("");
     const [selectedRound, setSelectedRound] = useState<number>(1);
 
-    // Datos
     const [catalogPlayers, setCatalogPlayers] = useState<FantasyDemoPlayer[]>([]);
     const [rosterIds, setRosterIds] = useState<string[]>([]);
     const [lineupIds, setLineupIds] = useState<string[]>([]);
@@ -44,13 +40,12 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
     const [leagueCode, setLeagueCode] = useState<string>("");
     const [showInvite, setShowInvite] = useState(false);
 
-    // NUEVOS ESTADOS PARA EL MERCADO
     const [searchQuery, setSearchQuery] = useState("");
     const [filterPosition, setFilterPosition] = useState<string>("ALL");
     const [filterTeam, setFilterTeam] = useState<string>("ALL");
     const [playerTotalScores, setPlayerTotalScores] = useState<Record<string, number>>({});
+    const [playerMatchesPlayed, setPlayerMatchesPlayed] = useState<Record<string, number>>({});
 
-    // Jornadas
     const [rounds, setRounds] = useState<Array<{ id: string, number: number, label: string, isLocked: boolean, startsAt: string, endsAt: string }>>([]);
     const [myRealScores, setMyRealScores] = useState<Record<number, number>>({});
     const [ranking, setRanking] = useState<any[]>([]);
@@ -313,13 +308,11 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
         setActionLoading(false);
     };
 
-    // Helpers
     const playerMap = useMemo(() => new Map(catalogPlayers.map((p) => [p.id, p])), [catalogPlayers]);
     const rosterPlayers = useMemo(() => rosterIds.flatMap(id => playerMap.get(id) ? [playerMap.get(id)!] : []), [playerMap, rosterIds]);
     const lineupPlayers = useMemo(() => lineupIds.flatMap(id => playerMap.get(id) ? [playerMap.get(id)!] : []), [lineupIds, playerMap]);
     const lineupValidation = useMemo(() => validateLineup(lineupIds, rosterPlayers), [lineupIds, rosterPlayers]);
 
-    // Lógica de mercado diario
     const marketPlayers = useMemo(() => {
         if (catalogPlayers.length === 0) return [];
 
@@ -360,7 +353,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
         return dailyMarket;
     }, [catalogPlayers]);
 
-    // Cargar puntos TOTALES
+    // Cargar puntos TOTALES y partidos jugados
     useEffect(() => {
         if (!competitionRfevbId || !seasonRfevbId) return;
 
@@ -372,10 +365,13 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
 
                 if (payload.success && isMounted) {
                     const totals: Record<string, number> = {};
+                    const matchCounts: Record<string, number> = {};
                     payload.scores.forEach((s: any) => {
                         totals[s.playerId] = (totals[s.playerId] || 0) + s.score;
+                        matchCounts[s.playerId] = (matchCounts[s.playerId] || 0) + (s.matchesPlayed || 0);
                     });
                     setPlayerTotalScores(totals);
+                    setPlayerMatchesPlayed(matchCounts);
                 }
             } catch (e) {
                 console.error("Error cargando puntos totales", e);
@@ -480,6 +476,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                                 {rosterPlayers.map(p => {
                                     const isTitular = lineupIds.includes(p.id);
                                     const points = playerTotalScores[p.id];
+                                    const matches = playerMatchesPlayed[p.id] ?? 0;
 
                                     return (
                                         <div key={p.id} onClick={() => setSelectedPlayer(p)} className={`flex justify-between items-center p-3 rounded border cursor-pointer hover:border-slate-300 transition-colors ${isTitular ? 'bg-violet-50 border-violet-200' : 'bg-slate-50'}`}>
@@ -489,7 +486,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                                                 <div className="mt-1">
                                                     {points !== undefined ? (
                                                         <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
-                                                            {points} pts totales
+                                                            {points} pts · {matches} PJ
                                                         </span>
                                                     ) : (
                                                         <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-400 ring-1 ring-inset ring-slate-500/10">
@@ -520,6 +517,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                             <div className="space-y-2 mb-4 flex-1">
                                 {lineupPlayers.map(p => {
                                     const points = playerTotalScores[p.id];
+                                    const matches = playerMatchesPlayed[p.id] ?? 0;
                                     return (
                                         <div key={p.id} onClick={() => setSelectedPlayer(p)} className="flex justify-between p-3 bg-slate-50 rounded border border-slate-100 cursor-pointer hover:border-slate-300 transition-colors">
                                             <div>
@@ -529,7 +527,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                                             <div className="text-right">
                                                 <p className="font-bold text-emerald-600 text-sm">{p.price}M</p>
                                                 {points !== undefined ? (
-                                                    <span className="text-xs font-semibold text-blue-600">{points} pts tot.</span>
+                                                    <span className="text-xs font-semibold text-blue-600">{points} pts · {matches} PJ</span>
                                                 ) : (
                                                     <span className="text-xs text-slate-400">Sin pts</span>
                                                 )}
@@ -546,7 +544,6 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                                 </div>
                             )}
 
-                            {/* Banner de estado del guardado, AHORA JUNTO AL BOTÓN */}
                             {!hasFutureRounds ? (
                                 <div className="bg-amber-50 border border-amber-200 text-amber-700 px-3 py-2 rounded-md flex items-center gap-2 text-xs font-medium mb-3">
                                     <AlertCircle className="w-4 h-4 shrink-0" />
@@ -559,9 +556,8 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                                 </div>
                             )}
 
-                            {/* Mensajes de éxito/error, justo encima del botón */}
                             {successMsg && (
-                                <div className="bg-emerald-100 border border-emerald-200 text-emerald-800 px-3 py-2 rounded-md flex items-center gap-2 text-sm font-medium mb-3 animate-in fade-in">
+                                <div className="bg-emerald-100 border border-emerald-200 text-emerald-800 px-3 py-2 rounded-md flex items-center gap-2 text-sm font-medium mb-3">
                                     <CheckCircle2 className="w-4 h-4 shrink-0" />
                                     <span>{successMsg}</span>
                                 </div>
@@ -612,7 +608,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                         <div>
                             <h3 className="font-bold text-lg text-slate-800">Mercado de Fichajes</h3>
-                            <p className="text-xs text-slate-500 mt-1">Mostrando puntuaciones totales de la temporada</p>
+                            <p className="text-xs text-slate-500 mt-1">Precios dinámicos basados en rendimiento de la temporada</p>
                         </div>
 
                         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
@@ -655,6 +651,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                         {filteredPlayers.map(p => {
                             const isOwned = rosterIds.includes(p.id);
                             const points = playerTotalScores[p.id];
+                            const matches = playerMatchesPlayed[p.id] ?? 0;
 
                             return (
                                 <div
@@ -668,7 +665,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                                         <div className="mt-1">
                                             {points !== undefined ? (
                                                 <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
-                                                    {points} pts totales
+                                                    {points} pts · {matches} PJ
                                                 </span>
                                             ) : (
                                                 <span className="inline-flex items-center rounded-md bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-400 ring-1 ring-inset ring-slate-500/10">

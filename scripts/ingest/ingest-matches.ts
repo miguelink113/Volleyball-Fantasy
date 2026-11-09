@@ -23,12 +23,20 @@ import {
 
 const MADRID_TZ = "Europe/Madrid";
 
+// Tipo para el cache de stats. Usamos discriminante `source` para evitar
+// mezclar el literal "from_db" con el objeto MatchStats en la misma unión.
+type CachedStats =
+    | { source: "db" }
+    | { source: "fetched"; data: Awaited<ReturnType<typeof fetchMatchStatistics>> }
+    | { source: "failed" };
+
 // ─────────────────────────── args ───────────────────────────
 
 interface Args {
     competitionRfevbId: string;
     seasonRfevbId: string;
     round?: number;
+    forceRefresh?: boolean;
 }
 
 function parseArgs(): Args {
@@ -42,10 +50,11 @@ function parseArgs(): Args {
     const competitionRfevbId = get("competition");
     const seasonRfevbId = get("season");
     const roundRaw = get("round");
+    const forceRefresh = args.includes("--force-refresh");
 
     if (!competitionRfevbId || !seasonRfevbId) {
         console.error(
-            "Uso: npm run ingest:matches -- --competition=152 --season=186 [--round=1]"
+            "Uso: npm run ingest:matches -- --competition=152 --season=186 [--round=1] [--force-refresh]"
         );
         process.exit(1);
     }
@@ -60,7 +69,7 @@ function parseArgs(): Args {
         round = n;
     }
 
-    return { competitionRfevbId, seasonRfevbId, round };
+    return { competitionRfevbId, seasonRfevbId, round, forceRefresh };
 }
 
 // ─────────────────────── timezone helpers ───────────────────────
@@ -226,12 +235,10 @@ function normalizeGroupName(
     const raw = rawGroupName?.trim();
     if (!raw) return "General";
 
-    // Si el nombre contiene palabras clave de grupo válido, lo aceptamos tal cual.
     if (/superliga|grupo|liga\s+regular/i.test(raw)) {
         return raw;
     }
 
-    // Si no, intentamos deducir el grupo desde el roster de equipos.
     const homeNorm = normalizePersonName(homeTeamName);
     const awayNorm = normalizePersonName(awayTeamName);
 
@@ -239,7 +246,6 @@ function normalizeGroupName(
         if (!t.group_name) continue;
         const teamNorm = normalizePersonName(t.name);
 
-        // Coincidencia parcial por inclusión (en cualquier dirección)
         const matchesHome =
             homeNorm.length > 3 &&
             (homeNorm.includes(teamNorm) || teamNorm.includes(homeNorm));
@@ -364,7 +370,8 @@ async function main() {
 
     console.log(
         `→ Ingesta de partidos: competición=${args.competitionRfevbId} temporada=${args.seasonRfevbId}` +
-        (args.round ? ` (solo jornada ${args.round})` : "")
+        (args.round ? ` (solo jornada ${args.round})` : "") +
+        (args.forceRefresh ? ` [FORCE REFRESH]` : "")
     );
 
     const supabase = createAdminClient();
@@ -393,7 +400,6 @@ async function main() {
         );
     }
 
-    // Cargamos todos los equipos de la temporada CON su group_name
     const { data: teamsData } = await supabase
         .from("teams")
         .select("id, name, group_name")
@@ -413,6 +419,41 @@ async function main() {
         `  ${rosterRows.length} jugadores en ${rosterByTeamId.size} equipos`
     );
 
+    // ══════════════════════════════════════════════════════════════
+    // CACHE: partidos ya en BD + si tienen stats
+    // ══════════════════════════════════════════════════════════════
+    console.log("→ Cargando partidos existentes en BD…");
+    const { data: existingMatches } = await supabase
+        .from("matches")
+        .select("id, rfevb_match_id, status")
+        .eq("season_id", seasonId);
+
+    const existingMatchMap = new Map<string, { id: string; status: string }>();
+    for (const em of existingMatches || []) {
+        existingMatchMap.set(em.rfevb_match_id, { id: em.id, status: em.status });
+    }
+
+    const existingMatchIds = (existingMatches || []).map(em => em.id);
+    let matchesWithStats = new Set<string>();
+
+    if (existingMatchIds.length > 0) {
+        const { data: existingStats } = await supabase
+            .from("match_player_stats")
+            .select("match_id")
+            .in("match_id", existingMatchIds);
+
+        for (const st of existingStats || []) {
+            matchesWithStats.add(st.match_id);
+        }
+    }
+
+    console.log(
+        `  ${existingMatchMap.size} partidos en BD (${matchesWithStats.size} con stats)`
+    );
+
+    // ─────────────────────────────────────────────
+    // Descargar partidos del listado principal
+    // ─────────────────────────────────────────────
     console.log("→ Descargando partidos desde RFEVB…");
     const matches = await fetchMatches(
         Number(args.competitionRfevbId),
@@ -424,12 +465,29 @@ async function main() {
     }
 
     // ─────────────────────────────────────────────
-    // PRE-PASO: Descargar stats en caché para leer la jornada oficial
+    // PRE-PASO: Descargar stats (con cache)
     // ─────────────────────────────────────────────
-    console.log("→ Descargando estadísticas de partidos (pre-paso para fechas reales)...");
-    const statsCache = new Map<string, Awaited<ReturnType<typeof fetchMatchStatistics>> | null>();
+    console.log("→ Descargando estadísticas de partidos (con cache)…");
+    const statsCache = new Map<string, CachedStats>();
+
+    let fetchedCount = 0;
+    let cachedCount = 0;
 
     for (const m of matches) {
+        const existing = existingMatchMap.get(m.matchId);
+
+        const canUseCache =
+            !args.forceRefresh &&
+            existing !== undefined &&
+            existing.status === "COMPLETED" &&
+            matchesWithStats.has(existing.id);
+
+        if (canUseCache) {
+            statsCache.set(m.matchId, { source: "db" });
+            cachedCount++;
+            continue;
+        }
+
         try {
             const stats = await fetchMatchStatistics(
                 m.matchId,
@@ -437,23 +495,25 @@ async function main() {
                 m.categoryId,
                 m.seasonId
             );
-            statsCache.set(m.matchId, stats);
+            statsCache.set(m.matchId, { source: "fetched", data: stats });
+            fetchedCount++;
         } catch (err) {
-            statsCache.set(m.matchId, null);
+            statsCache.set(m.matchId, { source: "failed" });
         }
     }
 
+    console.log(`  ✓ Desde BD (cache): ${cachedCount} partidos`);
+    console.log(`  ⬇ Descargados de RFEVB: ${fetchedCount} partidos`);
+
     // Agrupar por Grupo + Jornada OFICIAL
-    // 🔧 CAMBIO: Usamos normalizeGroupName para evitar que "Alcudia" o "Egido"
-    // se traten como grupos distintos. Si el groupName no parece válido,
-    // usamos el group_name oficial del equipo desde la tabla `teams`.
     const roundMap = new Map<string, ScrapedMatch[]>();
     for (const m of matches) {
-        const stats = statsCache.get(m.matchId);
+        const cached = statsCache.get(m.matchId);
+        const statsData = cached?.source === "fetched" ? cached.data : null;
 
-        const effectiveRound = stats?.officialRound ?? m.round;
+        const effectiveRound = statsData?.officialRound ?? m.round;
         const effectiveGroup = normalizeGroupName(
-            m.groupName ?? stats?.officialGroup,
+            m.groupName ?? statsData?.officialGroup,
             m.homeTeam,
             m.awayTeam,
             teamsList
@@ -480,6 +540,7 @@ async function main() {
     const aliasCtx = { competitionId, seasonId };
 
     let totalMatchesPersisted = 0;
+    let totalMatchesSkippedCached = 0;
     let totalStatsPersisted = 0;
     let totalSkippedNoTeam = 0;
     let totalSkippedNoStats = 0;
@@ -573,6 +634,34 @@ async function main() {
         const teamsInThisRound = new Set<string>();
 
         for (const scraped of roundMatches) {
+            const cached = statsCache.get(scraped.matchId);
+
+            // Si el partido ya está en BD con stats, saltarlo entero
+            // Si el partido ya está en BD con stats, saltarlo entero
+            // PERO primero resolver equipos y registrarlos en el escudo anti-duplicados
+            if (cached?.source === "db") {
+                const homeTeamId = resolvedByName.get(scraped.homeTeam) ?? null;
+                const awayTeamId = resolvedByName.get(scraped.awayTeam) ?? null;
+
+                if (
+                    homeTeamId && awayTeamId &&
+                    (teamsInThisRound.has(homeTeamId) || teamsInThisRound.has(awayTeamId))
+                ) {
+                    console.warn(
+                        `  ⚠ Conflicto (cache): "${scraped.homeTeam}" o "${scraped.awayTeam}" ya tiene un partido en la Jornada ${roundNumber}. Partido omitido.`
+                    );
+                    totalSkippedDuplicateTeam++;
+                    continue;
+                }
+
+                if (homeTeamId) teamsInThisRound.add(homeTeamId);
+                if (awayTeamId) teamsInThisRound.add(awayTeamId);
+
+                totalMatchesSkippedCached++;
+                expectedPersistedMatchIds.add(scraped.matchId);
+                continue;
+            }
+
             const homeTeamId = resolvedByName.get(scraped.homeTeam) ?? null;
             const awayTeamId = resolvedByName.get(scraped.awayTeam) ?? null;
 
@@ -619,8 +708,7 @@ async function main() {
                     .is("group_name", null);
             }
 
-            const statsData = statsCache.get(scraped.matchId) ?? null;
-
+            const statsData = cached?.source === "fetched" ? cached.data : null;
             const matchRow = {
                 competition_id: competitionId,
                 season_id: seasonId,
@@ -819,10 +907,8 @@ async function main() {
     console.log(`Competición RFEVB:    ${args.competitionRfevbId}`);
     console.log(`Temporada RFEVB:      ${args.seasonRfevbId}`);
     console.log(`Partidos en RFEVB:    ${matches.length}`);
-    console.log(
-        `Partidos intentados:  ${expectedPersistedMatchIds.size} ` +
-        `(esta ejecución: ${totalMatchesPersisted})`
-    );
+    console.log(`  Desde BD (cache):   ${totalMatchesSkippedCached}`);
+    console.log(`  Desde RFEVB:        ${totalMatchesPersisted}`);
     console.log(
         `Partidos en Supabase: ${persistedIds.size} (acumulado de la temporada)`
     );

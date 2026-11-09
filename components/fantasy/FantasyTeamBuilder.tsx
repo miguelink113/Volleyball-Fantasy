@@ -2,19 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import {
-    createDailyFantasyRoster,
-    validateLineup,
-    type FantasyDemoPlayer,
-} from "@/lib/services/fantasy/fantasy-team.service";
+import { validateLineup, type FantasyDemoPlayer } from "@/lib/services/fantasy/fantasy-team.service";
 import type { PlayerPosition } from "@/domain/player/player.types";
 import { PlayerStatsModal } from "./PlayerStatsModal";
-import { Copy, UserPlus, Search, Lock, CheckCircle2, AlertCircle } from "lucide-react";
-import { getRoundLabel } from "@/lib/utils/round-label";
+import { Copy, UserPlus, Search, Lock, CheckCircle2, AlertCircle, Save } from "lucide-react";
 
 function displayPosition(position: PlayerPosition): string {
     return position === "unknown" ? "DESCONOCIDO" : position;
 }
+
+type SaveStatus = "idle" | "saving" | "saved" | "draft";
 
 export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
     const supabase = createClient();
@@ -25,6 +22,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
     const [error, setError] = useState<string | null>(null);
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
     const [selectedPlayer, setSelectedPlayer] = useState<FantasyDemoPlayer | null>(null);
+    const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
 
     // Pestaña activa
     const [activeTab, setActiveTab] = useState<"lineup" | "market" | "ranking">("lineup");
@@ -50,8 +48,6 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
     const [searchQuery, setSearchQuery] = useState("");
     const [filterPosition, setFilterPosition] = useState<string>("ALL");
     const [filterTeam, setFilterTeam] = useState<string>("ALL");
-
-    // Estado para los puntos totales de la temporada
     const [playerTotalScores, setPlayerTotalScores] = useState<Record<string, number>>({});
 
     // Jornadas
@@ -63,7 +59,6 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
         setLoading(true);
         setError(null);
         try {
-            // 1. Cargar equipo y contexto
             const teamRes = await fetch(`/api/fantasy-team?league_id=${leagueId}`);
             const teamPayload = await teamRes.json();
             if (!teamRes.ok || !teamPayload.success) throw new Error(teamPayload.error || "Error cargando equipo");
@@ -83,7 +78,6 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
             setBudget(teamPayload.team.budget);
             setTeamName(teamPayload.team.name);
 
-            // Limpieza de alineación inicial
             const activeIds = teamPayload.activePlayerIds;
             const loadedLineup = teamPayload.lineupPlayerIds || [];
             const cleanLineup = loadedLineup.filter((id: string) => activeIds.includes(id));
@@ -91,7 +85,6 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
             setRosterIds(activeIds);
             setLineupIds(cleanLineup);
 
-            // 2. Cargar catálogo de jugadores
             const rosterRes = await fetch(`/api/competition-roster?competition=${teamPayload.competition_rfevb_id}`);
             const rosterPayload = await rosterRes.json();
             if (!rosterRes.ok || !rosterPayload.success) throw new Error("Error cargando el mercado");
@@ -110,7 +103,6 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
 
             setCatalogPlayers(allPlayers);
 
-            // 3. Cargar puntuaciones reales y ranking
             const [scoresRes, rankRes] = await Promise.all([
                 fetch(`/api/league-scores?league_id=${leagueId}`),
                 fetch(`/api/league-ranking?league_id=${leagueId}`)
@@ -121,7 +113,6 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
             const rankPayload = await rankRes.json();
             if (rankPayload.success) setRanking(rankPayload.ranking);
 
-            // 4. Cargar jornadas
             const { data: dbRounds } = await supabase
                 .from("rounds")
                 .select("id, round_number, starts_at, ends_at")
@@ -152,7 +143,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                     return {
                         id: r.id,
                         number: r.round_number,
-                        label: getRoundLabel(r.round_number),
+                        label: r.round_number <= 22 ? `Jornada ${r.round_number}` : r.round_number === 23 ? "Cuartos" : r.round_number === 24 ? "Semis" : "Final",
                         isLocked,
                         startsAt: r.starts_at,
                         endsAt: r.ends_at
@@ -161,13 +152,11 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
 
             setRounds(formattedRounds);
 
-            // Seleccionamos la primera jornada futura por defecto, o la última jugada si no hay futuras
             if (formattedRounds.length > 0) {
                 const firstOpen = formattedRounds.find(r => !r.isLocked);
                 setSelectedRound(firstOpen ? firstOpen.number : formattedRounds[formattedRounds.length - 1].number);
             }
 
-            // Si no hay jornadas futuras, intentamos recuperar el borrador local
             const futureRounds = formattedRounds.filter(r => !r.isLocked);
             if (futureRounds.length === 0) {
                 const savedDraft = localStorage.getItem(`draft_lineup_${teamPayload.team.id}`);
@@ -175,7 +164,10 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                     try {
                         const parsed = JSON.parse(savedDraft);
                         const validDraft = parsed.filter((id: string) => activeIds.includes(id));
-                        if (validDraft.length > 0) setLineupIds(validDraft);
+                        if (validDraft.length > 0) {
+                            setLineupIds(validDraft);
+                            setSaveStatus("draft");
+                        }
                     } catch (e) {
                         console.error("Error parseando borrador local", e);
                     }
@@ -193,14 +185,13 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
 
     useEffect(() => {
         if (successMsg) {
-            const timer = setTimeout(() => setSuccessMsg(null), 3000);
+            const timer = setTimeout(() => setSuccessMsg(null), 4000);
             return () => clearTimeout(timer);
         }
     }, [successMsg]);
 
     const currentRoundObj = rounds.find(r => r.number === selectedRound);
 
-    // Cargar la alineación histórica (solo si la jornada está bloqueada)
     useEffect(() => {
         if (!currentRoundObj || !teamId || !currentRoundObj.isLocked) return;
 
@@ -247,6 +238,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
         }
 
         setActionLoading(true);
+        setSaveStatus("saving");
         setError(null);
         setSuccessMsg(null);
 
@@ -254,14 +246,13 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
             const futureRounds = rounds.filter(r => !r.isLocked);
 
             if (futureRounds.length === 0) {
-                // Guardado local si no hay jornadas futuras programadas
                 localStorage.setItem(`draft_lineup_${teamId}`, JSON.stringify(lineupIds));
-                setSuccessMsg("No hay jornadas futuras programadas. Tu alineación se ha guardado temporalmente y se aplicará cuando se cree la próxima jornada.");
+                setSuccessMsg("Borrador guardado. Se aplicará automáticamente cuando se habilite la próxima jornada.");
+                setSaveStatus("draft");
                 setActionLoading(false);
                 return;
             }
 
-            // Guardamos en todas las jornadas futuras a la vez
             const promises = futureRounds.map(r =>
                 supabase.rpc("save_lineup", {
                     p_fantasy_team_id: teamId,
@@ -278,24 +269,27 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
             }
 
             localStorage.removeItem(`draft_lineup_${teamId}`);
-            setSuccessMsg("Alineación guardada correctamente para todas las jornadas futuras.");
+            setSuccessMsg(`Alineación guardada para ${futureRounds.length} jornada${futureRounds.length > 1 ? 's' : ''} futura${futureRounds.length > 1 ? 's' : ''}.`);
+            setSaveStatus("saved");
 
             const rankRes = await fetch(`/api/league-ranking?league_id=${leagueId}`);
             const rankPayload = await rankRes.json();
             if (rankPayload.success) setRanking(rankPayload.ranking);
+
+            setTimeout(() => setSaveStatus("idle"), 3000);
         } catch (err: any) {
             setError(err.message || "Error al guardar la alineación.");
+            setSaveStatus("idle");
         } finally {
             setActionLoading(false);
         }
     };
 
     const handleTransfer = async (playerId: string, type: "BUY" | "SELL") => {
-        // Intentamos buscar la próxima jornada disponible. Si no hay, usamos la última.
-        const targetRound = rounds.find(r => !r.isLocked) || rounds[rounds.length - 1];
+        const nextRound = rounds.find(r => !r.isLocked);
 
-        if (!targetRound) {
-            setError("No hay jornadas programadas para poder fichar.");
+        if (!nextRound) {
+            setError("Los fichajes están cerrados hasta que se habilite la próxima jornada.");
             return;
         }
 
@@ -306,12 +300,12 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
         const { error: rpcError } = await supabase.rpc("transfer_player", {
             p_fantasy_team_id: teamId,
             p_player_id: playerId,
-            p_round_id: targetRound.id,
+            p_round_id: nextRound.id,
             p_type: type,
         });
 
         if (rpcError) {
-            setError(rpcError.message); // Si el backend dice "Jornada bloqueada", lo mostramos aquí
+            setError(rpcError.message);
         } else {
             setSuccessMsg(type === "BUY" ? "Jugador fichado correctamente." : "Jugador vendido correctamente.");
             await loadData();
@@ -326,12 +320,47 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
     const lineupValidation = useMemo(() => validateLineup(lineupIds, rosterPlayers), [lineupIds, rosterPlayers]);
 
     // Lógica de mercado diario
-    const marketPlayers = useMemo(
-        () => createDailyFantasyRoster(catalogPlayers).players,
-        [catalogPlayers]
-    );
+    const marketPlayers = useMemo(() => {
+        if (catalogPlayers.length === 0) return [];
 
-    // Cargar puntos TOTALES de la temporada
+        const todaySeed = new Date().toISOString().split('T')[0];
+        const seededRandom = (seed: string) => {
+            let h = 0xdeadbeef;
+            for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 2654435761);
+            return () => {
+                h = Math.imul(h ^ (h >>> 16), 2246822507);
+                h = Math.imul(h ^ (h >>> 13), 3266489909);
+                return ((h ^= h >>> 16) >>> 0) / 4294967296;
+            };
+        };
+
+        const marketQuota: Record<string, number> = {
+            setter: 2,
+            opposite: 2,
+            outside: 4,
+            middle: 4,
+            libero: 2
+        };
+
+        const dailyMarket: FantasyDemoPlayer[] = [];
+
+        Object.entries(marketQuota).forEach(([pos, count]) => {
+            const posPlayers = catalogPlayers.filter((p: FantasyDemoPlayer) => p.position === pos);
+            const random = seededRandom(todaySeed + pos);
+
+            const shuffled = [...posPlayers];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+
+            dailyMarket.push(...shuffled.slice(0, count));
+        });
+
+        return dailyMarket;
+    }, [catalogPlayers]);
+
+    // Cargar puntos TOTALES
     useEffect(() => {
         if (!competitionRfevbId || !seasonRfevbId) return;
 
@@ -423,8 +452,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                 </div>
             </header>
 
-            {error && <div className="rounded-lg bg-red-100 p-4 font-semibold text-red-700 shadow-sm flex items-center gap-2"><AlertCircle className="w-5 h-5"/> {error}</div>}
-            {successMsg && <div className="rounded-lg bg-emerald-100 p-4 font-semibold text-emerald-700 shadow-sm flex items-center gap-2"><CheckCircle2 className="w-5 h-5"/> {successMsg}</div>}
+            {error && <div className="rounded-lg bg-red-100 p-4 font-semibold text-red-700 shadow-sm flex items-center gap-2"><AlertCircle className="w-5 h-5 shrink-0"/> {error}</div>}
 
             <div className="flex flex-col md:flex-row items-start md:items-center gap-4 bg-white p-4 rounded-lg shadow-sm border border-slate-200">
                 <label className="font-semibold text-slate-700">Visualizar jornada:</label>
@@ -445,24 +473,6 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
 
             {activeTab === "lineup" && (
                 <div className="space-y-4">
-                    {/* Banner de estado */}
-                    {!hasFutureRounds ? (
-                        <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-md flex items-center gap-2 font-medium shadow-sm">
-                            <AlertCircle className="w-5 h-5 shrink-0" />
-                            No hay jornadas futuras programadas. Puedes preparar tu alineación y se guardará temporalmente hasta que se habilite la próxima jornada.
-                        </div>
-                    ) : currentRoundObj?.isLocked ? (
-                        <div className="bg-slate-100 border border-slate-200 text-slate-600 px-4 py-3 rounded-md flex items-center gap-2 font-medium shadow-sm">
-                            <Lock className="w-5 h-5 shrink-0" />
-                            Estás viendo una jornada pasada. Los cambios que hagas se aplicarán a las próximas jornadas.
-                        </div>
-                    ) : (
-                        <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-md flex items-center gap-2 font-medium shadow-sm">
-                            <CheckCircle2 className="w-5 h-5 shrink-0" />
-                            Estás editando tu alineación. Al guardar, se aplicará a todas las jornadas futuras.
-                        </div>
-                    )}
-
                     <div className="grid md:grid-cols-2 gap-6">
                         <div className="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
                             <h3 className="font-bold text-lg mb-4 text-slate-800">Plantilla ({rosterIds.length})</h3>
@@ -536,12 +546,53 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                                 </div>
                             )}
 
+                            {/* Banner de estado del guardado, AHORA JUNTO AL BOTÓN */}
+                            {!hasFutureRounds ? (
+                                <div className="bg-amber-50 border border-amber-200 text-amber-700 px-3 py-2 rounded-md flex items-center gap-2 text-xs font-medium mb-3">
+                                    <AlertCircle className="w-4 h-4 shrink-0" />
+                                    <span>La próxima jornada aún no está programada. Tu alineación se guardará como borrador y se aplicará cuando se publique.</span>
+                                </div>
+                            ) : (
+                                <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-2 rounded-md flex items-center gap-2 text-xs font-medium mb-3">
+                                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                                    <span>Al guardar, se aplicará a todas las jornadas futuras ({rounds.filter(r => !r.isLocked).length}).</span>
+                                </div>
+                            )}
+
+                            {/* Mensajes de éxito/error, justo encima del botón */}
+                            {successMsg && (
+                                <div className="bg-emerald-100 border border-emerald-200 text-emerald-800 px-3 py-2 rounded-md flex items-center gap-2 text-sm font-medium mb-3 animate-in fade-in">
+                                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                                    <span>{successMsg}</span>
+                                </div>
+                            )}
+
                             <button
                                 onClick={handleSaveLineup}
                                 disabled={actionLoading || lineupIds.length !== 7}
-                                className="w-full bg-slate-900 text-white py-3 rounded-lg font-bold hover:bg-slate-800 disabled:opacity-50 transition-colors mt-auto"
+                                className={`w-full py-3 rounded-lg font-bold transition-colors mt-auto ${
+                                    saveStatus === "saved"
+                                        ? "bg-emerald-600 text-white"
+                                        : saveStatus === "draft"
+                                            ? "bg-amber-600 hover:bg-amber-700 text-white"
+                                            : "bg-slate-900 text-white hover:bg-slate-800"
+                                } disabled:opacity-50`}
                             >
-                                {actionLoading ? "Guardando..." : "Guardar para próximas jornadas"}
+                                {actionLoading ? (
+                                    "Guardando..."
+                                ) : saveStatus === "saved" ? (
+                                    <span className="flex items-center justify-center gap-2">
+                                        <CheckCircle2 className="w-5 h-5" />
+                                        ¡Guardado!
+                                    </span>
+                                ) : saveStatus === "draft" ? (
+                                    <span className="flex items-center justify-center gap-2">
+                                        <Save className="w-5 h-5" />
+                                        Borrador guardado
+                                    </span>
+                                ) : (
+                                    "Guardar para próximas jornadas"
+                                )}
                             </button>
                         </div>
                     </div>
@@ -549,8 +600,16 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
             )}
 
             {activeTab === "market" && (
-                <div className="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                <div className="bg-white p-5 rounded-lg shadow-sm border border-slate-200 space-y-4">
+
+                    {!hasFutureRounds && (
+                        <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-md flex items-center gap-3 font-medium shadow-sm text-sm">
+                            <Lock className="w-5 h-5 shrink-0" />
+                            <p>El mercado de fichajes está cerrado temporalmente porque no hay una próxima jornada programada. Se abrirá automáticamente cuando se ingiera el calendario de la siguiente jornada.</p>
+                        </div>
+                    )}
+
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                         <div>
                             <h3 className="font-bold text-lg text-slate-800">Mercado de Fichajes</h3>
                             <p className="text-xs text-slate-500 mt-1">Mostrando puntuaciones totales de la temporada</p>
@@ -622,9 +681,9 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                                         <p className="font-bold text-emerald-600 text-sm mb-1">{p.price}M</p>
                                         <button
                                             onClick={(e) => { e.stopPropagation(); handleTransfer(p.id, isOwned ? "SELL" : "BUY"); }}
-                                            disabled={actionLoading}
+                                            disabled={actionLoading || !hasFutureRounds}
                                             className={`px-3 py-1 rounded text-xs font-bold transition disabled:opacity-50 ${isOwned ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}
-                                            title={!hasFutureRounds ? "La próxima jornada aún no está programada. Puede que el sistema no permita fichar hasta que se abra." : ""}
+                                            title={!hasFutureRounds ? "Mercado cerrado hasta nueva jornada" : ""}
                                         >
                                             {isOwned ? "Vender" : "Comprar"}
                                         </button>

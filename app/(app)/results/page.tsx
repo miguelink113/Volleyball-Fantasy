@@ -3,6 +3,7 @@ import { CompetitionSelector } from '@/components/results/CompetitionSelector';
 import { StandingsTable } from '@/components/results/StandingsTable';
 import { RoundSelector } from '@/components/results/RoundSelector';
 import { MatchList, type MatchData } from '@/components/results/MatchList';
+import { getRoundLabel } from "@/lib/utils/round-label";
 
 export const dynamic = 'force-dynamic';
 
@@ -42,7 +43,7 @@ export default async function ResultsPage({
         if (!uniqueRoundsMap.has(r.round_number)) {
             uniqueRoundsMap.set(r.round_number, {
                 number: r.round_number,
-                label: r.round_number <= 22 ? `Jornada ${r.round_number}` : r.round_number === 23 ? "Cuartos" : r.round_number === 24 ? "Semis" : "Final"
+                label: getRoundLabel(r.round_number)
             });
         }
     });

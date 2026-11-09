@@ -4,6 +4,7 @@ import { getRoundsBySeasonId } from "@/lib/repositories/rounds.repository";
 import { getMatchesByRoundId } from "@/lib/repositories/matches.repository";
 import { getStatsByMatchIds } from "@/lib/repositories/match-player-stats.repository";
 import { ScoringSystemV1 } from "@/domain/scoring/scoring-v1.system";
+import { getRoundLabel } from "@/lib/utils/round-label";
 
 export async function GET(request: NextRequest) {
     const params = request.nextUrl.searchParams;
@@ -204,7 +205,7 @@ export async function GET(request: NextRequest) {
 
         const formattedRounds = allRounds.map(r => ({
             number: r.round_number,
-            label: r.round_number <= 22 ? `Jornada ${r.round_number}` : r.round_number === 23 ? "Cuartos" : r.round_number === 24 ? "Semis" : "Final"
+            label: getRoundLabel(r.round_number)
         })).sort((a, b) => a.number - b.number);
 
         return NextResponse.json({

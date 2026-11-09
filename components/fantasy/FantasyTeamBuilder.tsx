@@ -10,6 +10,7 @@ import {
 import type { PlayerPosition } from "@/domain/player/player.types";
 import { PlayerStatsModal } from "./PlayerStatsModal";
 import { Copy, UserPlus, Search, Lock, CheckCircle2, AlertCircle } from "lucide-react";
+import { getRoundLabel } from "@/lib/utils/round-label";
 
 function displayPosition(position: PlayerPosition): string {
     return position === "unknown" ? "DESCONOCIDO" : position;
@@ -151,7 +152,7 @@ export function FantasyTeamBuilder({ leagueId }: { leagueId: string }) {
                     return {
                         id: r.id,
                         number: r.round_number,
-                        label: r.round_number <= 22 ? `Jornada ${r.round_number}` : r.round_number === 23 ? "Cuartos" : r.round_number === 24 ? "Semis" : "Final",
+                        label: getRoundLabel(r.round_number),
                         isLocked,
                         startsAt: r.starts_at,
                         endsAt: r.ends_at

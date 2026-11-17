@@ -1,3 +1,4 @@
+
 // scripts/ingest/ingest-matches.ts
 import { config } from "dotenv";
 import { resolve } from "node:path";
@@ -20,23 +21,27 @@ import {
     calculateSimilarity,
     calculateContainment,
 } from "@/lib/services/ingestion/team-alias-resolver";
+import { fetchMatchesEsvoley } from "@/lib/scraper/fetch-matches-esvoley";
+import {
+    canonicalizeRoundGroupName,
+    findEsvoleyMatch,
+    getEsvoleyGroups,
+    normalizeTeamName,
+} from "@/lib/scraper/esvoley-ingestion";
 
 const MADRID_TZ = "Europe/Madrid";
 
-// Tipo para el cache de stats. Usamos discriminante `source` para evitar
-// mezclar el literal "from_db" con el objeto MatchStats en la misma unión.
 type CachedStats =
     | { source: "db" }
     | { source: "fetched"; data: Awaited<ReturnType<typeof fetchMatchStatistics>> }
     | { source: "failed" };
-
-// ─────────────────────────── args ───────────────────────────
 
 interface Args {
     competitionRfevbId: string;
     seasonRfevbId: string;
     round?: number;
     forceRefresh?: boolean;
+    dryRun?: boolean;
 }
 
 function parseArgs(): Args {
@@ -51,10 +56,11 @@ function parseArgs(): Args {
     const seasonRfevbId = get("season");
     const roundRaw = get("round");
     const forceRefresh = args.includes("--force-refresh");
+    const dryRun = args.includes("--dry-run");
 
     if (!competitionRfevbId || !seasonRfevbId) {
         console.error(
-            "Uso: npm run ingest:matches -- --competition=152 --season=186 [--round=1] [--force-refresh]"
+            "Uso: npm run ingest:matches -- --competition=152 --season=186 [--round=1] [--force-refresh] [--dry-run]"
         );
         process.exit(1);
     }
@@ -69,7 +75,7 @@ function parseArgs(): Args {
         round = n;
     }
 
-    return { competitionRfevbId, seasonRfevbId, round, forceRefresh };
+    return { competitionRfevbId, seasonRfevbId, round, forceRefresh, dryRun };
 }
 
 // ─────────────────────── timezone helpers ───────────────────────
@@ -220,12 +226,6 @@ function findRosterPlayer(
 
 // ─────────────────────── group normalization ───────────────────────
 
-/**
- * Normaliza el nombre del grupo. DataProject a veces usa nombres de patrocinadores
- * ("Alcudia", "Egido") en las pestañas en lugar del nombre real del grupo
- * ("Superliga 2 - Grupo A"). Si detectamos eso, buscamos el grupo real del equipo
- * en la tabla `teams` (que sí está correctamente asignado por la ingesta de roster).
- */
 function normalizeGroupName(
     rawGroupName: string | null | undefined,
     homeTeamName: string,
@@ -307,8 +307,75 @@ async function upsertRound(
         groupName: string | null;
         startsAt: Date;
         endsAt: Date;
+        esvoleySource?: boolean;
+        dryRun?: boolean;
     }
-): Promise<string> {
+): Promise<{ id: string; groupName: string | null }> {
+    if (params.dryRun) {
+        return {
+            id: `dry-run:${params.seasonId}:${params.roundNumber}:${params.groupName ?? "General"}`,
+            groupName: params.groupName,
+        };
+    }
+
+    const canonicalGroup = canonicalizeRoundGroupName(params.groupName);
+    const { data: existingRounds, error: roundsError } = await supabase
+        .from("rounds")
+        .select("id, group_name")
+        .eq("season_id", params.seasonId)
+        .eq("round_number", params.roundNumber);
+
+    if (roundsError) throw roundsError;
+
+    const exact = (existingRounds ?? []).find(
+        (round) =>
+            canonicalGroup
+                ? round.group_name === canonicalGroup
+                : round.group_name === null
+    );
+
+    const equivalent = (existingRounds ?? []).filter(
+        (round) =>
+            canonicalGroup &&
+            canonicalizeRoundGroupName(round.group_name) === canonicalGroup
+    );
+
+    if (exact) {
+        if (params.esvoleySource) {
+            const { error } = await supabase
+                .from("rounds")
+                .update({
+                    starts_at: params.startsAt.toISOString(),
+                    ends_at: params.endsAt.toISOString(),
+                    status: "SCHEDULED",
+                })
+                .eq("id", exact.id);
+            if (error) throw error;
+        }
+        return { id: exact.id, groupName: exact.group_name };
+    }
+
+    if (params.esvoleySource && equivalent.length === 1) {
+        const existing = equivalent[0];
+        const { error } = await supabase
+            .from("rounds")
+            .update({
+                group_name: canonicalGroup,
+                starts_at: params.startsAt.toISOString(),
+                ends_at: params.endsAt.toISOString(),
+                status: "SCHEDULED",
+            })
+            .eq("id", existing.id);
+        if (error) throw error;
+        return { id: existing.id, groupName: canonicalGroup };
+    }
+
+    if (params.esvoleySource && equivalent.length > 1) {
+        throw new Error(
+            `Ambigüedad: existen varias jornadas equivalentes a temporada=${params.seasonId}, jornada=${params.roundNumber}, grupo=${canonicalGroup}. No se modificó ninguna.`
+        );
+    }
+
     const row = {
         competition_id: params.competitionId,
         season_id: params.seasonId,
@@ -341,7 +408,7 @@ async function upsertRound(
     const { data, error: selectError } = await query.single();
 
     if (selectError) throw selectError;
-    return data.id;
+    return { id: data.id, groupName: canonicalGroup };
 }
 
 async function loadResolvedTeam(
@@ -371,7 +438,8 @@ async function main() {
     console.log(
         `→ Ingesta de partidos: competición=${args.competitionRfevbId} temporada=${args.seasonRfevbId}` +
         (args.round ? ` (solo jornada ${args.round})` : "") +
-        (args.forceRefresh ? ` [FORCE REFRESH]` : "")
+        (args.forceRefresh ? ` [FORCE REFRESH]` : "") +
+        (args.dryRun ? ` [DRY RUN]` : "")
     );
 
     const supabase = createAdminClient();
@@ -405,7 +473,12 @@ async function main() {
         .select("id, name, group_name")
         .eq("season_id", seasonId);
 
-    const teamsList = (teamsData || []) as { id: string; name: string; group_name: string | null }[];
+    const teamsList = (teamsData || []) as {
+        id: string;
+        name: string;
+        group_name: string | null;
+    }[];
+
     const teamNameById = new Map<string, string>();
     for (const t of teamsList) teamNameById.set(t.id, t.name);
 
@@ -415,6 +488,7 @@ async function main() {
         list.push(row);
         rosterByTeamId.set(row.team_id, list);
     }
+
     console.log(
         `  ${rosterRows.length} jugadores en ${rosterByTeamId.size} equipos`
     );
@@ -422,15 +496,33 @@ async function main() {
     // ══════════════════════════════════════════════════════════════
     // CACHE: partidos ya en BD + si tienen stats
     // ══════════════════════════════════════════════════════════════
+
     console.log("→ Cargando partidos existentes en BD…");
     const { data: existingMatches } = await supabase
         .from("matches")
-        .select("id, rfevb_match_id, status")
+        .select("id, rfevb_match_id, status, round_id, match_date, home_sets, away_sets, sets")
         .eq("season_id", seasonId);
 
-    const existingMatchMap = new Map<string, { id: string; status: string }>();
+    const existingMatchMap = new Map<string, {
+        id: string;
+        status: string;
+        round_id: string;
+        match_date: string | null;
+        home_sets: number | null;
+        away_sets: number | null;
+        sets: unknown;
+    }>();
+
     for (const em of existingMatches || []) {
-        existingMatchMap.set(em.rfevb_match_id, { id: em.id, status: em.status });
+        existingMatchMap.set(em.rfevb_match_id, {
+            id: em.id,
+            status: em.status,
+            round_id: em.round_id,
+            match_date: em.match_date,
+            home_sets: em.home_sets,
+            away_sets: em.away_sets,
+            sets: em.sets,
+        });
     }
 
     const existingMatchIds = (existingMatches || []).map(em => em.id);
@@ -454,12 +546,201 @@ async function main() {
     // ─────────────────────────────────────────────
     // Descargar partidos del listado principal
     // ─────────────────────────────────────────────
+
     console.log("→ Descargando partidos desde RFEVB…");
-    const matches = await fetchMatches(
+    const scrapedMatches = await fetchMatches(
         Number(args.competitionRfevbId),
         Number(args.seasonRfevbId),
-        args.round
+        undefined
     );
+
+    type IngestMatch = ScrapedMatch & {
+        effectiveRound: number;
+        effectiveGroup: string | null;
+        esvoleySource: boolean;
+        esvoleyMatchId?: string;
+    };
+
+    const esvoleyGroups = getEsvoleyGroups(
+        Number(args.competitionRfevbId)
+    );
+
+    const esvoleyMatches: Array<
+        Awaited<ReturnType<typeof fetchMatchesEsvoley>>[number] &
+        { esvoleyGroupName: string }
+    > = [];
+
+    if (esvoleyGroups.length > 0) {
+        console.log("→ Consultando EsVoley como referencia de jornadas y fechas…");
+        for (const group of esvoleyGroups) {
+            try {
+                const groupMatches = await fetchMatchesEsvoley(group.id);
+                esvoleyMatches.push(
+                    ...groupMatches.map((match) => ({
+                        ...match,
+                        esvoleyGroupName: group.name,
+                    }))
+                );
+                console.log(`  ✓ ${group.name}: ${groupMatches.length} partidos`);
+            } catch (error) {
+                console.warn(
+                    `  ⚠ EsVoley ${group.name} (${group.id}) no disponible; se conserva el dato de Data Project.`
+                );
+                console.warn(
+                    error instanceof Error ? error.message : String(error)
+                );
+            }
+        }
+    } else {
+        console.log("  EsVoley no configurado para esta competición: se conserva Data Project.");
+    }
+
+    const usedEsvoleyMatchIds = new Set<string>();
+    let esvoleyMatchesApplied = 0;
+    let esvoleyMatchesAmbiguous = 0;
+
+    const resolver = new TeamAliasResolver(supabase);
+
+    const aliasActNames = [
+        ...new Set([
+            ...scrapedMatches.flatMap((match) => [match.homeTeam, match.awayTeam]),
+            ...esvoleyMatches.flatMap((match) => [match.homeTeam, match.awayTeam]),
+        ]),
+    ];
+
+    const resolvedTeamIds = resolver.resolveJornada(
+        aliasActNames,
+        teamsList.map((team) => ({ teamId: team.id, name: team.name })),
+        33
+    );
+
+    const mergedMatches: IngestMatch[] = scrapedMatches.map((match) => {
+        let effectiveRound = match.round;
+        let effectiveGroup: string | null = normalizeGroupName(
+            match.groupName,
+            match.homeTeam,
+            match.awayTeam,
+            teamsList
+        );
+        let matchDate = match.matchDate;
+        let esvoleySource = false;
+        let esvoleyMatchId: string | undefined;
+
+        if (esvoleyMatches.length > 0) {
+            const preferredGroup =
+                effectiveGroup === "General"
+                    ? esvoleyGroups[0]?.name ?? "General"
+                    : effectiveGroup;
+
+            const esvoleyMatch = findEsvoleyMatch(
+                match,
+                esvoleyMatches.filter(
+                    (candidate) => !usedEsvoleyMatchIds.has(candidate.rfevbMatchId)
+                ),
+                preferredGroup,
+                resolvedTeamIds
+            );
+
+            if (esvoleyMatch) {
+                effectiveRound = esvoleyMatch.round;
+                effectiveGroup = canonicalizeRoundGroupName(
+                    esvoleyMatch.esvoleyGroupName
+                );
+
+                if (
+                    args.dryRun &&
+                    esvoleyMatchesApplied <= 12 &&
+                    (
+                        normalizeTeamName(match.homeTeam) !==
+                        normalizeTeamName(esvoleyMatch.homeTeam) ||
+                        normalizeTeamName(match.awayTeam) !==
+                        normalizeTeamName(esvoleyMatch.awayTeam)
+                    )
+                ) {
+                    console.log(
+                        `  [ALIAS] DP mID=${match.matchId}: ` +
+                        `"${match.homeTeam}" vs "${match.awayTeam}" → ` +
+                        `EsVoley id=${esvoleyMatch.rfevbMatchId}: ` +
+                        `"${esvoleyMatch.homeTeam}" vs "${esvoleyMatch.awayTeam}" | ` +
+                        `j=${esvoleyMatch.round}, grupo=${esvoleyMatch.esvoleyGroupName}`
+                    );
+                }
+
+                if (esvoleyMatch.matchDate) {
+                    matchDate = esvoleyMatch.matchDate;
+                }
+
+                esvoleySource = true;
+                esvoleyMatchId = esvoleyMatch.rfevbMatchId;
+                usedEsvoleyMatchIds.add(esvoleyMatch.rfevbMatchId);
+                esvoleyMatchesApplied++;
+            } else {
+                esvoleyMatchesAmbiguous++;
+
+                if (args.dryRun && esvoleyMatchesAmbiguous <= 12) {
+                    const closest = esvoleyMatches
+                        .filter((candidate) => !usedEsvoleyMatchIds.has(candidate.rfevbMatchId))
+                        .map((candidate) => {
+                            const homeScore = Math.max(
+                                calculateContainment(match.homeTeam, candidate.homeTeam),
+                                calculateSimilarity(match.homeTeam, candidate.homeTeam)
+                            );
+                            const awayScore = Math.max(
+                                calculateContainment(match.awayTeam, candidate.awayTeam),
+                                calculateSimilarity(match.awayTeam, candidate.awayTeam)
+                            );
+
+                            return {
+                                candidate,
+                                score: homeScore + awayScore,
+                                homeScore,
+                                awayScore,
+                            };
+                        })
+                        .sort((a, b) => b.score - a.score)
+                        .slice(0, 2);
+
+                    console.log(
+                        `  [AMBIGUO] DP mID=${match.matchId} | ` +
+                        `${match.homeTeam} vs ${match.awayTeam} | ` +
+                        `j=${match.round} | grupo=${effectiveGroup ?? "General"} | ` +
+                        `fecha=${match.matchDate?.toISOString() ?? "sin dato"}`
+                    );
+
+                    for (const item of closest) {
+                        console.log(
+                            `    EsVoley id=${item.candidate.rfevbMatchId} | ` +
+                            `${item.candidate.homeTeam} vs ${item.candidate.awayTeam} | ` +
+                            `j=${item.candidate.round} | grupo=${item.candidate.esvoleyGroupName} | ` +
+                            `fecha=${item.candidate.matchDate?.toISOString() ?? "sin dato"} | ` +
+                            `scores=${item.homeScore}/${item.awayScore}`
+                        );
+                    }
+                }
+            }
+        }
+
+        return {
+            ...match,
+            matchDate,
+            effectiveRound,
+            effectiveGroup,
+            esvoleySource,
+            esvoleyMatchId,
+        };
+    });
+
+    let matches = args.round
+        ? mergedMatches.filter((match) => match.effectiveRound === args.round)
+        : mergedMatches;
+
+    if (esvoleyMatches.length > 0) {
+        console.log(
+            `  EsVoley aplicado a ${esvoleyMatchesApplied} partidos; ` +
+            `${esvoleyMatchesAmbiguous} partidos sin correspondencia inequívoca conservan Data Project.`
+        );
+    }
+
     if (matches.length === 0) {
         throw new Error("El scraper no devolvió partidos. Abortando.");
     }
@@ -467,6 +748,7 @@ async function main() {
     // ─────────────────────────────────────────────
     // PRE-PASO: Descargar stats (con cache)
     // ─────────────────────────────────────────────
+
     console.log("→ Descargando estadísticas de partidos (con cache)…");
     const statsCache = new Map<string, CachedStats>();
 
@@ -497,7 +779,7 @@ async function main() {
             );
             statsCache.set(m.matchId, { source: "fetched", data: stats });
             fetchedCount++;
-        } catch (err) {
+        } catch {
             statsCache.set(m.matchId, { source: "failed" });
         }
     }
@@ -506,18 +788,24 @@ async function main() {
     console.log(`  ⬇ Descargados de RFEVB: ${fetchedCount} partidos`);
 
     // Agrupar por Grupo + Jornada OFICIAL
-    const roundMap = new Map<string, ScrapedMatch[]>();
+    const roundMap = new Map<string, IngestMatch[]>();
+
     for (const m of matches) {
         const cached = statsCache.get(m.matchId);
         const statsData = cached?.source === "fetched" ? cached.data : null;
 
-        const effectiveRound = statsData?.officialRound ?? m.round;
-        const effectiveGroup = normalizeGroupName(
-            m.groupName ?? statsData?.officialGroup,
-            m.homeTeam,
-            m.awayTeam,
-            teamsList
-        );
+        const effectiveRound = m.esvoleySource
+            ? m.effectiveRound
+            : (statsData?.officialRound ?? m.effectiveRound);
+
+        const effectiveGroup = m.esvoleySource
+            ? m.effectiveGroup
+            : normalizeGroupName(
+                m.groupName ?? statsData?.officialGroup,
+                m.homeTeam,
+                m.awayTeam,
+                teamsList
+            );
 
         const key = `${effectiveGroup}|${effectiveRound}`;
         const list = roundMap.get(key) ?? [];
@@ -536,7 +824,6 @@ async function main() {
         `  ${matches.length} partidos en ${roundKeys.length} bloques (Grupo+Jornada)`
     );
 
-    const resolver = new TeamAliasResolver(supabase);
     const aliasCtx = { competitionId, seasonId };
 
     let totalMatchesPersisted = 0;
@@ -546,7 +833,7 @@ async function main() {
     let totalSkippedNoStats = 0;
     let totalSkippedNoPlayer = 0;
     let totalSkippedDuplicatePlayer = 0;
-    let totalSkippedDuplicateTeam = 0;
+    let totalDuplicateTeamConflicts = 0;
     let totalRoundsSkippedNoDates = 0;
 
     const expectedPersistedMatchIds = new Set<string>();
@@ -567,6 +854,7 @@ async function main() {
         const groupName = groupNameStr === "General" ? null : groupNameStr;
 
         const dated = roundMatches.filter((m) => m.matchDate !== null);
+
         if (dated.length === 0) {
             console.warn(
                 `  ⚠ Jornada ${groupName || ""} ${roundNumber} sin fechas. Se omite entera.`
@@ -578,6 +866,7 @@ async function main() {
         const first = dated.reduce((a, b) =>
             a.matchDate! < b.matchDate! ? a : b
         );
+
         const last = dated.reduce((a, b) =>
             a.matchDate! > b.matchDate! ? a : b
         );
@@ -590,14 +879,19 @@ async function main() {
             `[${startsAt.toISOString()} → ${endsAt.toISOString()}]`
         );
 
-        const roundId = await upsertRound(supabase, {
+        const roundResolution = await upsertRound(supabase, {
             competitionId,
             seasonId,
             roundNumber,
             groupName,
             startsAt,
             endsAt,
+            esvoleySource: roundMatches.some((match) => match.esvoleySource),
+            dryRun: args.dryRun,
         });
+
+        const roundId = roundResolution.id;
+        const persistedGroupName = roundResolution.groupName;
 
         const actNames = roundMatches.flatMap((m) => [m.homeTeam, m.awayTeam]);
 
@@ -611,6 +905,7 @@ async function main() {
             if (matchResolutions.has(rawName)) continue;
 
             const teamId = resolvedByName.get(rawName);
+
             if (teamId) {
                 const rosterName = teamNameById.get(teamId) || "?";
                 const containmentScore = calculateContainment(rawName, rosterName);
@@ -636,26 +931,50 @@ async function main() {
         for (const scraped of roundMatches) {
             const cached = statsCache.get(scraped.matchId);
 
-            // Si el partido ya está en BD con stats, saltarlo entero
-            // Si el partido ya está en BD con stats, saltarlo entero
-            // PERO primero resolver equipos y registrarlos en el escudo anti-duplicados
+            // Si el partido ya está en BD con stats, no se vuelve a procesar.
+            // Se comprueba el conflicto de equipos solo como advertencia.
             if (cached?.source === "db") {
                 const homeTeamId = resolvedByName.get(scraped.homeTeam) ?? null;
                 const awayTeamId = resolvedByName.get(scraped.awayTeam) ?? null;
 
                 if (
-                    homeTeamId && awayTeamId &&
-                    (teamsInThisRound.has(homeTeamId) || teamsInThisRound.has(awayTeamId))
+                    homeTeamId &&
+                    awayTeamId &&
+                    (
+                        teamsInThisRound.has(homeTeamId) ||
+                        teamsInThisRound.has(awayTeamId)
+                    )
                 ) {
                     console.warn(
-                        `  ⚠ Conflicto (cache): "${scraped.homeTeam}" o "${scraped.awayTeam}" ya tiene un partido en la Jornada ${roundNumber}. Partido omitido.`
+                        `  ⚠ Conflicto (cache): "${scraped.homeTeam}" vs "${scraped.awayTeam}" ya aparece en otro partido de la Jornada ${roundNumber}. Se conserva.`
                     );
-                    totalSkippedDuplicateTeam++;
-                    continue;
+                    totalDuplicateTeamConflicts++;
                 }
 
                 if (homeTeamId) teamsInThisRound.add(homeTeamId);
                 if (awayTeamId) teamsInThisRound.add(awayTeamId);
+
+                if (!args.dryRun && scraped.esvoleySource) {
+                    const existing = existingMatchMap.get(scraped.matchId);
+
+                    if (existing) {
+                        const updates: Record<string, unknown> = {
+                            round_id: roundId,
+                            group_name: persistedGroupName,
+                        };
+
+                        if (scraped.matchDate) {
+                            updates.match_date = scraped.matchDate.toISOString();
+                        }
+
+                        const { error } = await supabase
+                            .from("matches")
+                            .update(updates)
+                            .eq("id", existing.id);
+
+                        if (error) throw error;
+                    }
+                }
 
                 totalMatchesSkippedCached++;
                 expectedPersistedMatchIds.add(scraped.matchId);
@@ -674,13 +993,19 @@ async function main() {
                 continue;
             }
 
-            if (teamsInThisRound.has(homeTeamId) || teamsInThisRound.has(awayTeamId)) {
+            // El calendario puede contener encuentros aplazados o reprogramados.
+            // No se descartan partidos por la repetición de un equipo:
+            // se registra el conflicto y se continúa con la ingesta.
+            if (
+                teamsInThisRound.has(homeTeamId) ||
+                teamsInThisRound.has(awayTeamId)
+            ) {
                 console.warn(
-                    `  ⚠ Conflicto: "${scraped.homeTeam}" o "${scraped.awayTeam}" ya tiene un partido en la Jornada ${roundNumber} (${groupName || "General"}). Partido omitido.`
+                    `  ⚠ Conflicto: "${scraped.homeTeam}" vs "${scraped.awayTeam}" ya aparece en otro partido de la Jornada ${roundNumber} (${groupName || "General"}). Se conserva para revisión.`
                 );
-                totalSkippedDuplicateTeam++;
-                continue;
+                totalDuplicateTeamConflicts++;
             }
+
             teamsInThisRound.add(homeTeamId);
             teamsInThisRound.add(awayTeamId);
 
@@ -689,51 +1014,76 @@ async function main() {
                 seasonId,
                 homeTeamId
             );
+
             const awayTeam = await loadResolvedTeam(
                 supabase,
                 seasonId,
                 awayTeamId
             );
 
-            if (groupName) {
+            if (!args.dryRun && persistedGroupName) {
                 await supabase
                     .from("teams")
-                    .update({ group_name: groupName })
+                    .update({ group_name: persistedGroupName })
                     .eq("id", homeTeam.teamId)
                     .is("group_name", null);
+
                 await supabase
                     .from("teams")
-                    .update({ group_name: groupName })
+                    .update({ group_name: persistedGroupName })
                     .eq("id", awayTeam.teamId)
                     .is("group_name", null);
             }
 
             const statsData = cached?.source === "fetched" ? cached.data : null;
-            const matchRow = {
+            const existing = existingMatchMap.get(scraped.matchId);
+
+            const matchRow: Record<string, unknown> = {
                 competition_id: competitionId,
                 season_id: seasonId,
                 round_id: roundId,
                 rfevb_match_id: scraped.matchId,
-                group_name: groupName,
-                match_date: scraped.matchDate?.toISOString() ?? null,
+                group_name: persistedGroupName,
                 home_team_id: homeTeam.teamId,
                 away_team_id: awayTeam.teamId,
-                home_sets: statsData?.homeScore ?? null,
-                away_sets: statsData?.awayScore ?? null,
-                status: statsData ? "COMPLETED" : "SCHEDULED",
-                sets:
-                    statsData?.sets.map((s, i) => ({
-                        setNumber: i + 1,
-                        homeScore: s.home,
-                        awayScore: s.away,
-                    })) ?? [],
             };
+
+            if (scraped.matchDate) {
+                matchRow.match_date = scraped.matchDate.toISOString();
+            }
+
+            if (statsData) {
+                matchRow.home_sets = statsData.homeScore;
+                matchRow.away_sets = statsData.awayScore;
+                matchRow.status = "COMPLETED";
+                matchRow.sets = statsData.sets.map((s, i) => ({
+                    setNumber: i + 1,
+                    homeScore: s.home,
+                    awayScore: s.away,
+                }));
+            } else if (!existing) {
+                matchRow.home_sets = null;
+                matchRow.away_sets = null;
+                matchRow.status = "SCHEDULED";
+                matchRow.sets = [];
+            }
+
+            if (args.dryRun) {
+                console.log(
+                    `  [DRY-RUN] Partido ${scraped.matchId}: jornada ${roundNumber} (${persistedGroupName ?? "General"}), fecha ${scraped.matchDate?.toISOString() ?? "sin dato"}, estado ${statsData ? "COMPLETED" : existing?.status ?? "SCHEDULED"}`
+                );
+
+                totalMatchesPersisted++;
+                expectedPersistedMatchIds.add(scraped.matchId);
+                continue;
+            }
 
             const { error: matchUpsertError } = await supabase
                 .from("matches")
                 .upsert([matchRow], {
                     onConflict: "season_id,rfevb_match_id",
                 });
+
             if (matchUpsertError) throw matchUpsertError;
 
             const { data: matchRowData, error: matchSelectError } =
@@ -743,6 +1093,7 @@ async function main() {
                     .eq("season_id", seasonId)
                     .eq("rfevb_match_id", scraped.matchId)
                     .single();
+
             if (matchSelectError) throw matchSelectError;
 
             totalMatchesPersisted++;
@@ -750,18 +1101,22 @@ async function main() {
 
             if (!statsData) {
                 totalSkippedNoStats++;
-                await resolver.registerAliases(aliasCtx, [
-                    {
-                        teamId: homeTeam.teamId,
-                        source: "matches",
-                        alias: scraped.homeTeam,
-                    },
-                    {
-                        teamId: awayTeam.teamId,
-                        source: "matches",
-                        alias: scraped.awayTeam,
-                    },
-                ]);
+
+                if (!args.dryRun) {
+                    await resolver.registerAliases(aliasCtx, [
+                        {
+                            teamId: homeTeam.teamId,
+                            source: "matches",
+                            alias: scraped.homeTeam,
+                        },
+                        {
+                            teamId: awayTeam.teamId,
+                            source: "matches",
+                            alias: scraped.awayTeam,
+                        },
+                    ]);
+                }
+
                 continue;
             }
 
@@ -821,6 +1176,7 @@ async function main() {
                         totalSkippedDuplicatePlayer++;
                         continue;
                     }
+
                     seenPlayerIds.add(rosterPlayer.id);
 
                     statsRows.push({
@@ -858,6 +1214,7 @@ async function main() {
                     .upsert(statsRows, {
                         onConflict: "match_id,player_id",
                     });
+
                 if (statsUpsertError) throw statsUpsertError;
                 totalStatsPersisted += statsRows.length;
             }
@@ -877,31 +1234,47 @@ async function main() {
         }
     }
 
-    // ── verificación final ──
-    console.log("\n→ Verificando partidos persistidos…");
+    let persistedIds = new Set<string>();
+    let statsCount: number | null = null;
 
-    const { data: persistedMatches, error: persistedMatchesError } =
-        await supabase
-            .from("matches")
-            .select("rfevb_match_id")
+    if (!args.dryRun) {
+        console.log("\n→ Verificando partidos persistidos…");
+
+        const { data: persistedMatches, error: persistedMatchesError } =
+            await supabase
+                .from("matches")
+                .select("rfevb_match_id")
+                .eq("season_id", seasonId);
+
+        if (persistedMatchesError) throw persistedMatchesError;
+
+        persistedIds = new Set(
+            (persistedMatches ?? []).map((row) => row.rfevb_match_id as string)
+        );
+
+        const missing: string[] = [];
+
+        for (const id of expectedPersistedMatchIds) {
+            if (!persistedIds.has(id)) missing.push(id);
+        }
+
+        const { count, error: statsCountError } = await supabase
+            .from("match_player_stats")
+            .select("*", { count: "exact", head: true })
             .eq("season_id", seasonId);
 
-    if (persistedMatchesError) throw persistedMatchesError;
+        if (statsCountError) throw statsCountError;
+        statsCount = count;
 
-    const persistedIds = new Set(
-        (persistedMatches ?? []).map((row) => row.rfevb_match_id as string)
-    );
+        if (missing.length > 0) {
+            const preview = missing.slice(0, 5).join(", ");
+            const suffix = missing.length > 5 ? ", …" : "";
 
-    const missing: string[] = [];
-    for (const id of expectedPersistedMatchIds) {
-        if (!persistedIds.has(id)) missing.push(id);
+            throw new Error(
+                `Partidos esperados no persistidos (${missing.length}): ${preview}${suffix}`
+            );
+        }
     }
-
-    const { count: statsCount, error: statsCountError } = await supabase
-        .from("match_player_stats")
-        .select("*", { count: "exact", head: true })
-        .eq("season_id", seasonId);
-    if (statsCountError) throw statsCountError;
 
     console.log("\n═══ Resumen ═══");
     console.log(`Competición RFEVB:    ${args.competitionRfevbId}`);
@@ -913,7 +1286,7 @@ async function main() {
         `Partidos en Supabase: ${persistedIds.size} (acumulado de la temporada)`
     );
     console.log(
-        `Stats de jugador:     ${statsCount} (esta ejecución: ${totalStatsPersisted})`
+        `Stats de jugador:     ${args.dryRun ? "dry-run" : statsCount} (esta ejecución: ${args.dryRun ? 0 : totalStatsPersisted})`
     );
     console.log("");
     console.log(
@@ -925,15 +1298,9 @@ async function main() {
     console.log(
         `Stats con jugador duplicado:      ${totalSkippedDuplicatePlayer}`
     );
-    console.log(`Partidos omitidos por duplicado:  ${totalSkippedDuplicateTeam}`);
-
-    if (missing.length > 0) {
-        const preview = missing.slice(0, 5).join(", ");
-        const suffix = missing.length > 5 ? ", …" : "";
-        throw new Error(
-            `Partidos esperados no persistidos (${missing.length}): ${preview}${suffix}`
-        );
-    }
+    console.log(
+        `Conflictos entre equipos detectados: ${totalDuplicateTeamConflicts}`
+    );
 
     console.log("\n\n═══ Diagnóstico de Emparejamiento de Equipos ═══\n");
 
@@ -956,10 +1323,12 @@ async function main() {
         "% Sim.".padEnd(colSim) +
         "Estado".padEnd(colStatus)
     );
+
     console.log("-".repeat(colActa + colRoster + colSim + colStatus));
 
     let okCount = 0;
     let koCount = 0;
+
     for (const [actaName, info] of sortedResolutions) {
         if (info.status === "OK") okCount++;
         else koCount++;
@@ -968,6 +1337,7 @@ async function main() {
             actaName.length > colActa - 2
                 ? actaName.slice(0, colActa - 3) + "…"
                 : actaName;
+
         const rosterPadded =
             info.rosterName.length > colRoster - 2
                 ? info.rosterName.slice(0, colRoster - 3) + "…"
@@ -986,6 +1356,7 @@ async function main() {
     console.log(`Resueltos: ${okCount} | No resueltos: ${koCount}`);
 
     const seenRosterNames = new Set<string>();
+
     for (const info of matchResolutions.values()) {
         if (info.status === "OK" && info.rosterName !== "—") {
             seenRosterNames.add(info.rosterName);
@@ -995,10 +1366,12 @@ async function main() {
     const missingFromActas = teamsList.filter(
         (t) => !seenRosterNames.has(t.name)
     );
+
     if (missingFromActas.length > 0) {
         console.log(
             `\n⚠ Equipos del roster que no aparecen en ninguna acta (${missingFromActas.length}):`
         );
+
         for (const t of missingFromActas) {
             console.log(`  - ${t.name}`);
         }

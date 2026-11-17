@@ -99,8 +99,15 @@ La tabla `player_market_values` contiene precios dinámicos calculados tras cada
 - **Mercado Diario:** Rotación de 14 jugadores usando semilla de fecha.
 - **Modal de Estadísticas:** `PlayerStatsModal.tsx` con desglose fantasy y stats reales por jornada.
 - **Alineaciones Futuras:** Guardado masivo con `Promise.all`. Borrador en `localStorage` cuando no hay jornadas futuras, con feedback visual claro (botón ámbar "Borrador guardado", verde "¡Guardado!").
-- `/results`: Clasificación real y lista de partidos agrupada por `group_name`.
+- `/results`: Clasificación real y lista de partidos agrupada por `group_name`. La jornada se selecciona por número y el filtro de grupo se comparte con la clasificación mediante el parámetro `group`; la lista muestra jornadas vacías y errores de carga.
 - **Despliegue en Vercel:** CI/CD configurado desde GitHub.
+
+### Exploración de esvoley
+
+- Los cinco archivos de exploración existen, pero no tienen un script npm ni están llamados desde los procesos de ingesta.
+- `fetchMatchesEsvoley` obtiene equipos, fecha/hora, número de jornada, indicadores de aplazamiento y enlaces de estadísticas.
+- El endpoint comprobado no permite determinar que un partido haya terminado ni recuperar sets o marcador.
+- Sigue pendiente una fuente adicional y el mapeo necesario para integrar el calendario sin sustituir ni duplicar la ingesta DataProject/RFEVB.
 
 ## Deuda técnica conocida
 

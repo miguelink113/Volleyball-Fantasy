@@ -179,6 +179,8 @@ La interfaz utiliza pestañas y es 100% dinámica. Lee exclusivamente las tempor
 
 **Alineaciones:** El usuario edita la alineación una vez y el sistema la guarda en todas las jornadas futuras no bloqueadas mediante la RPC `save_lineup` (guardado masivo con `Promise.all`). Si no hay jornadas futuras, el frontend guarda un borrador en `localStorage` con la clave `draft_lineup_<teamId>`. La UI muestra feedback visual claro: botón verde "¡Guardado!" si se persiste en BD, botón ámbar "Borrador guardado" si se guarda localmente.
 
+**Resultados:** `/results` muestra las temporadas activas y agrupa las jornadas por `round_number`. Cada partido conserva el `group_name` de su jornada. El parámetro `group` se sincroniza con la interfaz: `MatchList` filtra partidos y `StandingsTable` filtra la clasificación. Cuando no existen temporadas, jornadas o partidos, o falla Supabase, la página muestra un estado vacío o de error específico.
+
 ## Flujo de datos de producto
 
 ### Lectura del roster
@@ -230,6 +232,12 @@ Flujo:
 **Por qué GitHub Actions y no Vercel Cron:** la ingesta de 4 competiciones puede tardar 15-20 min, superando el timeout de las funciones serverless de Vercel (10s-300s). Los runners de GitHub tienen 6 horas de margen.
 
 **Node 22 en el runner:** requerido por `@supabase/supabase-js` 2.119+ (WebSocket nativo).
+
+### Exploración experimental de esvoley
+
+Los módulos `lib/scraper/esvoley-groups.ts`, `lib/scraper/fetch-matches-esvoley.ts`, `lib/scraper/fetch-mid-esvoley.ts` y `lib/scraper/parse-match-date.ts`, junto con `scripts/tools/verify-esvoley-groups.ts`, sirven para identificar grupos, consultar el calendario y seguir enlaces a actas.
+
+La investigación obtiene nombres de equipos, fecha/hora, número de jornada, indicadores de partido aplazado o de otra jornada y, cuando existe, un enlace de estadísticas. El endpoint del calendario no expone un campo verificable de partido finalizado ni sets o marcador. Por tanto, estos archivos no forman parte de `scripts/ingest/` ni reemplazan a DataProject. Integrarlos requeriría una fuente adicional para finalizar el partido y obtener el resultado.
 
 ## Seguridad
 

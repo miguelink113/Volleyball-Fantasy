@@ -32,7 +32,7 @@ Las competiciones base son Superliga Masculina, Liga Iberdrola, Superliga Femeni
 - **Mercado dinámico:** Fórmula `1 + (pts * 0.07) + min(media * 0.3, 5)`, piso 1M y techo 20M. Se recalcula tras cada ingesta.
 - Dashboard dinámico con gestión de ligas y validaciones corregidas.
 - Pantalla fantasy con pestañas (Alineación, Mercado, Clasificación), validación de límites estrictos en backend y bloqueos temporales.
-- **Resultados (`/results`):** Lista de partidos por jornada con separación por grupos y clasificación real.
+- **Resultados (`/results`):** Selector de competición y temporada, jornada agrupada por `round_number`, partidos separados por `group_name`, filtro de grupo compartido con la clasificación y estados vacíos o de error.
 - **Mercado Diario:** Rotación automática de 14 jugadores cada día para incentivar la conexión.
 - **Estadísticas de Jugador:** Modal detallado con desglose de puntos fantasy y stats reales por jornada. Muestra también `pts · PJ` (partidos jugados) en cada tarjeta.
 - **Alineaciones:** Guardado masivo para todas las jornadas futuras. Si no hay jornadas futuras publicadas por DataProject, se guarda un borrador en `localStorage` con feedback visual (botón ámbar "Borrador guardado").
@@ -96,6 +96,12 @@ GET /api/standings?seasonId=<uuid-de-temporada>
 Devuelve el equipo visible para el usuario, la clasificación privada de la liga y la clasificación oficial de los equipos reales, respectivamente.
 
 Para más detalles, consulta `docs/PROJECT_STATUS.md`, `docs/ARCHITECTURE.md`, `docs/SCRAPER.md`, `docs/SCORING.md` y `docs/DEVELOPMENT.md`.
+
+### Exploración experimental de esvoley
+
+Existen `lib/scraper/esvoley-groups.ts`, `lib/scraper/fetch-matches-esvoley.ts`, `lib/scraper/fetch-mid-esvoley.ts`, `lib/scraper/parse-match-date.ts` y `scripts/tools/verify-esvoley-groups.ts`.
+
+Esta exploración ha identificado grupos y el endpoint de calendario de esvoley, pero no está integrada en la ingesta de partidos ni sustituye a DataProject/RFEVB. El endpoint permite consultar equipos, fechas, jornada y aplazamientos, pero no determina de forma verificable si un partido terminó ni proporciona resultados o sets. Integrarlo requiere una fuente adicional que confirme finalización y marcador.
 
 ## Comandos de desarrollo y validación
 

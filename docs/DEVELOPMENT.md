@@ -65,6 +65,12 @@ docs/                      Documentación
 supabase/migrations/       Migraciones SQL
 ```
 
+## Página de resultados
+
+`/results` carga temporadas activas con el cliente administrativo, agrupa las filas de `rounds` por `round_number` y consulta los partidos de todos los grupos de la jornada seleccionada. El parámetro `group` filtra la lista en `MatchList` y la clasificación en `StandingsTable`. También sincroniza el primer grupo disponible con la URL.
+
+Estados manejados: temporada no disponible, jornadas inexistentes, partidos vacíos, error cargando temporadas, jornadas o partidos y respuesta inválida o error HTTP de la clasificación.
+
 ## Ingesta
 
 Los comandos siguientes son ejemplos dinámicos (sustituye los IDs por la temporada correspondiente).
@@ -167,3 +173,4 @@ npm run build
 - **Cruce de jugadores:** Quedan ~150 estadísticas sin emparejar en las actas.
 - **Duplicidad de cálculo de puntuaciones:** La API y el servicio tienen implementaciones paralelas. Aceptado como deuda técnica.
 - **Node 22 requerido** por `@supabase/supabase-js`. En local y en CI.
+- **Exploración esvoley:** los módulos y el verificador existen, pero no están integrados ni tienen comando npm. El endpoint investigado no confirma finalización ni expone resultados/sets; falta una fuente adicional antes de añadirlo a la ingesta.

@@ -1,6 +1,6 @@
 # Modelo persistente de Supabase
 
-Las migraciones del proyecto definen el esquema del catálogo y de fantasy. El archivo `repomix-output.xml` usado en la revisión excluye `supabase/migrations/`, por lo que esta documentación describe el modelo esperado apoyándose en `scripts/tests/test-supabase-schema.ts`, no en una lectura directa de las definiciones SQL.
+Las migraciones de `supabase/migrations/` definen el esquema del catálogo y de fantasy. `scripts/tests/test-supabase-schema.ts` verifica una parte de este modelo esperado contra una base remota; no sustituye la lectura de las migraciones ni modifica el esquema.
 
 ## Capas de datos
 

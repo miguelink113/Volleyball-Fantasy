@@ -95,6 +95,7 @@ Probar con varios usuarios el ciclo completo:
 - [x] **Navegación global:** Sidebar y Dashboard refactorizados.
 - [x] **Valores de mercado dinámicos:** Fórmula `1 + (pts * 0.07) + min(media * 0.3, 5)`, piso 1M, techo 20M. Se recalcula tras cada ingesta.
 - [x] **Limpieza profunda de BD:** Re-ingesta completa (266 partidos limpios, sin rondas fantasma). Escudo anti-duplicados + `normalizeGroupName`.
+- [x] **Filtro por grupo en `/results`:** el parámetro `group` filtra partidos y clasificación y se sincroniza con la URL.
 
 ### Refinamiento (Deuda técnica y UI)
 - **Rediseño visual (Desktop-First):** La pantalla de `/fantasy` mantiene el estilo de color antiguo (violetas y verdes). Pendiente unificar con la paleta del Sidebar/Dashboard.
@@ -102,7 +103,6 @@ Probar con varios usuarios el ciclo completo:
 ### Pendiente de corregir (feedback beta)
 
 - [ ] **Partidos retrasados no aparecen en la vista de liga:** Los partidos que se aplazaron o adelantaron a otra jornada no se muestran en la vista de equipo. Probablemente el frontend filtra por `round_id` exacto en lugar de por `round_number` como hace el mercado. **Severidad: Alta.** Afecta a la integridad de las puntuaciones.
-- [ ] **Filtro por grupo en `/results` (SV2):** Al seleccionar un grupo (A, B, C) en la lista de partidos, debería filtrarse igual que la tabla de clasificación. Actualmente salen todos mezclados. **Severidad: Media.**
 
 ## Fase 13 — Despliegue Final y Automatización ✅
 
@@ -113,6 +113,14 @@ Probar con varios usuarios el ciclo completo:
 - [x] **Escudo anti-duplicados con cache:** Los partidos servidos desde cache también registran sus equipos en `teamsInThisRound`.
 - [x] **Verificación de producción:** RLS, permisos y rendimiento validados.
 - [x] **Migraciones controladas:** FKs de `matches` aplicadas (`fk_matches_home_team`, `fk_matches_away_team`).
+
+## Exploración de esvoley — Experimental, no integrada
+
+- [ ] Identificar una fuente que confirme finalización y proporcione sets o marcador.
+- [ ] Añadir mapping entre IDs/grupos esvoley y temporadas, rondas y partidos persistidos.
+- [ ] Integrar el calendario solo después de resolver resultados y evitar sustitución o duplicación con DataProject.
+
+Los archivos `esvoley-groups.ts`, `fetch-matches-esvoley.ts`, `fetch-mid-esvoley.ts`, `parse-match-date.ts` y `verify-esvoley-groups.ts` existen como herramientas de investigación. No constituyen una alternativa funcional de ingesta ni se ejecutan por el workflow diario.
 
 ## Fase 14 — Social & UX (Sprint de feedback beta) ⏳
 
@@ -148,7 +156,6 @@ Mecánicas de juego que requieren cambios profundos en la base de datos y la ló
 | Prioridad | Item | Fase | Motivo |
 | :--- | :--- | :--- | :--- |
 | **P0** | Bug: partidos retrasados no aparecen | 12 | Rompe la experiencia principal |
-| **P1** | Bug: filtro por grupo en `/results` | 12 | Confunde a los usuarios en SV2 |
 | **P1** | Nombres de liga personalizados | 14 | Muy visible, muy barato |
 | **P1** | Enlaces directos para compartir | 14 | Reduce fricción de onboarding |
 | **P2** | Filtro por grupo en el mercado | 14 | Mejora búsqueda |

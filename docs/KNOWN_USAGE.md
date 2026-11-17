@@ -18,11 +18,12 @@ Next.js importa estos archivos dinámicamente, por lo que `ts-prune` los marca c
 Son archivos ejecutados manualmente desde la terminal o por tareas programadas (Cron). No son importados por la app de Next.js, pero son esenciales:
 - `scripts/ingest/ingest-roster.ts`
 - `scripts/ingest/ingest-matches.ts`
-- `scripts/ingest/ingest-standings.ts` (¡El que acabamos de crear!)
+- `scripts/ingest/ingest-standings.ts`
 - `scripts/ingest/ingest-market-values.ts`
 - `scripts/ingest/calculate-scores.ts`
 - `scripts/tests/**/*` (Todos los scripts de test, se ejecutan con `npm run test:*`)
 - `scripts/tools/**/*` (Herramientas de diagnóstico manual)
+- `lib/scraper/esvoley-groups.ts`, `lib/scraper/fetch-matches-esvoley.ts`, `lib/scraper/fetch-mid-esvoley.ts`, `lib/scraper/parse-match-date.ts` y `scripts/tools/verify-esvoley-groups.ts` (exploración no integrada; conservar para futuras investigaciones).
 - `scripts/ingest/check-new-matches.ts` (Usado por el workflow de GitHub Actions)
 - `scripts/ingest/calculate-market-values.ts` (Ejecutado tras cada ingesta)
 - 
@@ -48,7 +49,7 @@ Knip y ts-prune a veces fallan con exportaciones de tipos (especialmente si se u
 
 ## 6. Dependencias del Sistema
 - `supabase`, `depcheck`, `madge`, `ts-prune` (Herramientas de desarrollo/CLI, no se importan en el código).
-- `lucide-react`, `recharts`: Knip los marca como no usados. *Pendiente de verificación manual*. Si el usuario confirma que no se usan en la UI, se borrarán en la Fase 2.
+- `lucide-react`: se usa en la UI de resultados y otras vistas. Knip puede necesitar tracing manual de exports.
 
 ## 7. Next.js / React (No tocar)
 - `hooks/useAuth.ts` (Usado dinámicamente en componentes cliente).

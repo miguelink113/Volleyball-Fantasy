@@ -24,6 +24,20 @@ RFEVB en directo; los endpoints de producto de roster y puntuaciones leen Supaba
 | `components/fantasy/` | Mostrar el mercado, el equipo y la alineación. |
 | Supabase | Persistencia del catálogo, jornadas, partidos, estadísticas, clasificaciones, precios y datos fantasy mediante ingesta/repositorios/RPC. El scraper no escribe directamente. |
 
+## Exploración experimental de esvoley
+
+Los siguientes archivos corresponden a una investigación separada y no forman parte de la ingesta:
+
+- `lib/scraper/esvoley-groups.ts`: mapa RFEVB/esvoley de las cuatro competiciones verificadas y sus IDs de grupo.
+- `lib/scraper/fetch-matches-esvoley.ts`: consulta `getJornadasCalendario` y transforma jornadas y partidos; fuerza timeout y valida la forma JSON.
+- `lib/scraper/fetch-mid-esvoley.ts`: desde una URL esvoley busca el enlace de `MatchStatistics.aspx` de DataProject y sus parámetros.
+- `lib/scraper/parse-match-date.ts`: convierte fechas de calendario esvoley al huso `Europe/Madrid`.
+- `scripts/tools/verify-esvoley-groups.ts`: recorre los grupos configurados y muestra una muestra de partidos y posibles campos de resultado.
+
+La información obtenida incluye ID del partido, equipos, jornada, fecha/hora, si proviene de otra jornada o está aplazado/suspendido y enlace de estadísticas. `fetchMatchesEsvoley` fija `isFinished`, `homeSets` y `awaySets` a valores no confirmados; no debe considerarse una fuente fiable de finalización o marcador.
+
+La investigación no está integrada en `scripts/ingest/`, no tiene comando declarado en `package.json` y no sustituye a DataProject/RFEVB. Falta confirmar finalización y resultado/sets mediante otro endpoint o acta, además de definir el mapeo hacia temporadas, rondas y partidos persistidos.
+
 ## Endpoints
 
 ### 1. Obtener partidos
@@ -385,8 +399,12 @@ lib/
     ├── fetch-matches.ts
     ├── fetch-match-statistics.ts
     ├── fetch-competition-statistics.ts
-    ├── fetch-competition-standings.ts  <-- NUEVO
-    └── fetch-competition-roster.ts
+    ├── fetch-competition-standings.ts
+    ├── fetch-competition-roster.ts
+    ├── esvoley-groups.ts
+    ├── fetch-matches-esvoley.ts
+    ├── fetch-mid-esvoley.ts
+    └── parse-match-date.ts
 ```
 
 * `fetch-matches.ts`: obtiene los partidos. Extrae la fecha de cada uno desde

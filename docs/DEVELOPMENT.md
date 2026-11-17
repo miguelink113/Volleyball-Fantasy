@@ -91,6 +91,14 @@ npx tsx scripts/ingest/ingest-matches.ts --competition=167 --season=203
 
 *(Nota: Este script usa cache de partidos completados para evitar descargas redundantes. Incluye escudo anti-duplicados y normaliza nombres de grupos. Añade `--force-refresh` para ignorar el cache).*
 
+Para simular una ejecución de EsVoley y Data Project sin escribir en Supabase:
+
+```bash
+npx tsx scripts/ingest/ingest-matches.ts --competition=167 --season=203 --dry-run
+```
+
+Las competiciones incluidas en `ESVOLEY_GROUPS` usan EsVoley como referencia de jornada, grupo y fecha. Si no puede identificarse inequívocamente un partido, se conserva la información disponible de Data Project.
+
 ### Valores iniciales del mercado
 
 ```bash

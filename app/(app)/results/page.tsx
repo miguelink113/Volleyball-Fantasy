@@ -168,7 +168,19 @@ export default async function ResultsPage({
         group_name: roundGroupMap.get(match.round_id) ?? null,
     }));
 
-    const activeGroup = sp.group ?? null;
+    // 7. Validar el grupo seleccionado para esta temporada.
+    const availableGroups = Array.from(
+        new Set(
+            (dbRounds ?? [])
+                .map(round => round.group_name)
+                .filter((group): group is string => Boolean(group))
+        )
+    );
+
+    const activeGroup =
+        sp.group && availableGroups.includes(sp.group)
+            ? sp.group
+            : availableGroups[0] ?? null;
 
     return (
         <main className="min-h-screen bg-slate-50">

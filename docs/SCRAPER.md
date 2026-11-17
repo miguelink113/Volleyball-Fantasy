@@ -36,7 +36,7 @@ Los siguientes archivos corresponden a una investigación separada y no forman p
 
 La información obtenida incluye ID del partido, equipos, jornada, fecha/hora, si proviene de otra jornada o está aplazado/suspendido y enlace de estadísticas. `fetchMatchesEsvoley` fija `isFinished`, `homeSets` y `awaySets` a valores no confirmados; no debe considerarse una fuente fiable de finalización o marcador.
 
-La investigación no está integrada en `scripts/ingest/`, no tiene comando declarado en `package.json` y no sustituye a DataProject/RFEVB. Falta confirmar finalización y resultado/sets mediante otro endpoint o acta, además de definir el mapeo hacia temporadas, rondas y partidos persistidos.
+EsVoley ya se utiliza en `ingest-matches.ts` únicamente como referencia de jornadas, grupos y fechas para las cuatro correspondencias configuradas en `ESVOLEY_GROUPS`. Data Project continúa proporcionando identificadores de partido, estadísticas y resultados. La ingesta conserva `rfevb_match_id` y no crea ni elimina jornadas o partidos. Si EsVoley no permite identificar inequívocamente un partido, conserva el dato de Data Project y registra una advertencia.
 
 ## Endpoints
 

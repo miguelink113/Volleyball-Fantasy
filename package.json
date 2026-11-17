@@ -17,6 +17,7 @@
     "test:supabase:admin": "tsx scripts/tests/test-supabase-admin.ts",
     "test:ingestion-mappers": "tsx scripts/tests/test-ingestion-mappers.ts",
     "test:match-date-parser": "tsx scripts/tests/test-match-date-parser.ts",
+    "test:esvoley-migration": "tsx scripts/tests/test-esvoley-migration.ts",
     "test:market-rules": "tsx scripts/tests/test-market-rules.ts",
     "test:league-seeding": "tsx scripts/tests/test-league-seeding.ts",
     "test:repositories": "tsx scripts/tests/test-repositories.ts",

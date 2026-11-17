@@ -104,10 +104,11 @@ La tabla `player_market_values` contiene precios dinámicos calculados tras cada
 
 ### Exploración de esvoley
 
-- Los cinco archivos de exploración existen, pero no tienen un script npm ni están llamados desde los procesos de ingesta.
-- `fetchMatchesEsvoley` obtiene equipos, fecha/hora, número de jornada, indicadores de aplazamiento y enlaces de estadísticas.
-- El endpoint comprobado no permite determinar que un partido haya terminado ni recuperar sets o marcador.
-- Sigue pendiente una fuente adicional y el mapeo necesario para integrar el calendario sin sustituir ni duplicar la ingesta DataProject/RFEVB.
+- `ingest-matches.ts` consulta EsVoley para las cuatro competiciones configuradas y usa su jornada, grupo y fecha como referencia.
+- Data Project sigue aportando el identificador de partido, estadísticas y resultados.
+- El emparejamiento exige equipos coincidentes o inequívocamente resolubles y conserva el dato Data Project ante ambigüedad.
+- `--dry-run` permite revisar la asociación sin escribir.
+- Falta una fuente adicional solo si se pretende usar EsVoley también para finalización y marcador.
 
 ## Deuda técnica conocida
 

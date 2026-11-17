@@ -70,7 +70,7 @@ export function StandingsTable({ seasonId }: { seasonId: string }) {
             ? urlGroup
             : groups[0] ?? null;
 
-    // Mantiene el grupo seleccionado sincronizado con la URL.
+    // Sincroniza la URL cuando el grupo solicitado no existe.
     useEffect(() => {
         if (loading || !activeGroup || urlGroup === activeGroup) return;
 

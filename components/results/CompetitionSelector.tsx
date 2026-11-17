@@ -20,7 +20,8 @@ export function CompetitionSelector({
             onChange={(e) => {
                 const next = new URLSearchParams(params.toString());
                 next.set('seasonId', e.target.value);
-                next.delete('round'); // reset jornada al cambiar competición
+                next.delete('round');
+                next.delete('group');
                 router.push(`/results?${next.toString()}`);
             }}
             className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-md text-slate-700"

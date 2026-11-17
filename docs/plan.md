@@ -114,11 +114,13 @@ Probar con varios usuarios el ciclo completo:
 - [x] **Verificación de producción:** RLS, permisos y rendimiento validados.
 - [x] **Migraciones controladas:** FKs de `matches` aplicadas (`fk_matches_home_team`, `fk_matches_away_team`).
 
-## Exploración de esvoley — Experimental, no integrada
+## Migración progresiva de jornadas y fechas a EsVoley
 
-- [ ] Identificar una fuente que confirme finalización y proporcione sets o marcador.
-- [ ] Añadir mapping entre IDs/grupos esvoley y temporadas, rondas y partidos persistidos.
-- [ ] Integrar el calendario solo después de resolver resultados y evitar sustitución o duplicación con DataProject.
+- [x] Añadir mapping entre IDs de competición Data Project e IDs de grupo EsVoley.
+- [x] Consultar EsVoley desde `ingest-matches.ts` para jornadas, grupos y fechas.
+- [x] Conservar partidos, UUID internos e identificadores Data Project; evitar sobrescribir datos faltantes.
+- [x] Añadir `--dry-run` para inspeccionar asociaciones sin escribir.
+- [ ] Identificar una fuente adicional si EsVoley debe aportar finalización y marcador.
 
 Los archivos `esvoley-groups.ts`, `fetch-matches-esvoley.ts`, `fetch-mid-esvoley.ts`, `parse-match-date.ts` y `verify-esvoley-groups.ts` existen como herramientas de investigación. No constituyen una alternativa funcional de ingesta ni se ejecutan por el workflow diario.
 

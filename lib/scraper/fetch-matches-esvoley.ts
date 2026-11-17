@@ -121,8 +121,12 @@ export async function fetchMatchesEsvoley(
     }
 
     if (!isCalendarResponse(json)) {
-        const data = json as any;
-        const round = data?.content?.[0];
+        const data = json as {
+            content?: Array<Record<string, unknown> & {
+                partidos?: Array<Record<string, unknown>>;
+            }>;
+        };
+        const round = data.content?.[0];
         const match = round?.partidos?.[0];
 
         console.log({

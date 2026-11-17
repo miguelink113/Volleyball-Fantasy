@@ -11,8 +11,13 @@ export type MatchData = {
     group_name?: string | null;
 };
 
-export function MatchList({ matches }: { matches: MatchData[] }) {
-    if (matches.length === 0) {
+export function MatchList({ matches, activeGroup }: { matches: MatchData[], activeGroup?: string | null }) {
+    // Si hay un grupo activo seleccionado, filtramos
+    const filteredMatches = activeGroup
+        ? matches.filter(m => m.group_name === activeGroup)
+        : matches;
+
+    if (filteredMatches.length === 0) {
         return (
             <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
                 <Calendar className="mx-auto h-8 w-8 text-slate-300 mb-3" />
@@ -21,15 +26,13 @@ export function MatchList({ matches }: { matches: MatchData[] }) {
         );
     }
 
-    // Agrupamos los partidos. Si no tienen grupo, van a "General"
-    const groupedMatches = matches.reduce((acc, match) => {
+    const groupedMatches = filteredMatches.reduce((acc, match) => {
         const group = match.group_name || "General";
         if (!acc[group]) acc[group] = [];
         acc[group].push(match);
         return acc;
     }, {} as Record<string, MatchData[]>);
 
-    // Ordenamos: "General" al final, el resto alfabéticamente
     const sortedGroups = Object.keys(groupedMatches).sort((a, b) => {
         if (a === "General") return 1;
         if (b === "General") return -1;
@@ -43,8 +46,6 @@ export function MatchList({ matches }: { matches: MatchData[] }) {
 
                 return (
                     <div key={groupName} className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-
-                        {/* Título del Grupo */}
                         <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
                             <h3 className="font-semibold text-slate-700 text-sm uppercase tracking-wider">
                                 {displayTitle}

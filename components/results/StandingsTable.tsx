@@ -1,51 +1,124 @@
+
 'use client';
 
-import { useEffect, useState } from 'react';
-import {StandingWithTeam} from "@/lib/repositories/standings.repository";
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { StandingWithTeam } from '@/lib/repositories/standings.repository';
 
 export function StandingsTable({ seasonId }: { seasonId: string }) {
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const urlGroup = searchParams.get('group');
+    const queryString = searchParams.toString();
+
     const [standings, setStandings] = useState<StandingWithTeam[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeGroup, setActiveGroup] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        setLoading(true);
-        fetch(`/api/standings?seasonId=${seasonId}`)
-            .then((res) => res.json())
-            .then((data) => {
+        const controller = new AbortController();
+
+        async function loadStandings() {
+            setLoading(true);
+            setError(null);
+
+            try {
+                const response = await fetch(
+                    `/api/standings?seasonId=${encodeURIComponent(seasonId)}`,
+                    { signal: controller.signal }
+                );
+
+                if (!response.ok) {
+                    throw new Error(`Error cargando clasificación: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (!Array.isArray(data)) {
+                    throw new Error('Respuesta inválida del servidor');
+                }
+
                 setStandings(data);
-                const groups = Array.from(new Set(data.map((r: StandingWithTeam) => r.group_name).filter(Boolean)));
-                setActiveGroup(groups.length > 0 ? (groups[0] as string) : null);
-            })
-            .finally(() => setLoading(false));
+            } catch (err) {
+                if (err instanceof Error && err.name === 'AbortError') return;
+
+                setError(err instanceof Error ? err.message : 'Error desconocido');
+                setStandings([]);
+            } finally {
+                if (!controller.signal.aborted) setLoading(false);
+            }
+        }
+
+        loadStandings();
+
+        return () => controller.abort();
     }, [seasonId]);
 
-    if (loading) return <div className="p-4 text-sm text-slate-500">Cargando clasificación...</div>;
-    if (!standings.length) return <div className="p-4 text-sm text-slate-500">Sin datos.</div>;
+    const groups = useMemo(
+        () => Array.from(
+            new Set(
+                standings
+                    .map(row => row.group_name)
+                    .filter((group): group is string => Boolean(group))
+            )
+        ),
+        [standings]
+    );
 
-    const groups = Array.from(new Set(standings.map((r) => r.group_name).filter(Boolean)));
-    const isMultiGroup = groups.length > 0;
-    const displayed = isMultiGroup
-        ? standings.filter((r) => r.group_name === activeGroup)
+    const activeGroup =
+        urlGroup && groups.includes(urlGroup)
+            ? urlGroup
+            : groups[0] ?? null;
+
+    // Mantiene el grupo seleccionado sincronizado con la URL.
+    useEffect(() => {
+        if (loading || !activeGroup || urlGroup === activeGroup) return;
+
+        const next = new URLSearchParams(queryString);
+        next.set('group', activeGroup);
+        router.replace(`/results?${next.toString()}`, { scroll: false });
+    }, [loading, activeGroup, urlGroup, queryString, router]);
+
+    const displayed = activeGroup
+        ? standings.filter(row => row.group_name === activeGroup)
         : standings;
+
+    const handleGroupChange = (group: string) => {
+        const next = new URLSearchParams(queryString);
+        next.set('group', group);
+        router.push(`/results?${next.toString()}`, { scroll: false });
+    };
+
+    if (loading) {
+        return <div className="p-4 text-sm text-slate-500">Cargando clasificación...</div>;
+    }
+
+    if (error) {
+        return <div className="p-4 text-sm text-red-600">{error}</div>;
+    }
+
+    if (!standings.length) {
+        return <div className="p-4 text-sm text-slate-500">Sin datos.</div>;
+    }
 
     return (
         <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
                 <h2 className="font-bold text-slate-800">Clasificación</h2>
-                {isMultiGroup && (
+
+                {groups.length > 1 && (
                     <div className="flex gap-1 bg-slate-100 p-1 rounded-md">
-                        {groups.map((g) => (
+                        {groups.map(group => (
                             <button
-                                key={g}
-                                onClick={() => setActiveGroup(g as string)}
+                                key={group}
+                                onClick={() => handleGroupChange(group)}
                                 className={`px-3 py-1 text-xs font-semibold rounded ${
-                                    activeGroup === g
+                                    activeGroup === group
                                         ? 'bg-white text-violet-700 shadow-sm'
                                         : 'text-slate-500 hover:text-slate-700'
                                 }`}
                             >
-                                {g}
+                                {group}
                             </button>
                         ))}
                     </div>
@@ -67,17 +140,15 @@ export function StandingsTable({ seasonId }: { seasonId: string }) {
                     </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                    {displayed.map((row) => (
+                    {displayed.map(row => (
                         <tr key={row.team.id} className="hover:bg-slate-50 transition-colors">
                             <td className="px-2 py-2 text-center font-medium text-slate-400">
                                 {row.position}
                             </td>
                             <td className="px-2 py-2">
-                                <div className="flex items-center gap-2">
-                                    {/* Si tienes logos, descomenta: */}
-                                    {/* {row.team.logo_url && <img src={row.team.logo_url} className="w-5 h-5 object-contain" alt="" />} */}
-                                    <span className="font-medium text-slate-700">{row.team.name}</span>
-                                </div>
+                                    <span className="font-medium text-slate-700">
+                                        {row.team.name}
+                                    </span>
                             </td>
                             <td className="px-2 py-2 text-center text-slate-600">{row.matches_played}</td>
                             <td className="px-2 py-2 text-center text-slate-600">{row.matches_won}</td>
